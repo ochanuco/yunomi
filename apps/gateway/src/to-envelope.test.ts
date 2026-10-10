@@ -16,6 +16,7 @@ const msg = (over: Partial<MessageLike> = {}): MessageLike => ({
 	createdAt: new Date("2026-01-01T00:00:00.000Z"),
 	author: { id: "4", bot: false, displayName: "alice" },
 	mentionedUserIds: [],
+	mentionsBotRole: false,
 	replyToMessageId: null,
 	attachments: [],
 	...over,
@@ -48,6 +49,16 @@ describe("toEnvelope", () => {
 	it("bot へのメンションを mentions に含める", () => {
 		const r = toEnvelope(msg({ mentionedUserIds: ["999", "5", "5"] }), opts);
 		expect(r.ok && r.value.payload.mentions).toEqual(["999", "5"]);
+	});
+
+	it("bot の管理ロールへのメンションは bot 本人へのメンションとして含める", () => {
+		const r = toEnvelope(
+			msg({ mentionedUserIds: ["5", "999"], mentionsBotRole: true }),
+			opts,
+		);
+		expect(r.ok && r.value.payload.mentions).toEqual(["5", "999"]);
+		const roleOnly = toEnvelope(msg({ mentionsBotRole: true }), opts);
+		expect(roleOnly.ok && roleOnly.value.payload.mentions).toEqual(["999"]);
 	});
 
 	it("返信先 message id を写す", () => {

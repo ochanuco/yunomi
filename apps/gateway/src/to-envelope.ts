@@ -17,6 +17,8 @@ export type MessageLike = {
 	createdAt: Date;
 	author: { id: string; bot: boolean; displayName: string };
 	mentionedUserIds: readonly string[];
+	/** Discord の補完は bot 本人ではなく bot の管理ロールを選ぶことがあり、それも partner 宛てとみなす。 */
+	mentionsBotRole: boolean;
 	replyToMessageId: string | null;
 	attachments: readonly {
 		name: string;
@@ -56,7 +58,12 @@ export const toEnvelope = (
 				is_bot: message.author.bot,
 			},
 			content: message.content,
-			mentions: [...new Set(message.mentionedUserIds)],
+			mentions: [
+				...new Set([
+					...message.mentionedUserIds,
+					...(message.mentionsBotRole ? [botUserId] : []),
+				]),
+			],
 			reply_to_message_id: message.replyToMessageId,
 			attachments: message.attachments.map((a) => ({
 				name: a.name,

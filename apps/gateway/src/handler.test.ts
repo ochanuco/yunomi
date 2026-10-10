@@ -12,6 +12,7 @@ const message: MessageLike = {
 	createdAt: new Date("2026-01-01T00:00:00.000Z"),
 	author: { id: "4", bot: false, displayName: "alice" },
 	mentionedUserIds: [],
+	mentionsBotRole: false,
 	replyToMessageId: null,
 	attachments: [],
 };

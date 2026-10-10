@@ -14,6 +14,11 @@ import { YunomiClient } from "./yunomi-client.ts";
 
 const PARTNER_ID = "yukarin";
 
+const mentionsBotRole = (m: Message): boolean => {
+	const botRoleId = m.guild?.members.me?.roles.botRole?.id;
+	return botRoleId !== undefined && m.mentions.roles.has(botRoleId);
+};
+
 const toMessageLike = (m: Message): MessageLike => ({
 	id: m.id,
 	guildId: m.guildId,
@@ -26,6 +31,7 @@ const toMessageLike = (m: Message): MessageLike => ({
 		displayName: m.member?.displayName ?? m.author.displayName,
 	},
 	mentionedUserIds: [...m.mentions.users.keys()],
+	mentionsBotRole: mentionsBotRole(m),
 	replyToMessageId: m.reference?.messageId ?? null,
 	attachments: [...m.attachments.values()].map((a) => ({
 		name: a.name,
