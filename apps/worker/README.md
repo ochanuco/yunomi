@@ -28,3 +28,7 @@
 ## State / Relationship
 
 純粋なドメイン関数は `@yunomi/core` の `partner-state.ts`（`applyStateDelta` / `applyRelationshipDelta`、日次上限は `lifestyleDay` の JST 05:00 境界）。現在値は DO SQLite（`partner_state`、`relationships`）、履歴は D1（`state_transitions`、`relationship_events`）。D1 の履歴書き込みは `ctx.waitUntil` に載せて応答を待たせない。テストは `PartnerDO.flushBackground()` で完了を待つ。作者の entity 解決（`entities` / `external_identities`）は LLM 判定に進んだときに行う。
+
+## Memory
+
+LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。prompt には話者の現行 Fact を importance 降順・observed_at 降順で上位 12 件入れる。書き込みは次のターンが読めるよう応答前に完了させる。

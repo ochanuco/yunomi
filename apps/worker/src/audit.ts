@@ -4,6 +4,7 @@ import type {
 	StateDelta,
 } from "@yunomi/core";
 import type { Usage } from "@yunomi/llm";
+import type { CandidateOutcome } from "./memory.ts";
 
 export type DecisionReason =
 	| "llm"
@@ -46,4 +47,5 @@ export type TurnAuditData = {
 		applied: RelationshipDelta;
 		rejected: RelationshipUpdateRejected[];
 	} | null;
+	memory: { outcomes: CandidateOutcome[]; error: string | null } | null;
 };

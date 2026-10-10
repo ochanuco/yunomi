@@ -18,6 +18,8 @@ import {
 } from "@yunomi/core";
 import type { ModelRouter, RoutedResult } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
+import type { TurnAuditData } from "../audit.ts";
+import type { MemoryRepo } from "../memory.ts";
 import type { EntityResolver } from "./entities.ts";
 import type { HistoryWriter } from "./history.ts";
 import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
@@ -34,6 +36,7 @@ export type TurnDeps = {
 	createRouter: () => ModelRouter;
 	entities: EntityResolver;
 	history: HistoryWriter;
+	memory: MemoryRepo;
 	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
 	background: (task: Promise<void>) => void;
 };
@@ -84,6 +87,9 @@ export const runTurn = async (
 		store.getRelationship(partnerId, entityId) ??
 		seedRelationship(deps, entityId, seededAt);
 
+	// 記憶の取得に失敗しても会話は続ける（記憶なしで応答する）。
+	const facts = await deps.memory.topFacts(partnerId, entityId).catch(() => []);
+
 	const prompt = new PromptBuilder().build({
 		profile,
 		state: state0,
@@ -92,7 +98,11 @@ export const runTurn = async (
 			familiarity: rel0.relationship.familiarity,
 			trust: rel0.relationship.trust,
 		},
-		memory: [],
+		memory: facts.map((f) => ({
+			subject: msg.author.displayName,
+			predicate: f.predicate,
+			object: f.object,
+		})),
 		channel: { name: null, presence: null },
 		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
 			speaker: m.authorName,
@@ -166,7 +176,39 @@ export const runTurn = async (
 		);
 	}
 
+	// 次のターンの prompt に載せるため、応答前に書き終える（background にしない）。
+	// 失敗しても返信は止めず、audit に残す。
+	let memory: NonNullable<TurnAuditData["memory"]>;
+	try {
+		memory = {
+			outcomes: await deps.memory.processCandidates(
+				{
+					partnerId,
+					speakerEntityId: entityId,
+					speakerAliases: [msg.author.displayName, msg.author.id],
+					sourceEventId: msg.eventId,
+					now: at,
+				},
+				output.memory_candidates.map((c) => ({
+					subject: c.subject,
+					predicate: c.predicate,
+					object: c.object,
+					confidence: c.confidence,
+					importance: c.importance,
+					source: c.source,
+				})),
+			),
+			error: null,
+		};
+	} catch (e) {
+		memory = {
+			outcomes: [],
+			error: e instanceof Error ? e.message : "memory write failed",
+		};
+	}
+
 	const common = {
+		memory,
 		state: { applied: stateUpdate.applied, rejected: stateUpdate.rejected },
 		relationship: {
 			entityId,

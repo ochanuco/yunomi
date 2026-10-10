@@ -1,9 +1,11 @@
+import { sql } from "drizzle-orm";
 import {
 	index,
 	primaryKey,
 	real,
 	sqliteTable,
 	text,
+	uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 export const partners = sqliteTable("partners", {
@@ -71,4 +73,64 @@ export const relationshipEvents = sqliteTable(
 			t.occurredAt,
 		),
 	],
+);
+
+export const facts = sqliteTable(
+	"facts",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		subjectEntityId: text("subject_entity_id")
+			.notNull()
+			.references(() => entities.id),
+		predicate: text("predicate").notNull(),
+		objectType: text("object_type").notNull(),
+		objectValue: text("object_value").notNull(),
+		objectDisplay: text("object_display"),
+		confidence: real("confidence").notNull(),
+		importance: real("importance").notNull(),
+		source: text("source").notNull(),
+		observedAt: text("observed_at").notNull(),
+		validFrom: text("valid_from").notNull(),
+		validTo: text("valid_to"),
+		decayPolicy: text("decay_policy").notNull().default("standard"),
+		supersededBy: text("superseded_by"),
+	},
+	(t) => [
+		index("facts_retrieval").on(
+			t.partnerId,
+			t.subjectEntityId,
+			t.importance,
+			t.observedAt,
+		),
+		// 現行 Fact は (subject, predicate) ごとに 1 件。並行ターンの二重 insert を防ぐ。
+		uniqueIndex("facts_current_unique")
+			.on(t.partnerId, t.subjectEntityId, t.predicate)
+			.where(sql`${t.validTo} IS NULL AND ${t.supersededBy} IS NULL`),
+	],
+);
+
+export const memoryCandidates = sqliteTable(
+	"memory_candidates",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		// LLM の subject が話者を指さないときは entity を解決できないため null にし、subject_text に原文を残す。
+		subjectEntityId: text("subject_entity_id").references(() => entities.id),
+		subjectText: text("subject_text"),
+		predicate: text("predicate").notNull(),
+		objectType: text("object_type").notNull(),
+		objectValue: text("object_value").notNull(),
+		confidence: real("confidence").notNull(),
+		importance: real("importance").notNull(),
+		source: text("source").notNull(),
+		status: text("status", {
+			enum: ["pending", "promoted", "conflict", "rejected"],
+		}).notNull(),
+		conflictFactId: text("conflict_fact_id"),
+		expiresAt: text("expires_at").notNull(),
+		createdAt: text("created_at").notNull(),
+		sourceEventId: text("source_event_id").notNull(),
+	},
+	(t) => [index("memory_candidates_status").on(t.partnerId, t.status)],
 );

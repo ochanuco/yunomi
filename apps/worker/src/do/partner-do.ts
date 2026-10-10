@@ -4,6 +4,7 @@ import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
+import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
@@ -33,6 +34,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #pending = new Set<Promise<void>>();
 	readonly #entities: EntityResolver;
 	readonly #history: HistoryWriter;
+	readonly #memory: MemoryRepo;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
@@ -50,6 +52,7 @@ export class PartnerDO extends DurableObject<Env> {
 				createRouter: () => this.createRouter(this.env),
 				entities: this.#entities,
 				history: this.#history,
+				memory: this.#memory,
 				background: (task) => this.#background(task),
 			},
 			msg,
@@ -60,6 +63,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#store = new DoStore(ctx.storage.sql);
 		const db = drizzle(env.DB);
 		this.#history = createHistoryWriter(db);
+		this.#memory = createMemoryRepo(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
 	}

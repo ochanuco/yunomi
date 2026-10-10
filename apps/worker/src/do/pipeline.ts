@@ -41,6 +41,7 @@ export const ignoreOutcome = (
 		toolIntents: [],
 		state: null,
 		relationship: null,
+		memory: null,
 		...extra,
 	},
 });
