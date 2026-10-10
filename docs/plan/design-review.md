@@ -78,7 +78,7 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 | C1 | Discord Message Content Intent | 非メンションの継続会話を読むには privileged intent が必要。dev/prod 両方の bot application で有効化する（100 サーバー未満なので審査は不要）。 |
 | C2 | 重複受信 | Gateway の再送に備え、`source=discord` + Discord message id で DO 内 dedupe（`events.md` の Dedupe 方針）。 |
 | C3 | 返信長 | Discord の 2000 文字制限に合わせ、structured output の utterance に上限を設けて Gateway 側で分割しない。 |
-| C4 | 構造化出力の失敗 | スキーマ不一致・パース失敗は `ignore` + `degraded` として Audit に残し、ユーザーには何も送らない。Sonnet 失敗時は Haiku で 1 回だけ再試行し、dev の Haiku 既定では fallback なし。 |
+| C4 | 構造化出力の失敗 | スキーマ不一致・パース失敗は `ignore` + `degraded` として Audit に残し、ユーザーには何も送らない。主モデルは dev / prod とも Sonnet で、失敗時は Haiku で 1 回だけ再試行する。 |
 | C5 | Audit の保持期間 | `observability.md` は短期保存とするが期限がない。D1 には TTL がないので、受信本文を含む詳細 Audit は 30 日で Cron が削除する。判断サマリだけの KPI 集計は残す。 |
 | C6 | Queue の導入時期 | 最初の縦切りでは非同期処理がない（memory candidate は同じ structured output から同期で保存できる）。EventBus interface と Envelope は最初に定義し、Cloudflare Queues 実装は最初の非同期 consumer（Goal 2 の memory extraction / summary）で入れる。Audit 書き込みは `ctx.waitUntil` 相当で応答経路から外す。 |
 | C7 | Open Loop | `mvp-scope.md` は MVP で抽出・保存とするが、`CLAUDE_TASK.md` の最初の縦切りと `implementation-plan.md` は Goal 2。structured output のスキーマには `open_loop_updates` を入れ、保存は Goal 2 で行う。 |
