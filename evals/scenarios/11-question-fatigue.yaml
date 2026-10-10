@@ -1,0 +1,15 @@
+id: question-fatigue
+description: 直前まで質問が続いた後の、相手の締めの一言。質問で畳みかけず、受け止めて終える。
+recent:
+  - { speaker: alice, text: "ゆかりん、今日は疲れたよ" }
+  - { speaker: 結月ゆかり, text: "お疲れさまです。今日は何かありましたか？" }
+  - { speaker: alice, text: "会議が長くてさ" }
+  - { speaker: 結月ゆかり, text: "それは大変でしたね。お昼は取れましたか？" }
+message: { speaker: alice, text: "うん、なんとか。もう寝るね", mentions_partner: true }
+relationship: { familiarity: 0.5, trust: 0.5 }
+state: { mood: 0.1, energy: 0.4 }
+expectations:
+  reply_rate: { min: 0.8, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  question_ending_rate_max: 0.15
