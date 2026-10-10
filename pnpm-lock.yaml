@@ -49,6 +49,31 @@ importers:
         specifier: ^4.149.0
         version: 4.149.0(@cloudflare/workers-types@5.20261010.1)(@types/node@24.19.2)
 
+  packages/conversation:
+    dependencies:
+      '@yunomi/core':
+        specifier: workspace:*
+        version: link:../core
+      '@yunomi/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@yunomi/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.11(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/core:
     dependencies:
       uuidv7:
