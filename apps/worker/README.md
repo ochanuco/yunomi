@@ -7,7 +7,7 @@
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
 - `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` に引く。`POST /v1/interfaces/discord/events` は `gateway` のみ。
 - ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
-- `cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
+- Worker 名・ホスト・D1 database id は `resources.ts` に集約し、`cloudflare.config.ts` と `scripts/deploy.sh` が読む。`cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
 ## 型
 
@@ -44,3 +44,43 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 ## Admin Web の配信
 
 `/admin/` 配下は `apps/admin` のビルド成果物を返す。`cloudflare.config.ts` の `assets` が配信ディレクトリを指定できないため、`scripts/embed-admin.ts` が `../admin/dist` を `src/generated/admin-assets.ts`（git 管理外）に埋め込み、`src/admin/static.ts` が返す。`typecheck` / `test` は未ビルドなら空で生成し、`build` は `dist` が無いと失敗する。詳細は `apps/admin/README.md`。
+
+## デプロイ（dev）
+
+`.github/workflows/deploy-dev.yml` が main への push と手動実行で dev に反映する。`pnpm turbo typecheck test` の後、`op run --env-file=.github/deploy/dev.env.op -- scripts/deploy.sh development` を実行する。
+
+`scripts/deploy.sh <development|production>` の流れ:
+
+1. `resources.ts` から D1 id を読む。プレースホルダのままなら、#7 を案内して失敗する。
+2. `cf d1 migrations apply <id> --dir migrations`（remote）
+3. `cf deploy --mode <mode>`。`ANTHROPIC_API_KEY` が環境にあれば `--secrets-file`（権限 600 の一時 `.env`、終了時に削除）で渡す。`cf workers secrets update` は `--text` しか持たず値が argv に載るため使わない。
+4. `https://<host>/health` を最大 10 回（6 秒間隔）確認する。
+
+#### 事前に人手で用意するもの
+
+- GitHub Environment `dev` と、その secret `OP_SA_DEPLOY`（vault `yunomi-dev` を読む 1Password Service Account の token）
+- 1Password vault `yunomi-dev` の item `cloudflare-api-token`（`credential`、`yunomi-deploy-dev` token）と `anthropic-api-key`（`credential`）。参照は `.github/deploy/dev.env.op`
+- dev の D1 を作り、`resources.ts` の `development.d1Id` を実 UUID にする
+
+#7 が終わるまで、このパイプラインは D1 id のガードで失敗する（`OP_SA_DEPLOY` 未設定でも 1Password 認証で失敗する）。
+
+## デプロイ（prod）
+
+`.github/workflows/deploy-prod.yml` は `workflow_dispatch` のみ（main への merge では動かない）。入力 `ref`（既定 `main`）は main か既存の tag に限り、それ以外は最初の step で失敗する。dev と同じ手順で `scripts/deploy.sh production` を実行する。
+
+#### 事前に人手で用意するもの
+
+- GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `yunomi-production` を読む別の 1Password Service Account の token
+- 1Password vault `yunomi-production` の item `cloudflare-api-token`（`yunomi-deploy-prod` token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
+- prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
+
+#### dev / prod 分離チェックリスト
+
+- D1: `yunomi-dev` と `yunomi` で別 database（別 UUID）
+- Worker / DO namespace: `yunomi-dev` と `yunomi`（DO は Worker 単位で分かれる）
+- ホスト: `yunomi-dev.chanu.co` と `yunomi.chanu.co`
+- Discord bot: 別アプリ・別 token（Gateway の `.env.dev` / `.env.prod`）
+- Anthropic API key: 別 key（既定モデルは prod が Sonnet）
+- Cloudflare Access: app・AUD・service token を別にする（`cloudflare.config.ts` の `ACCESS_AUD_*` / `ACCESS_CALLERS_*`）。dev の token で prod に入れない
+- 1Password: vault `yunomi-dev` / `yunomi-production`、Service Account も別
+- GitHub Environment: `dev`（承認なし）/ `production`（承認必須）

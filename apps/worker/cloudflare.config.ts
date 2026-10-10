@@ -1,11 +1,6 @@
 import { bindings, defineConfig, exports, triggers } from "cf/config";
+import { resources } from "./resources.ts";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
-
-// 実 UUID は infra Issue (#7) で D1 を作成してから差し替える。
-// cf d1 は全ゼロ UUID を拒否するため version/variant ビットを立てた形式にしている。
-// ローカルの Miniflare は UUID の実在を問わないため、この値のまま動く。
-const D1_ID_DEV = "00000000-0000-4000-8000-000000000000";
-const D1_ID_PROD = "00000000-0000-4000-8000-000000000000";
 
 const ACCESS_AUD_PROD =
 	"28c0b88e0f64e6dc812df4854fde0645e4d57a934826ce3849f4bb2e8a7d9019";
@@ -23,17 +18,15 @@ const ACCESS_CALLERS_DEV = {
 export default defineConfig(({ mode }) => {
 	const production = mode === "production";
 	const local = mode === "local";
+	const r =
+		resources[local ? "local" : production ? "production" : "development"];
 	return {
 		worker: {
-			name: local ? "yunomi-local" : production ? "yunomi" : "yunomi-dev",
+			name: r.worker,
 			entrypoint,
 			compatibilityDate: "2026-07-01",
 			// cf dev はカスタムドメインがあると request.url を書き換えるため、local は domains を持たない。
-			...(local
-				? {}
-				: {
-						domains: [production ? "yunomi.chanu.co" : "yunomi-dev.chanu.co"],
-					}),
+			...(r.host ? { domains: [r.host] } : {}),
 			workersDev: false,
 			previewUrls: false,
 			env: {
@@ -55,11 +48,11 @@ export default defineConfig(({ mode }) => {
 				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				DB: bindings.d1({
-					id: production ? D1_ID_PROD : D1_ID_DEV,
-					name: production ? "yunomi" : "yunomi-dev",
+					id: r.d1Id,
+					name: r.worker,
 				}),
 				PARTNER: bindings.durableObject({
-					worker: local ? "yunomi-local" : production ? "yunomi" : "yunomi-dev",
+					worker: r.worker,
 					exportName: "PartnerDO",
 				}),
 			},
