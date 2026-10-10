@@ -163,7 +163,7 @@ describe("YunomiClient.notifySent", () => {
 			devCaller: true,
 		});
 		const r = await client.notifySent("yukarin", sent);
-		expect(r.ok).toBe(true);
+		expect(r.ok && r.value).toEqual({ bound: true });
 		const [url, init] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe("https://yunomi.example/v1/partners/yukarin/discord/sent");
 		expect(JSON.parse(String(init?.body))).toEqual(sent);

@@ -99,6 +99,12 @@ export const createMessageHandler =
 					sent_message_id: sent.id,
 					error: notified.error.type,
 				});
+			} else if (!notified.value.bound) {
+				// Worker 側で partner 発言が見つからなかった。Discord 上の返信を partner 宛てと判定できない
+				log.warn("sent notification not bound", {
+					message_id: message.id,
+					sent_message_id: sent.id,
+				});
 			}
 		} catch (e) {
 			log.warn("sent notification failed", {
