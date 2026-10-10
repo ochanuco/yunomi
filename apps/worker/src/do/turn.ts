@@ -5,15 +5,19 @@ import {
 	turnOutput,
 } from "@yunomi/conversation";
 import {
+	applyLlmFailure,
+	applyLlmSuccess,
 	applyRelationshipDelta,
 	applyStateDelta,
 	type DomainError,
 	externalServiceUnavailable,
 	initialPartnerState,
 	initialRelationship,
+	type LlmHealthUpdate,
 	lifestyleDay,
 	newId,
 	type PartnerProfile,
+	type PartnerState,
 	type Result,
 } from "@yunomi/core";
 import type { ModelRouter, RoutedResult } from "@yunomi/llm";
@@ -127,7 +131,24 @@ export const runTurn = async (
 		};
 	}
 
-	if (!result.ok) return degraded(msg, result.error, Date.now() - started);
+	if (!result.ok) {
+		const failedAt = deps.now();
+		// await を挟まず同期で読み直し・適用・保存する（他チャンネルのターンとの競合を避ける）。
+		const current = store.getState() ?? state0;
+		const health = applyLlmFailure(
+			current,
+			store.getLlmFailureStreak(),
+			failedAt,
+		);
+		store.setLlmFailureStreak(health.failureStreak);
+		recordHealth(deps, msg, current, health, failedAt);
+		return degraded(
+			msg,
+			result.error,
+			Date.now() - started,
+			health.enteredDegraded ? "entered" : null,
+		);
+	}
 
 	const { output, model, usage, latencyMs, fallbackUsed } = result.value;
 	// LLM の await の間に他チャンネルのターンが state を更新しうるため、最新値を読み直し、
@@ -158,11 +179,15 @@ export const runTurn = async (
 				before,
 				after: stateUpdate.state,
 				delta: stateUpdate.applied,
+				reason: "turn_delta",
 				sourceEventId: msg.eventId,
 				occurredAt: at,
 			}),
 		);
 	}
+	const health = applyLlmSuccess(stateUpdate.state, at);
+	store.setLlmFailureStreak(health.failureStreak);
+	recordHealth(deps, msg, stateUpdate.state, health, at);
 	if (relUpdate.applied.familiarity !== 0 || relUpdate.applied.trust !== 0) {
 		deps.background(
 			deps.history.recordRelationshipEvent({
@@ -221,6 +246,7 @@ export const runTurn = async (
 		usage,
 		latencyMs,
 		toolIntents: output.tool_intents,
+		degradedTransition: health.recovered ? ("recovered" as const) : null,
 	};
 	const utterance = output.utterance.trim();
 	if (output.reply_policy !== "reply" || utterance === "") {
@@ -263,12 +289,37 @@ const degraded = (
 	msg: InboundMessage,
 	error: DomainError,
 	latencyMs: number,
+	degradedTransition: TurnAuditData["degradedTransition"] = null,
 ): TurnOutcome =>
 	ignoreOutcome(msg, "error", {
 		degraded: true,
 		errorType: error.type,
 		latencyMs,
+		degradedTransition,
 	});
+
+// state の保存と D1 履歴の登録。変化がなければ何もしない。
+const recordHealth = (
+	deps: TurnDeps,
+	msg: InboundMessage,
+	before: PartnerState,
+	health: LlmHealthUpdate,
+	at: Date,
+) => {
+	if (health.state === before || !health.reason) return;
+	deps.store.putState(health.state);
+	deps.background(
+		deps.history.recordStateTransition({
+			partnerId: deps.profile.partner_id,
+			before,
+			after: health.state,
+			delta: { mood: 0, energy: 0 },
+			reason: health.reason,
+			sourceEventId: msg.eventId,
+			occurredAt: at,
+		}),
+	);
+};
 
 // 初回のみ。プロファイルの初期値を DO に永続化してから使う。
 const seedState = (deps: TurnDeps, now: Date) => {

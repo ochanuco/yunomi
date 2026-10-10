@@ -56,6 +56,12 @@ const MIGRATIONS: string[][] = [
 		"ALTER TABLE recent_messages ADD COLUMN discord_message_id TEXT",
 		"CREATE INDEX IF NOT EXISTS recent_messages_discord_id ON recent_messages (discord_message_id)",
 	],
+	[
+		`CREATE TABLE IF NOT EXISTS llm_health (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			failure_streak INTEGER NOT NULL
+		)`,
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {

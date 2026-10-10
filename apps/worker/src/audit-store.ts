@@ -58,6 +58,7 @@ export const toAuditRow = (
 			relationship: audit.relationship,
 			memory: audit.memory,
 			toolIntents: audit.toolIntents,
+			degradedTransition: audit.degradedTransition,
 		}),
 		occurredAt: ctx.occurredAt.toISOString(),
 		createdAt: ctx.now.toISOString(),

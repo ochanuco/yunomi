@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { PartnerProfile } from "./partner-profile.ts";
 import {
+	applyLlmFailure,
+	applyLlmSuccess,
 	applyRelationshipDelta,
 	applyStateDelta,
 	type DailyAccumulator,
@@ -178,5 +180,55 @@ describe("applyRelationshipDelta", () => {
 		);
 		expect(big.rejected).toHaveLength(2);
 		expect(big.relationship).toBe(rel);
+	});
+});
+
+describe("LLM の健全性による state 遷移", () => {
+	const base = initialPartnerState(profile, T);
+	const failN = (n: number, from = base, streak = 0) => {
+		let u = applyLlmFailure(from, streak, T);
+		for (let i = 1; i < n; i++)
+			u = applyLlmFailure(u.state, u.failureStreak, T);
+		return u;
+	};
+
+	it("2 回の失敗では立たず、3 回目で degradedMode と stress +0.2", () => {
+		const two = failN(2);
+		expect(two.state).toBe(base);
+		expect(two.reason).toBeNull();
+		const three = failN(3);
+		expect(three.state).toMatchObject({
+			degradedMode: true,
+			systemStress: 0.2,
+			version: 2,
+		});
+		expect(three.reason).toBe("llm_consecutive_failures");
+		expect(three.enteredDegraded).toBe(true);
+	});
+
+	it("degradedMode 中の失敗は stress が 1 回ごとに +0.1、上限 1.0", () => {
+		expect(failN(4).state.systemStress).toBeCloseTo(0.3);
+		expect(failN(4).enteredDegraded).toBe(false);
+		expect(failN(30).state.systemStress).toBe(1);
+	});
+
+	it("成功で degradedMode が戻り、stress は -0.1、下限 0", () => {
+		const degraded = failN(3);
+		const ok = applyLlmSuccess(degraded.state, T);
+		expect(ok.state).toMatchObject({ degradedMode: false, systemStress: 0.1 });
+		expect(ok.failureStreak).toBe(0);
+		expect(ok.reason).toBe("llm_recovered");
+		expect(ok.recovered).toBe(true);
+		const again = applyLlmSuccess(ok.state, T);
+		expect(again.state.systemStress).toBe(0);
+		expect(again.recovered).toBe(false);
+		expect(applyLlmSuccess(again.state, T).state).toBe(again.state);
+	});
+
+	it("成功を挟むと連続失敗はやり直し", () => {
+		const two = failN(2);
+		const ok = applyLlmSuccess(two.state, T);
+		const next = failN(2, ok.state, ok.failureStreak);
+		expect(next.state.degradedMode).toBe(false);
 	});
 });
