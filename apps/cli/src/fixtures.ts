@@ -2,6 +2,7 @@ import type {
 	AuditItem,
 	CandidateView,
 	FactView,
+	KpiDay,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -93,3 +94,21 @@ export const auditItem = (over: Partial<AuditItem> = {}): AuditItem => ({
 	created_at: "2026-10-11T03:00:01.000Z",
 	...over,
 });
+
+export const kpiDay: KpiDay = {
+	day: "2026-10-10",
+	turns: 10,
+	replies: 7,
+	ignores: 3,
+	errors: 1,
+	degraded: 0,
+	fallback_used: 2,
+	latency_p50_ms: 1200,
+	latency_p95_ms: 3400,
+	usage: {
+		input_tokens: 1000,
+		output_tokens: 200,
+		cache_read_tokens: 50,
+		cache_write_tokens: 10,
+	},
+};

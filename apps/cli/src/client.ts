@@ -3,6 +3,8 @@ import {
 	ApiErrorSchema,
 	type AuditResponse,
 	AuditResponseSchema,
+	type KpisResponse,
+	KpisResponseSchema,
 	type MemoryKind,
 	type MemoryResponse,
 	MemoryResponseSchema,
@@ -26,6 +28,7 @@ export type AdminClient = {
 		limit: number;
 		cursor?: string;
 	}): Promise<MemoryResponse>;
+	kpis(q: { days: number }): Promise<KpisResponse>;
 	audit(q: {
 		limit: number;
 		cursor?: string;
@@ -87,6 +90,7 @@ export const createClient = (
 		status: () => call("status", StatusResponseSchema),
 		relationships: () => call("relationships", RelationshipsResponseSchema),
 		memory: (q) => call("memory", MemoryResponseSchema, q),
+		kpis: (q) => call("kpis", KpisResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
 	};
 };

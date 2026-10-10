@@ -14,6 +14,7 @@ import { purgeExpiredAudit } from "./audit-store.ts";
 import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
+import { aggregateDailyKpis } from "./kpi-store.ts";
 
 export { PartnerDO };
 
@@ -43,10 +44,15 @@ export default {
 	},
 
 	async scheduled(controller, env): Promise<void> {
-		await purgeExpiredAudit(
-			drizzle(env.DB),
-			new Date(controller.scheduledTime),
+		const db = drizzle(env.DB);
+		const now = new Date(controller.scheduledTime);
+		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
+		await aggregateDailyKpis(
+			db,
+			now,
+			yukarinProfile.living_rhythm.lifestyle_day_boundary,
 		);
+		await purgeExpiredAudit(db, now);
 	},
 } satisfies ExportedHandler<Env>;
 

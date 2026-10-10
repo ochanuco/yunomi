@@ -33,6 +33,17 @@ describe("parseCli", () => {
 		});
 	});
 
+	it("kpi の既定は 30 日、--days で変える", () => {
+		expect(ok(["kpi"]).command).toEqual({ name: "kpi", days: 30 });
+		expect(ok(["kpi", "--days", "7", "--json"]).command).toEqual({
+			name: "kpi",
+			days: 7,
+		});
+		expect(parseCli(["kpi", "--days", "0"]).ok).toBe(false);
+		expect(parseCli(["kpi", "--days", "366"]).ok).toBe(false);
+		expect(parseCli(["kpi", "--limit", "5"]).ok).toBe(false);
+	});
+
 	it("audit tail の -n と -f", () => {
 		expect(ok(["audit", "tail", "-n", "50", "-f"]).command).toEqual({
 			name: "audit-tail",

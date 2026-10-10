@@ -4,6 +4,7 @@ import {
 	auditItem,
 	candidate,
 	fact,
+	kpiDay,
 	relationship,
 	status,
 } from "./fixtures.ts";
@@ -34,6 +35,7 @@ const api = (url: URL) => {
 	const path = url.pathname.replace("/admin/api/partners/yukarin/", "");
 	if (path === "status") return status;
 	if (path === "relationships") return { items: [relationship] };
+	if (path === "kpis") return { items: [kpiDay] };
 	if (path === "memory") {
 		return url.searchParams.get("kind") === "candidates"
 			? { kind: "candidates", items: [candidate], next_cursor: null }
@@ -68,6 +70,22 @@ describe("run", () => {
 		expect(h.urls[0]?.searchParams.get("limit")).toBe("3");
 		expect(h.out[0]).toContain("緑茶");
 		expect(h.out[1]).toContain("友達");
+	});
+
+	it("kpi は days を渡して表で出す", async () => {
+		const h = harness(api);
+		expect(await run(["kpi", "--days", "7"], h.deps)).toBe(0);
+		expect(h.urls[0]?.pathname).toBe("/admin/api/partners/yukarin/kpis");
+		expect(h.urls[0]?.searchParams.get("days")).toBe("7");
+		expect(h.out[0]).toContain("2026-10-10");
+		expect(h.out[0]).toContain("3400");
+	});
+
+	it("kpi --json は応答をそのまま出す", async () => {
+		const h = harness(api);
+		await run(["kpi", "--json"], h.deps);
+		expect(h.urls[0]?.searchParams.get("days")).toBe("30");
+		expect(JSON.parse(h.out[0] ?? "").items[0].turns).toBe(10);
 	});
 
 	it("audit tail は古い順に出す", async () => {

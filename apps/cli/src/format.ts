@@ -2,6 +2,7 @@ import type {
 	AuditItem,
 	CandidateView,
 	FactView,
+	KpiDay,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -151,6 +152,38 @@ export const formatCandidates = (items: CandidateView[]): string =>
 					truncate(c.object_value, 30),
 					num(c.confidence),
 					c.source,
+				]),
+			);
+
+export const formatKpis = (items: KpiDay[]): string =>
+	items.length === 0
+		? "(KPI なし)"
+		: table(
+				[
+					"DAY (JST)",
+					"TURNS",
+					"REPLY",
+					"IGNORE",
+					"ERR",
+					"DEGR",
+					"FALLBACK",
+					"P50 MS",
+					"P95 MS",
+					"IN/OUT TOKENS",
+					"CACHE R/W",
+				],
+				items.map((k) => [
+					k.day,
+					String(k.turns),
+					String(k.replies),
+					String(k.ignores),
+					String(k.errors),
+					String(k.degraded),
+					String(k.fallback_used),
+					k.latency_p50_ms === null ? "-" : String(k.latency_p50_ms),
+					k.latency_p95_ms === null ? "-" : String(k.latency_p95_ms),
+					`${k.usage.input_tokens}/${k.usage.output_tokens}`,
+					`${k.usage.cache_read_tokens}/${k.usage.cache_write_tokens}`,
 				]),
 			);
 

@@ -7,6 +7,7 @@ import {
 	formatAuditRow,
 	formatCandidates,
 	formatFacts,
+	formatKpis,
 	formatStatus,
 } from "./format.ts";
 
@@ -78,6 +79,11 @@ const execute = async (
 			if (!global.json && page.next_cursor) {
 				deps.err(`(続きあり: --limit を増やすと ${MAX_PAGE} 件まで見られる)`);
 			}
+			return;
+		}
+		case "kpi": {
+			const r = await client.kpis({ days: command.days });
+			deps.out(global.json ? JSON.stringify(r, null, 2) : formatKpis(r.items));
 			return;
 		}
 		case "audit-tail":

@@ -5,6 +5,7 @@ Admin 読み取り API（`/admin/api/...`）を叩いて、Yukarin の状態・�
 ```
 ykm status                                   State / Relationship / 件数
 ykm memory list [--candidates] [--limit N]   Fact（既定）か candidate の一覧
+ykm kpi [--days N]                          生活日ごとの KPI（既定 30 日、当日は含まない）
 ykm audit tail [-n N] [-f]                   直近の audit。-f は 5 秒ごとに since で追う
 ```
 
