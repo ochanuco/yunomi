@@ -41,9 +41,13 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 
 1 メッセージにつき `audit_events`（D1）へ 1 行を書く。自己発言は書かない。書き込みは `#background`（`ctx.waitUntil`）に載せ、`flushBackground()` が待つ。思考過程は持たず、判断サマリ・モデル・fallback・token・latency・受信本文と、state / relationship / memory / tool_intents の詳細（`detail_json`）だけを残す。`created_at` が `AUDIT_RETENTION_DAYS`（30）より古い行は、毎日 04:17 JST（`17 19 * * *` UTC）の `scheduled` が削除する。
 
+### 日次 KPI
+
+`scheduled` は削除の前に `audit_events` を生活日（JST 05:00 境界）単位で集計し、`audit_daily_kpis`（主キー `(partner_id, day)`）へ upsert する。集計に失敗したら削除しない。列は turns / replies / ignores / errors（`error_type` あり）/ degraded / fallback_used / reply ターンの latency p50・p95（nearest-rank、reply が無い日は null）/ input・output・cache_read・cache_write tokens の合計。進行中の生活日は含めず、直近 `KPI_RECOMPUTE_DAYS`（7）日分の確定済みの日を毎回再集計する。upsert なので何度走らせても同じ結果になり、cron の失敗で取りこぼした日も 7 日以内なら拾える。cron は 04:17 JST（生活日の境界の前）に走るため、ある生活日が集計されるのは翌日の cron になる。保持期間（30 日）内の過去分の遡及集計はしない。
+
 ## Admin API
 
-`/admin/api/partners/:partnerId/{status,relationships,memory,audit}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`、`audit` は新しい順で `since` を取れる。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+`/admin/api/partners/:partnerId/{status,relationships,memory,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
 
 ## Admin Web の配信
 

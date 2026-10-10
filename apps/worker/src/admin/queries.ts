@@ -10,6 +10,7 @@ import {
 	count,
 	desc,
 	eq,
+	gt,
 	gte,
 	inArray,
 	isNull,
@@ -105,6 +106,7 @@ export const createAdminQueries = (db: DrizzleD1Database) => ({
 		partnerId: string,
 		limit: number,
 		cursor: Cursor | null,
+		current: { now: Date } | null,
 	): Promise<Page<FactView>> {
 		const rows = await db
 			.select()
@@ -112,6 +114,15 @@ export const createAdminQueries = (db: DrizzleD1Database) => ({
 			.where(
 				and(
 					eq(facts.partnerId, partnerId),
+					current
+						? and(
+								isNull(facts.supersededBy),
+								or(
+									isNull(facts.validTo),
+									gt(facts.validTo, current.now.toISOString()),
+								),
+							)
+						: undefined,
 					cursor
 						? or(
 								lt(facts.observedAt, cursor.at),

@@ -1,6 +1,7 @@
 import {
 	ADMIN_API_PREFIX,
 	type AuditResponse,
+	type KpisResponse,
 	type MemoryResponse,
 	type RelationshipsResponse,
 	type StatusResponse,
@@ -9,6 +10,7 @@ import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { drizzle } from "drizzle-orm/d1";
 import { authenticate } from "../auth/access.ts";
 import { accessEnv, partnerNamespace } from "../env.ts";
+import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
 
@@ -19,7 +21,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
-	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|audit)$`,
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|audit|kpis)$`,
 );
 
 type Params = { limit: number; cursor: ReturnType<typeof decodeCursor> };
@@ -105,8 +107,17 @@ export async function handleAdminApi(
 			}
 			const page = parsePage(url);
 			if (page instanceof Response) return page;
+			const include = url.searchParams.get("include");
+			if (include !== null && include !== "all") {
+				return fail(400, "invalid_include");
+			}
 			if (kind === "facts") {
-				const r = await queries.facts(partnerId, page.limit, page.cursor);
+				const r = await queries.facts(
+					partnerId,
+					page.limit,
+					page.cursor,
+					include === "all" ? null : { now: new Date() },
+				);
 				return json({
 					kind,
 					items: r.items,
@@ -119,6 +130,24 @@ export async function handleAdminApi(
 				items: r.items,
 				next_cursor: r.nextCursor,
 			} satisfies MemoryResponse);
+		}
+		case "kpis": {
+			const rawDays = url.searchParams.get("days");
+			let days = KPI_DEFAULT_DAYS;
+			if (rawDays !== null) {
+				days = Number(rawDays);
+				if (!Number.isInteger(days) || days < 1 || days > KPI_MAX_DAYS) {
+					return fail(400, "invalid_days");
+				}
+			}
+			const items = await readDailyKpis(
+				drizzle(env.DB),
+				partnerId,
+				days,
+				new Date(),
+				yukarinProfile.living_rhythm.lifestyle_day_boundary,
+			);
+			return json({ items } satisfies KpisResponse);
 		}
 		default: {
 			const page = parsePage(url);

@@ -7,6 +7,7 @@ import {
 	formatAuditRow,
 	formatCandidates,
 	formatFacts,
+	formatKpis,
 	formatStatus,
 } from "./format.ts";
 
@@ -70,7 +71,11 @@ const execute = async (
 		}
 		case "memory-list": {
 			const kind = command.candidates ? "candidates" : "facts";
-			const page = await client.memory({ kind, limit: command.limit });
+			const page = await client.memory({
+				kind,
+				limit: command.limit,
+				include: command.all ? "all" : undefined,
+			});
 			if (global.json) json(page);
 			else if (page.kind === "facts") {
 				deps.out(formatFacts(page.items, deps.now()));
@@ -78,6 +83,11 @@ const execute = async (
 			if (!global.json && page.next_cursor) {
 				deps.err(`(続きあり: --limit を増やすと ${MAX_PAGE} 件まで見られる)`);
 			}
+			return;
+		}
+		case "kpi": {
+			const r = await client.kpis({ days: command.days });
+			deps.out(global.json ? JSON.stringify(r, null, 2) : formatKpis(r.items));
 			return;
 		}
 		case "audit-tail":

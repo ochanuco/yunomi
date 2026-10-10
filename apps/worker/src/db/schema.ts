@@ -168,3 +168,29 @@ export const auditEvents = sqliteTable(
 	},
 	(t) => [index("audit_events_partner_created").on(t.partnerId, t.createdAt)],
 );
+
+// audit_events は 30 日で消えるため、削除前に生活日単位へ集計して長期保存する。
+export const auditDailyKpis = sqliteTable(
+	"audit_daily_kpis",
+	{
+		partnerId: text("partner_id").notNull(),
+		// 生活日（JST 05:00 境界）の YYYY-MM-DD。
+		day: text("day").notNull(),
+		turns: integer("turns").notNull(),
+		replies: integer("replies").notNull(),
+		ignores: integer("ignores").notNull(),
+		// error_type を持つターン。成功率は 1 - errors / turns。
+		errors: integer("errors").notNull(),
+		degraded: integer("degraded").notNull(),
+		fallbackUsed: integer("fallback_used").notNull(),
+		// reply ターンの latency。reply が無い日は null。
+		latencyP50Ms: integer("latency_p50_ms"),
+		latencyP95Ms: integer("latency_p95_ms"),
+		inputTokens: integer("input_tokens").notNull(),
+		outputTokens: integer("output_tokens").notNull(),
+		cacheReadTokens: integer("cache_read_tokens").notNull(),
+		cacheWriteTokens: integer("cache_write_tokens").notNull(),
+		updatedAt: text("updated_at").notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.partnerId, t.day] })],
+);

@@ -320,6 +320,46 @@ describe("memory", () => {
 		expect(status.counts.pending_candidates).toBeGreaterThanOrEqual(1);
 	});
 
+	it("Fact は既定で置き換え済み・期限切れを除き、include=all で全件返す", async () => {
+		const p = PARTNER_ID;
+		await env.DB.prepare(
+			"INSERT INTO entities (id, kind, display_name, created_at) VALUES ('adm-e2', 'person', 'carol', '2031-01-01T00:00:00Z')",
+		).run();
+		const fact = (
+			id: string,
+			validTo: string | null,
+			supersededBy: string | null,
+		) =>
+			env.DB.prepare(
+				`INSERT INTO facts (id, partner_id, subject_entity_id, predicate, object_type, object_value, confidence, importance, source, observed_at, valid_from, valid_to, superseded_by)
+				VALUES (?1, ?2, 'adm-e2', ?1, 'string', 'v', 0.9, 0.7, 'user_statement', '2031-02-01T00:00:00Z', '2031-02-01T00:00:00Z', ?3, ?4)`,
+			)
+				.bind(id, p, validTo, supersededBy)
+				.run();
+		await fact("cur", null, null);
+		await fact("future", "2999-01-01T00:00:00Z", null);
+		await fact("expired", "2020-01-01T00:00:00Z", null);
+		await fact("old", null, "cur");
+
+		const ids = async (q: string) => {
+			const r = await parse(
+				await local(`${BASE}/memory?kind=facts&limit=200${q}`),
+				MemoryResponseSchema,
+			);
+			return r.items
+				.map((i) => i.id)
+				.filter((id) => ["cur", "future", "expired", "old"].includes(id));
+		};
+		expect((await ids("")).sort()).toEqual(["cur", "future"]);
+		expect((await ids("&include=all")).sort()).toEqual([
+			"cur",
+			"expired",
+			"future",
+			"old",
+		]);
+		expect((await local(`${BASE}/memory?include=x`)).status).toBe(400);
+	});
+
 	it("不明な kind は 400", async () => {
 		expect((await local(`${BASE}/memory?kind=x`)).status).toBe(400);
 	});

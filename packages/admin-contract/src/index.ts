@@ -82,6 +82,9 @@ export type CandidateView = {
 
 export type MemoryKind = "facts" | "candidates";
 
+/** `all` は置き換え済み・期限切れの Fact も含める。省略時は現行の Fact だけ。 */
+export type MemoryInclude = "all";
+
 export type FactsResponse = {
 	kind: "facts";
 	items: FactView[];
@@ -130,6 +133,31 @@ export type AuditResponse = {
 	items: AuditItem[];
 	next_cursor: string | null;
 };
+
+/** 確定した生活日（JST 05:00 境界）ごとの集計。audit が消えた後も残る。 */
+export type KpiDay = {
+	/** 生活日 `YYYY-MM-DD`。 */
+	day: string;
+	turns: number;
+	replies: number;
+	ignores: number;
+	/** error_type を持つターン。成功率は 1 - errors / turns。 */
+	errors: number;
+	degraded: number;
+	fallback_used: number;
+	/** reply ターンの latency。reply が無い日は null。 */
+	latency_p50_ms: number | null;
+	latency_p95_ms: number | null;
+	usage: {
+		input_tokens: number;
+		output_tokens: number;
+		cache_read_tokens: number;
+		cache_write_tokens: number;
+	};
+};
+
+/** 新しい日が先。当日（進行中）は含まない。 */
+export type KpisResponse = { items: KpiDay[] };
 
 export type ApiError = { error: string };
 
@@ -251,6 +279,28 @@ export const AuditItemSchema: v.GenericSchema<AuditItem> = v.object({
 export const AuditResponseSchema: v.GenericSchema<AuditResponse> = v.object({
 	items: v.array(AuditItemSchema),
 	next_cursor: nullable(str),
+});
+
+export const KpiDaySchema: v.GenericSchema<KpiDay> = v.object({
+	day: str,
+	turns: num,
+	replies: num,
+	ignores: num,
+	errors: num,
+	degraded: num,
+	fallback_used: num,
+	latency_p50_ms: nullable(num),
+	latency_p95_ms: nullable(num),
+	usage: v.object({
+		input_tokens: num,
+		output_tokens: num,
+		cache_read_tokens: num,
+		cache_write_tokens: num,
+	}),
+});
+
+export const KpisResponseSchema: v.GenericSchema<KpisResponse> = v.object({
+	items: v.array(KpiDaySchema),
 });
 
 export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
