@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+  - partners/*
+  - evals
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

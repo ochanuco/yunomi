@@ -1,0 +1,23 @@
+{
+	"name": "yunomi",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@10.33.0",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"build": "turbo build",
+		"typecheck": "turbo typecheck",
+		"lint": "turbo lint",
+		"test": "turbo test",
+		"eval": "turbo eval",
+		"format": "biome format --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.15",
+		"turbo": "^2.11.7",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.10"
+	}
+}
