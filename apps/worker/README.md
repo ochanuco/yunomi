@@ -32,3 +32,11 @@
 ## Memory
 
 LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。prompt には話者の現行 Fact を importance 降順・observed_at 降順で上位 12 件入れる。書き込みは次のターンが読めるよう応答前に完了させる。
+
+## Audit
+
+1 メッセージにつき `audit_events`（D1）へ 1 行を書く。自己発言は書かない。書き込みは `#background`（`ctx.waitUntil`）に載せ、`flushBackground()` が待つ。思考過程は持たず、判断サマリ・モデル・fallback・token・latency・受信本文と、state / relationship / memory / tool_intents の詳細（`detail_json`）だけを残す。`created_at` が `AUDIT_RETENTION_DAYS`（30）より古い行は、毎日 04:17 JST（`17 19 * * *` UTC）の `scheduled` が削除する。
+
+## Admin API
+
+`/admin/api/partners/:partnerId/{status,relationships,memory,audit}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`、`audit` は新しい順で `since` を取れる。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
