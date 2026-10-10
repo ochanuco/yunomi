@@ -182,8 +182,7 @@ describe("status / relationships", () => {
 			},
 		]);
 		await runInDurableObject(stub, (o) => {
-			o.createRouter = () =>
-				new ModelRouter({ provider: fake, env: "development" });
+			o.createRouter = () => new ModelRouter({ provider: fake });
 		});
 		await stub.handleDiscordMessage(
 			inbound({

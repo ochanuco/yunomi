@@ -28,7 +28,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 | オプション | 既定 | 内容 |
 | --- | --- | --- |
 | `--samples` | 5 | シナリオごとのサンプル数 |
-| `--env` | development | `development` は Haiku、`production` は Sonnet で応答を生成する |
+| `--env` | development | プロファイルの環境。応答は dev / prod とも Sonnet で生成する |
 | `--scenario <id>` | 全件 | 対象を絞る（複数指定可） |
 | `--strict` | なし | 閾値違反があるとき終了コード 1 |
 

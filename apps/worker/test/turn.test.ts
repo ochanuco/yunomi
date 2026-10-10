@@ -67,8 +67,7 @@ const setup = async (
 	const clock = { now: T0 };
 	await runInDurableObject(stub, (o) => {
 		o.now = () => clock.now;
-		o.createRouter = () =>
-			new ModelRouter({ provider: fake, env: opts.env ?? "development" });
+		o.createRouter = () => new ModelRouter({ provider: fake });
 	});
 	return { stub, fake, clock };
 };

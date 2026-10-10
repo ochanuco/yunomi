@@ -15,8 +15,7 @@ export type RoutedResult<T> = LLMResult<T> & { fallbackUsed: boolean };
 
 export type ModelRouterOptions = {
 	provider: LLMProvider;
-	env: Env;
-	/** 既定は prod=Sonnet / dev=Haiku。 */
+	/** 既定は dev / prod とも Sonnet。Haiku を主モデルにすると宛先でない会話への割り込みが増える（#59）。 */
 	primary?: ModelId;
 	fallback?: ModelId;
 };
@@ -28,7 +27,7 @@ export class ModelRouter {
 
 	constructor(opts: ModelRouterOptions) {
 		this.#provider = opts.provider;
-		this.primary = opts.primary ?? (opts.env === "production" ? SONNET : HAIKU);
+		this.primary = opts.primary ?? SONNET;
 		this.#fallback = opts.fallback ?? HAIKU;
 	}
 

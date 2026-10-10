@@ -69,11 +69,7 @@ export const installFakeLlm = async (
 	const stub = partnerStub(PARTNER_ID);
 	await runInDurableObject(stub, (o) => {
 		o.now = () => opts.now ?? T0;
-		o.createRouter = () =>
-			new ModelRouter({
-				provider: fake,
-				env: opts.production ? "production" : "development",
-			});
+		o.createRouter = () => new ModelRouter({ provider: fake });
 	});
 	return fake;
 };

@@ -79,7 +79,7 @@ describe("Tier 2 runner（Fake provider）", () => {
 
 		expect(fake.requests).toHaveLength(9);
 		const [turnReq, judgeReq] = [fake.requests[0], fake.requests[4]];
-		expect(turnReq?.model).toBe("claude-haiku-5-5");
+		expect(turnReq?.model).toBe("claude-sonnet-5-5");
 		expect(turnReq?.output.name).toBe("turn_response");
 		expect(judgeReq?.model).toBe(SONNET);
 		expect(judgeReq?.output.name).toBe("persona_judge");
@@ -107,7 +107,7 @@ describe("Tier 2 runner（Fake provider）", () => {
 		expect(report.overall.samples_ok).toBe(6);
 		expect(report.meta).toMatchObject({
 			env: "development",
-			turn_model: "claude-haiku-5-5",
+			turn_model: "claude-sonnet-5-5",
 			judge_model: SONNET,
 			samples_per_scenario: 3,
 			timestamp: "2026-01-01T00:00:00.000Z",

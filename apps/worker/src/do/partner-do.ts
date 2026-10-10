@@ -26,10 +26,7 @@ const defaultRouter = (env: Env): ModelRouter => {
 				generate: async () =>
 					err(externalServiceUnavailable({ service: "anthropic:no-api-key" })),
 			};
-	return new ModelRouter({
-		provider,
-		env: env.YUNOMI_ENV === "production" ? "production" : "development",
-	});
+	return new ModelRouter({ provider });
 };
 
 export type HandleResult = StoredResult;

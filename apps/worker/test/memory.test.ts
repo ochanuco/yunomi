@@ -54,8 +54,7 @@ const setup = async (name: string, script: Candidate[][]) => {
 	const clock = { now: new Date("2026-10-11T03:00:00Z") };
 	await runInDurableObject(stub, (o) => {
 		o.now = () => clock.now;
-		o.createRouter = () =>
-			new ModelRouter({ provider: fake, env: "development" });
+		o.createRouter = () => new ModelRouter({ provider: fake });
 	});
 	return { stub, fake, clock };
 };
