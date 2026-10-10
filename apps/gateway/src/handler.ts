@@ -3,6 +3,8 @@ import { type MessageLike, toEnvelope } from "./to-envelope.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
 export const TYPING_INTERVAL_MS = 8000;
+// 前段ルールで決まる ignore はすぐ返る。宛先でない発言のたびに typing を出さないよう、応答が遅いときだけ出す。
+export const TYPING_DELAY_MS = 1500;
 
 /** discord.js のテキストチャンネルのうち handler が使う部分。 */
 export type ChannelLike = {
@@ -40,13 +42,17 @@ export const createMessageHandler =
 			channel.sendTyping().catch((e: unknown) => {
 				log.debug("typing failed", { error: String(e) });
 			});
-		void typing();
-		const timer = setInterval(() => void typing(), TYPING_INTERVAL_MS);
+		let interval: ReturnType<typeof setInterval> | undefined;
+		const delay = setTimeout(() => {
+			void typing();
+			interval = setInterval(() => void typing(), TYPING_INTERVAL_MS);
+		}, TYPING_DELAY_MS);
 		let result: Awaited<ReturnType<YunomiClient["send"]>>;
 		try {
 			result = await deps.client.send(envelope.value);
 		} finally {
-			clearInterval(timer);
+			clearTimeout(delay);
+			clearInterval(interval);
 		}
 
 		if (!result.ok) {

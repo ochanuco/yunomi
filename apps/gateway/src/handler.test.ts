@@ -1,6 +1,10 @@
 import { err, ok } from "@yunomi/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMessageHandler, TYPING_INTERVAL_MS } from "./handler.ts";
+import {
+	createMessageHandler,
+	TYPING_DELAY_MS,
+	TYPING_INTERVAL_MS,
+} from "./handler.ts";
 import { silentLogger } from "./logger.ts";
 import type { MessageLike } from "./to-envelope.ts";
 
@@ -121,11 +125,11 @@ describe("createMessageHandler", () => {
 		expect(client.notifySent).not.toHaveBeenCalled();
 	});
 
-	it("ignore は何も送らず、typing は開始される", async () => {
+	it("すぐ返る ignore は何も送らず、typing も出さない", async () => {
 		const { channel, handle } = setup(async () => ok({ action: "ignore" }));
 		await handle(message, channel);
 		expect(channel.send).not.toHaveBeenCalled();
-		expect(channel.sendTyping).toHaveBeenCalledTimes(1);
+		expect(channel.sendTyping).not.toHaveBeenCalled();
 	});
 
 	it("失敗しても何も送らない", async () => {
@@ -136,7 +140,7 @@ describe("createMessageHandler", () => {
 		expect(channel.send).not.toHaveBeenCalled();
 	});
 
-	it("待機中は 8 秒ごとに typing を出し、完了後は止める", async () => {
+	it("応答が遅いときだけ typing を出し、以降 8 秒ごとに続け、完了後は止める", async () => {
 		vi.useFakeTimers();
 		let release: (v: unknown) => void = () => {};
 		const { channel, handle } = setup(
@@ -146,6 +150,9 @@ describe("createMessageHandler", () => {
 				}),
 		);
 		const done = handle(message, channel);
+		await vi.advanceTimersByTimeAsync(TYPING_DELAY_MS - 1);
+		expect(channel.sendTyping).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
 		expect(channel.sendTyping).toHaveBeenCalledTimes(1);
 		await vi.advanceTimersByTimeAsync(TYPING_INTERVAL_MS * 2);
 		expect(channel.sendTyping).toHaveBeenCalledTimes(3);
