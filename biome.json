@@ -6,7 +6,8 @@
 			"**",
 			"!**/migrations",
 			"!**/.cloudflare",
-			"!**/worker-configuration.d.ts"
+			"!**/worker-configuration.d.ts",
+			"!**/generated"
 		]
 	},
 	"formatter": { "indentStyle": "tab" },
