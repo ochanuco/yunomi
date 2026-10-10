@@ -40,6 +40,8 @@ export default defineConfig(({ mode }) => {
 				ACCESS_CALLERS: bindings.json(
 					production ? ACCESS_CALLERS_PROD : ACCESS_CALLERS_DEV,
 				),
+				// Admin API を許可する owner の email。
+				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				DB: bindings.d1({
 					id: production ? D1_ID_PROD : D1_ID_DEV,

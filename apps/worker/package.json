@@ -13,8 +13,15 @@
 		"db:migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000000 --local"
 	},
 	"dependencies": {
+		"@yunomi/conversation": "workspace:*",
+		"@yunomi/core": "workspace:*",
+		"@yunomi/llm": "workspace:*",
+		"@yunomi/partner-yukarin": "workspace:*",
+		"@yunomi/protocol": "workspace:*",
 		"cf": "1.0.0-beta.14",
-		"drizzle-orm": "^0.45.4"
+		"drizzle-orm": "^0.45.4",
+		"jose": "^6.2.12",
+		"valibot": "^1.5.0"
 	},
 	"devDependencies": {
 		"@cloudflare/config": "^0.24.1",
