@@ -19,7 +19,7 @@
 
 ## D1 migration
 
-`pnpm db:generate`（drizzle-kit、`migrations/NNNN_name.sql` のフラット配置は `cf d1 migrations apply` の既定 pattern `*.sql` と一致）。`pnpm db:migrate:local` はローカル Miniflare 状態へ適用する。
+`pnpm db:generate`（drizzle-kit、`migrations/NNNN_name.sql` のフラット配置は `cf d1 migrations apply` の既定 pattern `*.sql` と一致）。`pnpm db:migrate:local` は `cf dev` が使う `.wrangler/state` へ migration を適用する（`cf d1 migrations apply --local` は別の state を見るため使わない）。初回の `pnpm dev` の前に一度実行する。
 
 ## Partner DO
 
