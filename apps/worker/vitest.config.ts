@@ -5,15 +5,12 @@ import {
 	convertToWranglerConfig,
 	loadAndParseConfig,
 } from "@cloudflare/config";
-import {
-	cloudflareTest,
-	readD1Migrations,
-} from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
 const root = dirname(fileURLToPath(import.meta.url));
 
-// vitest-pool-workers は Wrangler 設定ファイルしか読めないため、
+// vitest-plugin は Wrangler 設定ファイルしか読めないため、
 // cloudflare.config.ts から生成して使う（設定の二重管理を避ける）。
 async function evaluateConfig(mode: string) {
 	const { result } = await loadAndParseConfig(

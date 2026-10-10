@@ -55,7 +55,7 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 `cf`（`cf@1.0.0-beta.14`）は 2026-10 時点で beta で、`cf/config` の実体（`@cloudflare/config`）は自身を「外部利用にはまだ安定していない」としている。また次の 2 点は `cloudflare.config.ts` で表現できない。
 
 - D1 migration の置き場所（`cf d1 migrations apply` は DB の UUID と `--dir` を受け取る）
-- `@cloudflare/vitest-pool-workers` の設定（Wrangler 設定を読む）
+- `@cloudflare/vitest-plugin` の設定（Wrangler 設定を読む）
 
 `cf init` の雛形は Vite を使うが、Vite は必須ではない。`cf dev` / `cf build` は `package.json` に宣言された実装（`@cloudflare/vite-plugin` か `wrangler`）に委譲する。
 
