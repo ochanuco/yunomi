@@ -14,7 +14,7 @@
 | secret | 名前を `bindings.secret()` で宣言する。デプロイ時は `cf deploy --secrets-file`（.env 形式の一時ファイル）で渡す。`cf workers secrets update` は値を `--text` でしか受け取らず argv に残るため使わない。ローカルは `.dev.vars.<mode>`。 |
 | 静的アセット | `bindings.assets` は `directory` を指定できず `cf build` が失敗する。Admin Web のビルド成果物は `scripts/embed-admin.ts` で Worker に埋め込んで配信する。 |
 | 型 | `cf workers types` はオフラインで動く。`cf-worker` の import attribute のため `tsconfig` は `module: preserve` にする。 |
-| テスト | `@cloudflare/vitest-pool-workers` は Wrangler 設定しか読まない。`vitest.config.ts` で `loadAndParseConfig` と `convertToWranglerConfig`（`@cloudflare/config`）を使い、local mode の設定から `.wrangler/test/wrangler.json` を生成して渡す。`exports` は pool が解釈しないため、DO クラスは `migrations` の `new_sqlite_classes` として補う。 |
+| テスト | `@cloudflare/vitest-plugin` は Wrangler 設定しか読まない。`vitest.config.ts` で `loadAndParseConfig` と `convertToWranglerConfig`（`@cloudflare/config`）を使い、local mode の設定から `.wrangler/test/wrangler.json` を生成して渡す。`exports` は plugin が解釈しないため、DO クラスは `migrations` の `new_sqlite_classes` として補う。 |
 
 ## Wrangler を併用する条件
 
