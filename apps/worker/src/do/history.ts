@@ -1,4 +1,5 @@
 import {
+	type LlmHealthReason,
 	newId,
 	type PartnerState,
 	type RelationshipDelta,
@@ -12,6 +13,7 @@ export type StateTransitionRecord = {
 	before: PartnerState;
 	after: PartnerState;
 	delta: StateDelta;
+	reason: "turn_delta" | LlmHealthReason;
 	sourceEventId: string;
 	occurredAt: Date;
 };
@@ -39,6 +41,7 @@ export const createHistoryWriter = (db: DrizzleD1Database): HistoryWriter => ({
 			beforeJson: JSON.stringify(r.before),
 			afterJson: JSON.stringify(r.after),
 			deltaJson: JSON.stringify(r.delta),
+			reason: r.reason,
 			sourceEventId: r.sourceEventId,
 			occurredAt: r.occurredAt.toISOString(),
 		});

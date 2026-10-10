@@ -48,4 +48,6 @@ export type TurnAuditData = {
 		rejected: RelationshipUpdateRejected[];
 	} | null;
 	memory: { outcomes: CandidateOutcome[]; error: string | null } | null;
+	/** このターンで degradedMode が切り替わったとき。LLM 失敗の連続による遷移だけを示す。 */
+	degradedTransition: "entered" | "recovered" | null;
 };

@@ -189,3 +189,91 @@ export const applyRelationshipDelta = (
 		rejected,
 	};
 };
+
+/** degradedMode に入るまでに必要な、成功を挟まない LLM 失敗の連続回数。 */
+export const DEGRADED_FAILURE_THRESHOLD = 3;
+/** degradedMode に入った瞬間の systemStress 加算。 */
+export const STRESS_ON_DEGRADED = 0.2;
+/** degradedMode 中にさらに失敗したときの 1 回あたりの systemStress 加算。 */
+export const STRESS_PER_FAILURE = 0.1;
+/** LLM 成功 1 回あたりの systemStress 減算。 */
+export const STRESS_RECOVERY = 0.1;
+
+export type LlmHealthReason = "llm_consecutive_failures" | "llm_recovered";
+
+export type LlmHealthUpdate = {
+	state: PartnerState;
+	/** 成功を挟まない連続失敗回数。DO の永続ストレージに持ち越す。 */
+	failureStreak: number;
+	/** state が変わらなかったときは null。 */
+	reason: LlmHealthReason | null;
+	enteredDegraded: boolean;
+	recovered: boolean;
+};
+
+const withHealth = (
+	state: PartnerState,
+	patch: Pick<PartnerState, "systemStress" | "degradedMode">,
+	now: Date,
+): PartnerState =>
+	state.systemStress === patch.systemStress &&
+	state.degradedMode === patch.degradedMode
+		? state
+		: {
+				...state,
+				...patch,
+				version: state.version + 1,
+				updatedAt: now.toISOString(),
+			};
+
+/** LLM 呼び出しが失敗したターンに適用する。前段ルールで LLM を呼ばなかったターンには使わない。 */
+export const applyLlmFailure = (
+	state: PartnerState,
+	failureStreak: number,
+	now: Date,
+): LlmHealthUpdate => {
+	const streak = failureStreak + 1;
+	const entering = !state.degradedMode && streak >= DEGRADED_FAILURE_THRESHOLD;
+	const increase = entering
+		? STRESS_ON_DEGRADED
+		: state.degradedMode
+			? STRESS_PER_FAILURE
+			: 0;
+	const next = withHealth(
+		state,
+		{
+			degradedMode: state.degradedMode || entering,
+			systemStress: round(clamp(state.systemStress + increase, 0, 1)),
+		},
+		now,
+	);
+	return {
+		state: next,
+		failureStreak: streak,
+		reason: next === state ? null : "llm_consecutive_failures",
+		enteredDegraded: entering,
+		recovered: false,
+	};
+};
+
+/** LLM 呼び出しが成功したターンに適用する。 */
+export const applyLlmSuccess = (
+	state: PartnerState,
+	now: Date,
+): LlmHealthUpdate => {
+	const next = withHealth(
+		state,
+		{
+			degradedMode: false,
+			systemStress: round(clamp(state.systemStress - STRESS_RECOVERY, 0, 1)),
+		},
+		now,
+	);
+	return {
+		state: next,
+		failureStreak: 0,
+		reason: next === state ? null : "llm_recovered",
+		enteredDegraded: false,
+		recovered: state.degradedMode,
+	};
+};

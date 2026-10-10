@@ -190,6 +190,7 @@ describe("保持期間", () => {
 				state: null,
 				relationship: null,
 				memory: null,
+				degradedTransition: null,
 			},
 		);
 		expect(Object.keys(row).join()).not.toMatch(/reasoning|thinking|thought/i);

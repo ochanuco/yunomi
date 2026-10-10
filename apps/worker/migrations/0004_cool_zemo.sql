@@ -1,0 +1,1 @@
+ALTER TABLE `state_transitions` ADD `reason` text DEFAULT 'turn_delta' NOT NULL;

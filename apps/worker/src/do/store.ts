@@ -216,6 +216,23 @@ export class DoStore {
 		);
 	}
 
+	getLlmFailureStreak(): number {
+		return (
+			this.#sql
+				.exec<{ failure_streak: number }>(
+					"SELECT failure_streak FROM llm_health WHERE id = 1",
+				)
+				.toArray()[0]?.failure_streak ?? 0
+		);
+	}
+
+	setLlmFailureStreak(n: number): void {
+		this.#sql.exec(
+			"INSERT OR REPLACE INTO llm_health (id, failure_streak) VALUES (1, ?)",
+			n,
+		);
+	}
+
 	getRelationship(
 		partnerId: string,
 		entityId: string,

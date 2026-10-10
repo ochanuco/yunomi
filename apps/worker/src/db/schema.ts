@@ -41,6 +41,7 @@ export const stateTransitions = sqliteTable(
 		beforeJson: text("before_json").notNull(),
 		afterJson: text("after_json").notNull(),
 		deltaJson: text("delta_json").notNull(),
+		reason: text("reason").notNull().default("turn_delta"),
 		sourceEventId: text("source_event_id").notNull(),
 		occurredAt: text("occurred_at").notNull(),
 	},
