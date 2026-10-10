@@ -17,7 +17,7 @@
 - `packages/admin-contract`: `@yunomi/admin-contract`。Admin 読み取り API（`/admin/api/...`）の応答型と Valibot スキーマ。Worker・`ykm`・Admin Web が共有する
 - `apps/cli`: `@yunomi/cli`（bin `ykm`）。Admin API を読む CLI。ビルドせず Node 24 の type stripping で `src/bin.ts` を実行する
 - `apps/admin`: `@yunomi/admin`。Admin Web（Vite + plain DOM）。ビルド成果物は `apps/worker/scripts/embed-admin.ts` で Worker に埋め込み、`/admin/` で配信する
-- 今後追加: `apps/gateway` `partners/yukarin` `evals`
+- `apps/gateway`: Home の Discord Gateway（discord.js、`tsx` で直接実行）
 
 ## コーディング規約
 

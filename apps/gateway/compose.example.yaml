@@ -1,0 +1,14 @@
+# コピーして使う。.env.dev / .env.prod は commit しない（Komodo では 1Password から注入する）。
+# 必要な変数は apps/gateway/README.md の「環境変数」を参照。
+# dev と prod は別の Discord bot・別の Worker・別の Access service token を使う。
+services:
+  yunomi-gateway-dev:
+    image: ghcr.io/ochanuco/yunomi-gateway:main
+    restart: unless-stopped
+    env_file: .env.dev
+
+  yunomi-gateway:
+    # prod は main の tag ではなく、動作確認済みの sha-<short> に固定する
+    image: ghcr.io/ochanuco/yunomi-gateway:sha-0000000
+    restart: unless-stopped
+    env_file: .env.prod
