@@ -1,5 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import { err, externalServiceUnavailable } from "@yunomi/core";
+import {
+	err,
+	externalServiceUnavailable,
+	type PartnerState,
+	type Relationship,
+} from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
@@ -74,6 +79,15 @@ export class PartnerDO extends DurableObject<Env> {
 	ping(): { ok: true; rows: number } {
 		const [row] = this.ctx.storage.sql.exec("SELECT 1 AS one").toArray();
 		return { ok: true, rows: Number(row?.one ?? 0) };
+	}
+
+	/** Admin API 用。現在値は DO が持つ。 */
+	adminState(): PartnerState | null {
+		return this.#store.getState();
+	}
+
+	adminRelationships(): Relationship[] {
+		return this.#store.listRelationships(yukarinProfile.partner_id);
 	}
 
 	#background(task: Promise<void>): void {

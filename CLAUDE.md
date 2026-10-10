@@ -14,6 +14,7 @@
 
 - `apps/worker`: Cloudflare Worker（`cf` CLI + `cloudflare.config.ts`、Wrangler を委譲先に使う。Vite は使わない）
 - `packages/core`: `@yunomi/core`。ID、ドメインエラー、Envelope、EventBus。Workers 型に依存しない
+- `packages/admin-contract`: `@yunomi/admin-contract`。Admin 読み取り API（`/admin/api/...`）の応答型と Valibot スキーマ。Worker・`ykm`・Admin Web が共有する
 - 今後追加: `apps/gateway` `apps/admin` `apps/cli` `partners/yukarin` `evals`
 
 ## コーディング規約

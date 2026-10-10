@@ -13,6 +13,7 @@
 		"db:migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000000 --local"
 	},
 	"dependencies": {
+		"@yunomi/admin-contract": "workspace:*",
 		"@yunomi/conversation": "workspace:*",
 		"@yunomi/core": "workspace:*",
 		"@yunomi/llm": "workspace:*",

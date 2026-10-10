@@ -234,6 +234,30 @@ export class DoStore {
 			: null;
 	}
 
+	listRelationships(partnerId: string): Relationship[] {
+		return this.#sql
+			.exec<{
+				entity_id: string;
+				familiarity: number;
+				trust: number;
+				summary: string | null;
+				version: number;
+				updated_at: string;
+			}>(
+				"SELECT entity_id, familiarity, trust, summary, version, updated_at FROM relationships ORDER BY updated_at DESC, entity_id",
+			)
+			.toArray()
+			.map((r) => ({
+				partnerId,
+				entityId: r.entity_id,
+				familiarity: r.familiarity,
+				trust: r.trust,
+				summary: r.summary,
+				version: r.version,
+				updatedAt: r.updated_at,
+			}));
+	}
+
 	putRelationship(rel: Relationship, acc: DailyAccumulator): void {
 		this.#sql.exec(
 			`INSERT OR REPLACE INTO relationships

@@ -1,16 +1,15 @@
+import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { type GatewayResponse, toInboundMessage } from "@yunomi/protocol";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import { handleAdminApi } from "./admin/api.ts";
 import { purgeExpiredAudit } from "./audit-store.ts";
-import { type AccessEnv, authenticate, type Principal } from "./auth/access.ts";
+import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
+import { accessEnv, partnerNamespace } from "./env.ts";
 
 export { PartnerDO };
-
-// cloudflare.config.ts の binding は worker を名前で参照するため、DO の型は推論されない。
-const partnerNamespace = (env: Env) =>
-	env.PARTNER as DurableObjectNamespace<PartnerDO>;
 
 const DISCORD_EVENTS_PATH = "/v1/interfaces/discord/events";
 
@@ -19,6 +18,9 @@ export default {
 		const { pathname } = new URL(request.url);
 		if (request.method === "GET" && pathname === "/health") {
 			return health(env);
+		}
+		if (pathname.startsWith(`${ADMIN_API_PREFIX}/`)) {
+			return handleAdminApi(request, env);
 		}
 		if (pathname === DISCORD_EVENTS_PATH) {
 			return discordEvents(request, env);
@@ -33,14 +35,6 @@ export default {
 		);
 	},
 } satisfies ExportedHandler<Env>;
-
-const accessEnv = (env: Env): AccessEnv => ({
-	YUNOMI_ENV: env.YUNOMI_ENV,
-	ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN,
-	ACCESS_AUD: env.ACCESS_AUD,
-	ACCESS_CALLERS: env.ACCESS_CALLERS as Record<string, string>,
-	OWNER_EMAILS: env.OWNER_EMAILS as string[],
-});
 
 const isGateway = (p: Principal) =>
 	p.kind === "service" && p.caller === "gateway";
