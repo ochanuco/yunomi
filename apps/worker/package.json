@@ -1,0 +1,27 @@
+{
+	"name": "@yunomi/worker",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "cf dev",
+		"build": "cf build",
+		"typecheck": "cf workers types && tsc",
+		"lint": "biome check .",
+		"test": "vitest run",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000000 --local"
+	},
+	"dependencies": {
+		"cf": "1.0.0-beta.14",
+		"drizzle-orm": "^0.45.4"
+	},
+	"devDependencies": {
+		"@cloudflare/config": "^0.24.1",
+		"@cloudflare/vitest-pool-workers": "^0.23.0",
+		"drizzle-kit": "^0.31.11",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.11",
+		"wrangler": "^4.149.0"
+	}
+}

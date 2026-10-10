@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "preserve",
+		"types": ["@cloudflare/vitest-pool-workers/types"]
+	},
+	"include": [
+		"vitest.config.ts",
+		"src/**/*.ts",
+		"test/**/*.ts",
+		"*.ts",
+		".cloudflare/types/index.d.ts"
+	]
+}
