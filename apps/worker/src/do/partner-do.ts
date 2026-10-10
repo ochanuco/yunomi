@@ -3,7 +3,10 @@ import { err, externalServiceUnavailable } from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
+import { drizzle } from "drizzle-orm/d1";
 import { ChannelGate } from "./channel-gate.ts";
+import { createEntityResolver, type EntityResolver } from "./entities.ts";
+import { createHistoryWriter, type HistoryWriter } from "./history.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type StoredResult } from "./store.ts";
@@ -27,6 +30,9 @@ export type HandleResult = StoredResult;
 export class PartnerDO extends DurableObject<Env> {
 	readonly #store: DoStore;
 	readonly #gate = new ChannelGate();
+	readonly #pending = new Set<Promise<void>>();
+	readonly #entities: EntityResolver;
+	readonly #history: HistoryWriter;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
@@ -42,6 +48,9 @@ export class PartnerDO extends DurableObject<Env> {
 				partnerUserId: this.env.PARTNER_DISCORD_USER_ID,
 				now: () => this.now(),
 				createRouter: () => this.createRouter(this.env),
+				entities: this.#entities,
+				history: this.#history,
+				background: (task) => this.#background(task),
 			},
 			msg,
 		);
@@ -49,12 +58,28 @@ export class PartnerDO extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		this.#store = new DoStore(ctx.storage.sql);
+		const db = drizzle(env.DB);
+		this.#history = createHistoryWriter(db);
+		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
 	}
 
 	ping(): { ok: true; rows: number } {
 		const [row] = this.ctx.storage.sql.exec("SELECT 1 AS one").toArray();
 		return { ok: true, rows: Number(row?.one ?? 0) };
+	}
+
+	#background(task: Promise<void>): void {
+		const t: Promise<void> = task
+			.catch((e) => console.error("background write failed", e))
+			.finally(() => this.#pending.delete(t));
+		this.#pending.add(t);
+		this.ctx.waitUntil(t);
+	}
+
+	/** 応答経路から外した D1 書き込みの完了を待つ。テストと運用確認用。 */
+	async flushBackground(): Promise<void> {
+		while (this.#pending.size > 0) await Promise.all([...this.#pending]);
 	}
 
 	handleDiscordMessage(inbound: InboundMessage): Promise<HandleResult> {

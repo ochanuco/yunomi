@@ -5,14 +5,21 @@ import {
 	turnOutput,
 } from "@yunomi/conversation";
 import {
+	applyRelationshipDelta,
+	applyStateDelta,
 	type DomainError,
 	externalServiceUnavailable,
+	initialPartnerState,
+	initialRelationship,
+	lifestyleDay,
 	newId,
 	type PartnerProfile,
 	type Result,
 } from "@yunomi/core";
 import type { ModelRouter, RoutedResult } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
+import type { EntityResolver } from "./entities.ts";
+import type { HistoryWriter } from "./history.ts";
 import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
 import type { DoStore } from "./store.ts";
 
@@ -25,6 +32,10 @@ export type TurnDeps = {
 	partnerUserId: string;
 	now: () => Date;
 	createRouter: () => ModelRouter;
+	entities: EntityResolver;
+	history: HistoryWriter;
+	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
+	background: (task: Promise<void>) => void;
 };
 
 const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
@@ -50,22 +61,43 @@ export const runTurn = async (
 		return ignoreOutcome(msg, "not_addressed");
 	}
 
-	const { profile } = deps;
+	const { profile, store } = deps;
+	const partnerId = profile.partner_id;
+	let entityId: string;
+	try {
+		entityId = await deps.entities.resolve(
+			"discord",
+			msg.author.id,
+			msg.author.displayName,
+		);
+	} catch {
+		return degraded(
+			msg,
+			externalServiceUnavailable({ service: "d1:entities" }),
+			0,
+		);
+	}
+
+	const seededAt = deps.now();
+	const state0 = store.getState() ?? seedState(deps, seededAt);
+	const rel0 =
+		store.getRelationship(partnerId, entityId) ??
+		seedRelationship(deps, entityId, seededAt);
+
 	const prompt = new PromptBuilder().build({
 		profile,
-		state: profile.initial_state,
+		state: state0,
 		relationship: {
 			speakerName: msg.author.displayName,
-			...profile.initial_relationship,
+			familiarity: rel0.relationship.familiarity,
+			trust: rel0.relationship.trust,
 		},
 		memory: [],
 		channel: { name: null, presence: null },
-		recent: deps.store
-			.recentMessages(msg.channelId, msg.messageId)
-			.map((m) => ({
-				speaker: m.authorName,
-				text: m.content,
-			})),
+		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
+			speaker: m.authorName,
+			text: m.content,
+		})),
 		message: toPromptMessage(msg, deps.partnerUserId),
 	});
 
@@ -88,7 +120,59 @@ export const runTurn = async (
 	if (!result.ok) return degraded(msg, result.error, Date.now() - started);
 
 	const { output, model, usage, latencyMs, fallbackUsed } = result.value;
+	// LLM の await の間に他チャンネルのターンが state を更新しうるため、最新値を読み直し、
+	// await を挟まず同期で適用・保存する。LLM には絶対値を返させない。
+	const at = deps.now();
+	const before = store.getState() ?? state0;
+	const stateUpdate = applyStateDelta(
+		partnerId,
+		before,
+		output.emotion_delta,
+		at,
+	);
+	if (stateUpdate.state !== before) store.putState(stateUpdate.state);
+	const relBefore = store.getRelationship(partnerId, entityId) ?? rel0;
+	const relUpdate = applyRelationshipDelta(
+		relBefore.relationship,
+		relBefore.accumulator,
+		output.relationship_delta,
+		at,
+		profile.living_rhythm.lifestyle_day_boundary,
+	);
+	store.putRelationship(relUpdate.relationship, relUpdate.accumulator);
+
+	if (stateUpdate.state !== before) {
+		deps.background(
+			deps.history.recordStateTransition({
+				partnerId,
+				before,
+				after: stateUpdate.state,
+				delta: stateUpdate.applied,
+				sourceEventId: msg.eventId,
+				occurredAt: at,
+			}),
+		);
+	}
+	if (relUpdate.applied.familiarity !== 0 || relUpdate.applied.trust !== 0) {
+		deps.background(
+			deps.history.recordRelationshipEvent({
+				partnerId,
+				entityId,
+				delta: relUpdate.applied,
+				summary: output.decision_summary,
+				sourceEventId: msg.eventId,
+				occurredAt: at,
+			}),
+		);
+	}
+
 	const common = {
+		state: { applied: stateUpdate.applied, rejected: stateUpdate.rejected },
+		relationship: {
+			entityId,
+			applied: relUpdate.applied,
+			rejected: relUpdate.rejected,
+		},
 		decisionSummary: output.decision_summary,
 		model,
 		fallbackUsed,
@@ -101,7 +185,6 @@ export const runTurn = async (
 		return ignoreOutcome(msg, "llm", common);
 	}
 
-	const at = deps.now();
 	deps.store.setLastPartnerReplyAt(msg.channelId, at);
 	// 実際の Discord message id は Gateway が送信するまで分からないため、仮の ID で文脈に残す。
 	deps.store.appendRecent({
@@ -141,3 +224,21 @@ const degraded = (
 		errorType: error.type,
 		latencyMs,
 	});
+
+// 初回のみ。プロファイルの初期値を DO に永続化してから使う。
+const seedState = (deps: TurnDeps, now: Date) => {
+	const s = initialPartnerState(deps.profile, now);
+	deps.store.putState(s);
+	return s;
+};
+
+const seedRelationship = (deps: TurnDeps, entityId: string, now: Date) => {
+	const relationship = initialRelationship(deps.profile, entityId, now);
+	const accumulator = {
+		day: lifestyleDay(now, deps.profile.living_rhythm.lifestyle_day_boundary),
+		familiarity: 0,
+		trust: 0,
+	};
+	deps.store.putRelationship(relationship, accumulator);
+	return { relationship, accumulator };
+};

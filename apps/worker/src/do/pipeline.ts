@@ -39,6 +39,8 @@ export const ignoreOutcome = (
 		latencyMs: null,
 		errorType: null,
 		toolIntents: [],
+		state: null,
+		relationship: null,
 		...extra,
 	},
 });

@@ -1,3 +1,9 @@
+import type {
+	DailyAccumulator,
+	PartnerState,
+	Presence,
+	Relationship,
+} from "@yunomi/core";
 import type { GatewayResponse, InboundMessage } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
 
@@ -149,6 +155,120 @@ export class DoStore {
 			ON CONFLICT (channel_id) DO UPDATE SET last_partner_reply_at = excluded.last_partner_reply_at`,
 			channelId,
 			at.toISOString(),
+		);
+	}
+
+	getState(): PartnerState | null {
+		const r = this.#sql
+			.exec<{
+				mood: number;
+				energy: number;
+				presence: string;
+				system_stress: number;
+				degraded_mode: number;
+				version: number;
+				updated_at: string;
+			}>("SELECT * FROM partner_state WHERE id = 1")
+			.toArray()[0];
+		return r
+			? {
+					mood: r.mood,
+					energy: r.energy,
+					presence: r.presence as Presence,
+					systemStress: r.system_stress,
+					degradedMode: r.degraded_mode === 1,
+					version: r.version,
+					updatedAt: r.updated_at,
+				}
+			: null;
+	}
+
+	putState(s: PartnerState): void {
+		this.#sql.exec(
+			`INSERT OR REPLACE INTO partner_state
+				(id, mood, energy, presence, system_stress, degraded_mode, version, updated_at)
+			VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
+			s.mood,
+			s.energy,
+			s.presence,
+			s.systemStress,
+			s.degradedMode ? 1 : 0,
+			s.version,
+			s.updatedAt,
+		);
+	}
+
+	getRelationship(
+		partnerId: string,
+		entityId: string,
+	): { relationship: Relationship; accumulator: DailyAccumulator } | null {
+		const r = this.#sql
+			.exec<{
+				familiarity: number;
+				trust: number;
+				summary: string | null;
+				version: number;
+				updated_at: string;
+				acc_day: string;
+				acc_familiarity: number;
+				acc_trust: number;
+			}>("SELECT * FROM relationships WHERE entity_id = ?", entityId)
+			.toArray()[0];
+		return r
+			? {
+					relationship: {
+						partnerId,
+						entityId,
+						familiarity: r.familiarity,
+						trust: r.trust,
+						summary: r.summary,
+						version: r.version,
+						updatedAt: r.updated_at,
+					},
+					accumulator: {
+						day: r.acc_day,
+						familiarity: r.acc_familiarity,
+						trust: r.acc_trust,
+					},
+				}
+			: null;
+	}
+
+	putRelationship(rel: Relationship, acc: DailyAccumulator): void {
+		this.#sql.exec(
+			`INSERT OR REPLACE INTO relationships
+				(entity_id, familiarity, trust, summary, version, updated_at, acc_day, acc_familiarity, acc_trust)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			rel.entityId,
+			rel.familiarity,
+			rel.trust,
+			rel.summary,
+			rel.version,
+			rel.updatedAt,
+			acc.day,
+			acc.familiarity,
+			acc.trust,
+		);
+	}
+
+	cachedEntity(provider: string, externalId: string): string | null {
+		return (
+			this.#sql
+				.exec<{ entity_id: string }>(
+					"SELECT entity_id FROM entity_cache WHERE provider = ? AND external_id = ?",
+					provider,
+					externalId,
+				)
+				.toArray()[0]?.entity_id ?? null
+		);
+	}
+
+	cacheEntity(provider: string, externalId: string, entityId: string): void {
+		this.#sql.exec(
+			"INSERT OR REPLACE INTO entity_cache (provider, external_id, entity_id) VALUES (?, ?, ?)",
+			provider,
+			externalId,
+			entityId,
 		);
 	}
 }

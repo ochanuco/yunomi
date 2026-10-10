@@ -22,6 +22,35 @@ const MIGRATIONS: string[][] = [
 			last_partner_reply_at TEXT
 		)`,
 	],
+	[
+		`CREATE TABLE IF NOT EXISTS partner_state (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			mood REAL NOT NULL,
+			energy REAL NOT NULL,
+			presence TEXT NOT NULL,
+			system_stress REAL NOT NULL,
+			degraded_mode INTEGER NOT NULL,
+			version INTEGER NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS relationships (
+			entity_id TEXT PRIMARY KEY,
+			familiarity REAL NOT NULL,
+			trust REAL NOT NULL,
+			summary TEXT,
+			version INTEGER NOT NULL,
+			updated_at TEXT NOT NULL,
+			acc_day TEXT NOT NULL,
+			acc_familiarity REAL NOT NULL,
+			acc_trust REAL NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS entity_cache (
+			provider TEXT NOT NULL,
+			external_id TEXT NOT NULL,
+			entity_id TEXT NOT NULL,
+			PRIMARY KEY (provider, external_id)
+		)`,
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {
