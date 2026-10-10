@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
 	index,
+	integer,
 	primaryKey,
 	real,
 	sqliteTable,
@@ -133,4 +134,36 @@ export const memoryCandidates = sqliteTable(
 		sourceEventId: text("source_event_id").notNull(),
 	},
 	(t) => [index("memory_candidates_status").on(t.partnerId, t.status)],
+);
+
+export const auditEvents = sqliteTable(
+	"audit_events",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		// inbound envelope の event_id。dedupe_key は再送を同一視するキー。
+		eventId: text("event_id").notNull(),
+		dedupeKey: text("dedupe_key").notNull(),
+		channelId: text("channel_id").notNull(),
+		authorEntityId: text("author_entity_id"),
+		kind: text("kind", { enum: ["turn"] }).notNull(),
+		decision: text("decision", { enum: ["reply", "ignore"] }).notNull(),
+		reason: text("reason").notNull(),
+		decisionSummary: text("decision_summary"),
+		model: text("model"),
+		fallbackUsed: integer("fallback_used", { mode: "boolean" }).notNull(),
+		degraded: integer("degraded", { mode: "boolean" }).notNull(),
+		errorType: text("error_type"),
+		inputTokens: integer("input_tokens").notNull(),
+		outputTokens: integer("output_tokens").notNull(),
+		cacheReadTokens: integer("cache_read_tokens").notNull(),
+		cacheWriteTokens: integer("cache_write_tokens").notNull(),
+		latencyMs: integer("latency_ms").notNull(),
+		// 受信本文。保持期間を過ぎたら行ごと削除する。
+		inboundContent: text("inbound_content").notNull(),
+		detailJson: text("detail_json").notNull(),
+		occurredAt: text("occurred_at").notNull(),
+		createdAt: text("created_at").notNull(),
+	},
+	(t) => [index("audit_events_partner_created").on(t.partnerId, t.createdAt)],
 );

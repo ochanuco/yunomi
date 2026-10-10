@@ -1,4 +1,4 @@
-import { bindings, defineConfig, exports } from "cf/config";
+import { bindings, defineConfig, exports, triggers } from "cf/config";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 
 // 実 UUID は infra Issue (#7) で D1 を作成してから差し替える。
@@ -55,6 +55,8 @@ export default defineConfig(({ mode }) => {
 					exportName: "PartnerDO",
 				}),
 			},
+			// 04:17 JST。詳細 audit の保持期間切れを削除する。
+			triggers: [triggers.scheduled({ schedule: "17 19 * * *" })],
 			exports: {
 				PartnerDO: exports.durableObject({ storage: "sqlite" }),
 			},

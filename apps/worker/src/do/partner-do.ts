@@ -4,6 +4,7 @@ import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
+import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
@@ -35,6 +36,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #entities: EntityResolver;
 	readonly #history: HistoryWriter;
 	readonly #memory: MemoryRepo;
+	readonly #audit: AuditWriter;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
@@ -64,6 +66,7 @@ export class PartnerDO extends DurableObject<Env> {
 		const db = drizzle(env.DB);
 		this.#history = createHistoryWriter(db);
 		this.#memory = createMemoryRepo(db);
+		this.#audit = createAuditWriter(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
 	}
@@ -108,7 +111,22 @@ export class PartnerDO extends DurableObject<Env> {
 			() => this.pipeline(inbound).then(toResult),
 			() => toResult(ignoreOutcome(inbound, "coalesced")),
 		);
-		this.#store.putProcessed(key, this.now(), result);
+		const at = this.now();
+		this.#store.putProcessed(key, at, result);
+		// 自己発言は会話ではないので残さない。
+		if (result.audit.reason !== "self") {
+			this.#background(
+				this.#audit.record(
+					{
+						partnerId: inbound.partnerId,
+						dedupeKey: key,
+						now: at,
+						occurredAt: inbound.occurredAt,
+					},
+					result.audit,
+				),
+			);
+		}
 		return result;
 	}
 }

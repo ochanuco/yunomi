@@ -2,6 +2,7 @@ import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { type GatewayResponse, toInboundMessage } from "@yunomi/protocol";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import { purgeExpiredAudit } from "./audit-store.ts";
 import { type AccessEnv, authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 
@@ -23,6 +24,13 @@ export default {
 			return discordEvents(request, env);
 		}
 		return Response.json({ error: "not_found" }, { status: 404 });
+	},
+
+	async scheduled(controller, env): Promise<void> {
+		await purgeExpiredAudit(
+			drizzle(env.DB),
+			new Date(controller.scheduledTime),
+		);
 	},
 } satisfies ExportedHandler<Env>;
 

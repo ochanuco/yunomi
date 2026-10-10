@@ -15,7 +15,7 @@ export type DecisionReason =
 	| "error";
 
 /**
- * 1 ターンの判断記録。永続化は Audit Issue (#22) で行い、ここでは返り値として運ぶだけ。
+ * 1 ターンの判断記録。D1 の audit_events へは audit-store.ts が書く。
  * 思考過程は持たない。判断の運用サマリ（decisionSummary）のみ。
  */
 export type TurnAuditData = {

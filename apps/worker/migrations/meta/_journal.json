@@ -22,6 +22,13 @@
       "when": 1791653369695,
       "tag": "0002_facts_and_memory_candidates",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791653610883,
+      "tag": "0003_mean_nehzno",
+      "breakpoints": true
     }
   ]
 }
