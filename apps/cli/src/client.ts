@@ -5,6 +5,7 @@ import {
 	AuditResponseSchema,
 	type KpisResponse,
 	KpisResponseSchema,
+	type MemoryInclude,
 	type MemoryKind,
 	type MemoryResponse,
 	MemoryResponseSchema,
@@ -27,6 +28,7 @@ export type AdminClient = {
 		kind: MemoryKind;
 		limit: number;
 		cursor?: string;
+		include?: MemoryInclude;
 	}): Promise<MemoryResponse>;
 	kpis(q: { days: number }): Promise<KpisResponse>;
 	audit(q: {

@@ -107,8 +107,17 @@ export async function handleAdminApi(
 			}
 			const page = parsePage(url);
 			if (page instanceof Response) return page;
+			const include = url.searchParams.get("include");
+			if (include !== null && include !== "all") {
+				return fail(400, "invalid_include");
+			}
 			if (kind === "facts") {
-				const r = await queries.facts(partnerId, page.limit, page.cursor);
+				const r = await queries.facts(
+					partnerId,
+					page.limit,
+					page.cursor,
+					include === "all" ? null : { now: new Date() },
+				);
 				return json({
 					kind,
 					items: r.items,

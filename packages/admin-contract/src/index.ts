@@ -82,6 +82,9 @@ export type CandidateView = {
 
 export type MemoryKind = "facts" | "candidates";
 
+/** `all` は置き換え済み・期限切れの Fact も含める。省略時は現行の Fact だけ。 */
+export type MemoryInclude = "all";
+
 export type FactsResponse = {
 	kind: "facts";
 	items: FactView[];

@@ -3,7 +3,12 @@ import { parseArgs } from "node:util";
 export type Command =
 	| { name: "help" }
 	| { name: "status" }
-	| { name: "memory-list"; candidates: boolean; limit: number }
+	| {
+			name: "memory-list";
+			candidates: boolean;
+			all: boolean;
+			limit: number;
+	  }
 	| { name: "kpi"; days: number }
 	| { name: "audit-tail"; count: number; follow: boolean };
 
@@ -57,6 +62,7 @@ export const parseCli = (argv: string[]): ParseResult => {
 				json: { type: "boolean" },
 				help: { type: "boolean", short: "h" },
 				candidates: { type: "boolean" },
+				all: { type: "boolean" },
 				days: { type: "string" },
 				limit: { type: "string" },
 				n: { type: "string", short: "n" },
@@ -102,13 +108,17 @@ export const parseCli = (argv: string[]): ParseResult => {
 			return { ok: true, command: { name: "status" }, global };
 		}
 		if (first === "memory" && second === "list") {
-			only(["candidates", "limit"]);
+			only(["candidates", "all", "limit"]);
 			noExtra(rest);
+			if (values.candidates && values.all) {
+				throw new Error("--all は Fact 用なので --candidates と併用できない");
+			}
 			return {
 				ok: true,
 				command: {
 					name: "memory-list",
 					candidates: values.candidates ?? false,
+					all: values.all ?? false,
 					limit: toCount(values.limit, 20, "--limit"),
 				},
 				global,
@@ -146,7 +156,9 @@ export const HELP = `ykm: Yunomi の状態を読み取る CLI
 
 使い方:
   ykm status                              State / Relationship / 件数
-  ykm memory list [--candidates] [--limit N]   Fact（既定）か candidate の一覧
+  ykm memory list [--candidates] [--all] [--limit N]
+                                          Fact（既定）か candidate の一覧。Fact は現行だけで、
+                                          --all で置き換え済み・期限切れも含める
   ykm kpi [--days N]                      生活日ごとの KPI（既定 30 日、当日は含まない）
   ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
 

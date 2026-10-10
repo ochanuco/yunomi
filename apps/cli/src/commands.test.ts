@@ -72,6 +72,14 @@ describe("run", () => {
 		expect(h.out[1]).toContain("友達");
 	});
 
+	it("memory list --all は include=all を付け、既定では付けない", async () => {
+		const h = harness(api);
+		await run(["memory", "list"], h.deps);
+		await run(["memory", "list", "--all"], h.deps);
+		expect(h.urls[0]?.searchParams.get("include")).toBeNull();
+		expect(h.urls[1]?.searchParams.get("include")).toBe("all");
+	});
+
 	it("kpi は days を渡して表で出す", async () => {
 		const h = harness(api);
 		expect(await run(["kpi", "--days", "7"], h.deps)).toBe(0);

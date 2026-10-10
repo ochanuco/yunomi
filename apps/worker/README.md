@@ -47,7 +47,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 
 ## Admin API
 
-`/admin/api/partners/:partnerId/{status,relationships,memory,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`、`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+`/admin/api/partners/:partnerId/{status,relationships,memory,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
 
 ## Admin Web の配信
 

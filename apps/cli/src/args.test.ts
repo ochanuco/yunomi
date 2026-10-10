@@ -21,6 +21,7 @@ describe("parseCli", () => {
 		expect(r.command).toEqual({
 			name: "memory-list",
 			candidates: false,
+			all: false,
 			limit: 5,
 		});
 	});
@@ -29,8 +30,19 @@ describe("parseCli", () => {
 		expect(ok(["memory", "list", "--candidates"]).command).toEqual({
 			name: "memory-list",
 			candidates: true,
+			all: false,
 			limit: 20,
 		});
+	});
+
+	it("memory list --all は Fact に置き換え済み・期限切れを含める", () => {
+		expect(ok(["memory", "list", "--all"]).command).toMatchObject({
+			name: "memory-list",
+			all: true,
+		});
+		expect(parseCli(["memory", "list", "--all", "--candidates"]).ok).toBe(
+			false,
+		);
 	});
 
 	it("kpi の既定は 30 日、--days で変える", () => {

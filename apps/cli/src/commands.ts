@@ -71,7 +71,11 @@ const execute = async (
 		}
 		case "memory-list": {
 			const kind = command.candidates ? "candidates" : "facts";
-			const page = await client.memory({ kind, limit: command.limit });
+			const page = await client.memory({
+				kind,
+				limit: command.limit,
+				include: command.all ? "all" : undefined,
+			});
 			if (global.json) json(page);
 			else if (page.kind === "facts") {
 				deps.out(formatFacts(page.items, deps.now()));
