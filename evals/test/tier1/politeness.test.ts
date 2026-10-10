@@ -19,6 +19,29 @@ describe("politenessScore", () => {
 		expect(politenessScore("どうでしょうか。ご存じですか？")).toBe(1);
 	});
 
+	it("文末の呼びかけを外して語尾を判定する", () => {
+		expect(
+			politenessScore(
+				"おはようございます、alice さん。今日も穏やかな一日になるとよいですね。",
+			),
+		).toBe(1);
+		expect(politenessScore("聞こえていますよ、ochanuco さん。")).toBe(1);
+		expect(politenessScore("元気だよ、alice さん。")).toBe(0);
+		expect(politenessScore("おはようございます、alice。")).toBe(1);
+	});
+
+	it("丁寧語尾に接続助詞が続く言いさしも丁寧に数える", () => {
+		expect(politenessScore("月もちゃんと休みますしね。")).toBe(1);
+		expect(politenessScore("休む時間があるくらいですから。")).toBe(1);
+		expect(politenessScore("休む夜がありますので。")).toBe(1);
+		expect(politenessScore("月も休むしね。")).toBe(0);
+		expect(politenessScore("よい一日になりますように。")).toBe(1);
+	});
+
+	it("短い応諾は分母に入れない", () => {
+		expect(politenessScore("ぜひ。きれいに見えるといいですね。")).toBe(1);
+	});
+
 	it("くだけた文末は丁寧に数えない", () => {
 		expect(politenessScore("それはだめだよ。やめなよ。")).toBe(0);
 		expect(politenessScore("そうなんだ。いいね！")).toBe(0);
