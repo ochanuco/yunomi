@@ -196,7 +196,7 @@ const TURN_MAX_TOKENS = 2000;
 const JUDGE_MAX_TOKENS = 800;
 
 export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
-	const router = new ModelRouter({ provider: opts.provider, env: opts.env });
+	const router = new ModelRouter({ provider: opts.provider });
 	const builder = new PromptBuilder();
 	const reports: ScenarioReport[] = [];
 

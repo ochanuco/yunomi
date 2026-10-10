@@ -43,8 +43,7 @@ const setup = async (name: string, script: TurnResponse[]) => {
 	const fake = new FakeLLMProvider(script.map(ok));
 	await runInDurableObject(stub, (o) => {
 		o.now = () => T0;
-		o.createRouter = () =>
-			new ModelRouter({ provider: fake, env: "development" });
+		o.createRouter = () => new ModelRouter({ provider: fake });
 	});
 	return { stub, fake };
 };
@@ -183,8 +182,7 @@ describe("State / Relationship の更新", () => {
 		const fake = new FakeLLMProvider([ok(response())]);
 		await runInDurableObject(fresh, (o) => {
 			o.now = () => T0;
-			o.createRouter = () =>
-				new ModelRouter({ provider: fake, env: "development" });
+			o.createRouter = () => new ModelRouter({ provider: fake });
 		});
 		await fresh.handleDiscordMessage(mention({ author }));
 		const system = fake.requests[0]?.system.map((b) => b.text).join("\n") ?? "";

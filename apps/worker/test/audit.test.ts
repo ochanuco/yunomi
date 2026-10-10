@@ -79,8 +79,7 @@ const setup = async (name: string, outputs: unknown[]) => {
 	}
 	await runInDurableObject(stub, (o) => {
 		o.now = () => NOW;
-		o.createRouter = () =>
-			new ModelRouter({ provider: fake, env: "development" });
+		o.createRouter = () => new ModelRouter({ provider: fake });
 	});
 	return stub;
 };
