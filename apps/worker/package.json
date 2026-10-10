@@ -10,7 +10,7 @@
 		"lint": "biome check .",
 		"test": "node scripts/embed-admin.ts --allow-missing && vitest run",
 		"db:generate": "drizzle-kit generate",
-		"db:migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000000 --local"
+		"db:migrate:local": "node scripts/migrate-local.ts"
 	},
 	"dependencies": {
 		"@yunomi/admin-contract": "workspace:*",
