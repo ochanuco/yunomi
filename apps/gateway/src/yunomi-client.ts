@@ -86,15 +86,14 @@ export class YunomiClient {
 	async notifySent(
 		partnerId: string,
 		sent: DiscordSent,
-	): Promise<Result<void, DomainError>> {
-		const result = await this.#withRetry(
+	): Promise<Result<{ bound: boolean }, DomainError>> {
+		return this.#withRetry(
 			`${this.#baseUrl}${discordSentPathFor(partnerId)}`,
 			JSON.stringify(sent),
 			sent.discord_message_id,
 			"POST sent",
-			(json) => v.safeParse(v.unknown(), json),
+			(json) => v.safeParse(v.object({ bound: v.boolean() }), json),
 		);
-		return result.ok ? ok(undefined) : result;
 	}
 
 	async #withRetry<T>(

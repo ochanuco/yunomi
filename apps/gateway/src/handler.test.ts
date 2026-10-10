@@ -24,15 +24,18 @@ const setup = (send: (e: unknown) => Promise<unknown>) => {
 	};
 	const client = {
 		send: vi.fn(send),
-		notifySent: vi.fn(async (..._a: unknown[]) => ok(undefined) as unknown),
+		notifySent: vi.fn(
+			async (..._a: unknown[]) => ok({ bound: true }) as unknown,
+		),
 	};
+	const logger = { ...silentLogger, warn: vi.fn() };
 	const handle = createMessageHandler({
 		client: client as never,
 		partnerId: "yukarin",
 		botUserId: "999",
-		logger: silentLogger,
+		logger,
 	});
-	return { channel, client, handle };
+	return { channel, client, handle, logger };
 };
 
 afterEach(() => vi.useRealTimers());
@@ -95,6 +98,18 @@ describe("createMessageHandler", () => {
 		client.notifySent.mockRejectedValueOnce(new Error("boom"));
 		await expect(handle(message, channel)).resolves.toBeUndefined();
 		expect(client.notifySent).toHaveBeenCalledTimes(2);
+	});
+
+	it("Worker が partner 発言を結び付けられなかったら warn を残す", async () => {
+		const { channel, client, handle, logger } = setup(async () =>
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
+		);
+		client.notifySent.mockResolvedValueOnce(ok({ bound: false }));
+		await handle(message, channel);
+		expect(logger.warn).toHaveBeenCalledWith(
+			"sent notification not bound",
+			expect.objectContaining({ sent_message_id: "500" }),
+		);
 	});
 
 	it("Discord への送信が失敗したら通知しない", async () => {
