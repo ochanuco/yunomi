@@ -228,10 +228,12 @@ export const runTurn = async (
 	}
 
 	deps.store.setLastPartnerReplyAt(msg.channelId, at);
-	// 実際の Discord message id は Gateway が送信するまで分からないため、仮の ID で文脈に残す。
+	// 実際の Discord message id は Gateway が送信するまで分からないため、仮の ID で文脈に残し、
+	// 送信後の sent 通知で結び付ける。
+	const partnerMessageId = `partner:${newId()}`;
 	deps.store.appendRecent({
 		channelId: msg.channelId,
-		messageId: `partner:${newId()}`,
+		messageId: partnerMessageId,
 		authorId: deps.partnerUserId,
 		authorName: profile.display_name,
 		isBot: false,
@@ -244,6 +246,7 @@ export const runTurn = async (
 			action: "reply",
 			content: utterance,
 			reply_to_message_id: msg.messageId,
+			partner_message_id: partnerMessageId,
 		},
 		audit: {
 			inbound: inboundSummary(msg),

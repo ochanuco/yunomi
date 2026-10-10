@@ -150,3 +150,38 @@ describe("YunomiClient.send", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("YunomiClient.notifySent", () => {
+	const sent = {
+		partner_message_id: "partner:x",
+		channel_id: "2",
+		discord_message_id: "500",
+	};
+
+	it("partner 別の sent パスへ body と認証ヘッダを送る", async () => {
+		const { client, fetchMock } = setup([json({ bound: true })], {
+			devCaller: true,
+		});
+		const r = await client.notifySent("yukarin", sent);
+		expect(r.ok).toBe(true);
+		const [url, init] = fetchMock.mock.calls[0] ?? [];
+		expect(url).toBe("https://yunomi.example/v1/partners/yukarin/discord/sent");
+		expect(JSON.parse(String(init?.body))).toEqual(sent);
+		const h = init?.headers as Record<string, string>;
+		expect(h["x-yunomi-dev-caller"]).toBe("gateway");
+	});
+
+	it("503 は再送し、403 は再送しない", async () => {
+		const retried = setup([
+			new Response("x", { status: 503 }),
+			json({ bound: true }),
+		]);
+		expect((await retried.client.notifySent("yukarin", sent)).ok).toBe(true);
+		expect(retried.fetchMock).toHaveBeenCalledTimes(2);
+
+		const denied = setup([new Response("no", { status: 403 })]);
+		const r = await denied.client.notifySent("yukarin", sent);
+		expect(!r.ok && r.error.type).toBe("PermissionDenied");
+		expect(denied.fetchMock).toHaveBeenCalledTimes(1);
+	});
+});

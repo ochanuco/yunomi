@@ -20,9 +20,12 @@ const message: MessageLike = {
 const setup = (send: (e: unknown) => Promise<unknown>) => {
 	const channel = {
 		sendTyping: vi.fn(async () => {}),
-		send: vi.fn(async (_o: unknown) => {}),
+		send: vi.fn(async (_o: unknown) => ({ id: "500" })),
 	};
-	const client = { send: vi.fn(send) };
+	const client = {
+		send: vi.fn(send),
+		notifySent: vi.fn(async (..._a: unknown[]) => ok(undefined) as unknown),
+	};
 	const handle = createMessageHandler({
 		client: client as never,
 		partnerId: "yukarin",
@@ -59,6 +62,48 @@ describe("createMessageHandler", () => {
 		expect(channel.send.mock.calls[0]?.[0]).toMatchObject({
 			reply: { messageReference: "3" },
 		});
+	});
+
+	it("送信後に partner 発言の Discord message id を通知する", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
+		);
+		await handle(message, channel);
+		expect(client.notifySent).toHaveBeenCalledWith("yukarin", {
+			partner_message_id: "partner:x",
+			channel_id: "2",
+			discord_message_id: "500",
+		});
+	});
+
+	it("partner_message_id が無い reply は通知しない", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({ action: "reply", content: "やあ" }),
+		);
+		await handle(message, channel);
+		expect(client.notifySent).not.toHaveBeenCalled();
+	});
+
+	it("通知が失敗しても handler は落ちない", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
+		);
+		client.notifySent.mockResolvedValueOnce(
+			err({ type: "ExternalServiceUnavailable" }),
+		);
+		await expect(handle(message, channel)).resolves.toBeUndefined();
+		client.notifySent.mockRejectedValueOnce(new Error("boom"));
+		await expect(handle(message, channel)).resolves.toBeUndefined();
+		expect(client.notifySent).toHaveBeenCalledTimes(2);
+	});
+
+	it("Discord への送信が失敗したら通知しない", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
+		);
+		channel.send.mockRejectedValueOnce(new Error("missing access"));
+		await handle(message, channel);
+		expect(client.notifySent).not.toHaveBeenCalled();
 	});
 
 	it("ignore は何も送らず、typing は開始される", async () => {

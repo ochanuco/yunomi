@@ -51,6 +51,11 @@ const MIGRATIONS: string[][] = [
 			PRIMARY KEY (provider, external_id)
 		)`,
 	],
+	[
+		// 既存行は NULL のまま。partner 発言だけが Gateway の sent 通知で埋まる
+		"ALTER TABLE recent_messages ADD COLUMN discord_message_id TEXT",
+		"CREATE INDEX IF NOT EXISTS recent_messages_discord_id ON recent_messages (discord_message_id)",
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {

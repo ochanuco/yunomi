@@ -63,11 +63,25 @@ export const gatewayResponseSchema = v.variant("action", [
 		action: v.literal("reply"),
 		content: v.pipe(v.string(), v.minLength(1), v.maxLength(2000)),
 		reply_to_message_id: v.optional(snowflake),
+		// DO が recent messages に積んだ自分の発言の id。送信後の sent 通知で Discord id と結び付ける
+		partner_message_id: v.optional(v.pipe(v.string(), v.nonEmpty())),
 	}),
 	v.object({ action: v.literal("ignore") }),
 ]);
 
 export type GatewayResponse = v.InferOutput<typeof gatewayResponseSchema>;
+
+export const discordSentPathFor = (partnerId: string): string =>
+	`/v1/partners/${encodeURIComponent(partnerId)}/discord/sent`;
+
+/** Gateway → Yunomi。reply を Discord に送れたあと、その発言の Discord message id を知らせる。 */
+export const discordSentSchema = v.object({
+	partner_message_id: v.pipe(v.string(), v.nonEmpty()),
+	channel_id: snowflake,
+	discord_message_id: snowflake,
+});
+
+export type DiscordSent = v.InferOutput<typeof discordSentSchema>;
 
 export type InboundMessage = {
 	eventId: string;

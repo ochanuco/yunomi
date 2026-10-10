@@ -280,6 +280,7 @@ describe("HTTP 経由", () => {
 			action: "reply",
 			content: "はい",
 			reply_to_message_id: msg.messageId,
+			partner_message_id: expect.stringMatching(/^partner:/),
 		});
 	});
 });

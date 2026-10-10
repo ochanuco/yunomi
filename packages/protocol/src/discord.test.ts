@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 import {
 	dedupeKey,
+	discordSentSchema,
 	gatewayResponseSchema,
 	toInboundMessage,
 } from "./discord.ts";
@@ -112,5 +113,51 @@ describe("gatewayResponseSchema", () => {
 		expect(ok({ action: "reply", content: "a".repeat(2001) })).toBe(false);
 		expect(ok({ action: "reply", content: "a".repeat(2000) })).toBe(true);
 		expect(ok({ action: "dm" })).toBe(false);
+	});
+});
+
+describe("discordSentSchema", () => {
+	const sent = {
+		partner_message_id: "partner:abc",
+		channel_id: "2",
+		discord_message_id: "100",
+	};
+
+	it("有効な body を受け付ける", () => {
+		expect(v.safeParse(discordSentSchema, sent).success).toBe(true);
+	});
+
+	it.each(["partner_message_id", "channel_id", "discord_message_id"] as const)(
+		"%s が空なら拒否する",
+		(key) => {
+			expect(
+				v.safeParse(discordSentSchema, { ...sent, [key]: "" }).success,
+			).toBe(false);
+		},
+	);
+
+	it("必須項目の欠落を拒否する", () => {
+		const { channel_id: _omit, ...rest } = sent;
+		expect(v.safeParse(discordSentSchema, rest).success).toBe(false);
+	});
+});
+
+describe("gatewayResponseSchema partner_message_id", () => {
+	it("reply は partner_message_id を持てる", () => {
+		const r = v.safeParse(gatewayResponseSchema, {
+			action: "reply",
+			content: "やあ",
+			partner_message_id: "partner:abc",
+		});
+		expect(r.success).toBe(true);
+	});
+
+	it("空の partner_message_id は拒否する", () => {
+		const r = v.safeParse(gatewayResponseSchema, {
+			action: "reply",
+			content: "やあ",
+			partner_message_id: "",
+		});
+		expect(r.success).toBe(false);
 	});
 });

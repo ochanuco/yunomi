@@ -127,14 +127,32 @@ export class DoStore {
 		return rows.map(toRecent);
 	}
 
+	/** Discord の message id でも、DO が振った id でも引ける。 */
 	getMessage(messageId: string): RecentMessage | null {
 		const row = this.#sql
 			.exec<RecentRow>(
-				"SELECT * FROM recent_messages WHERE message_id = ?",
+				"SELECT * FROM recent_messages WHERE message_id = ? OR discord_message_id = ? LIMIT 1",
+				messageId,
 				messageId,
 			)
 			.toArray()[0];
 		return row ? toRecent(row) : null;
+	}
+
+	/** partner 発言に Discord message id を紐付ける。対象が無ければ false。 */
+	bindDiscordMessageId(
+		partnerMessageId: string,
+		channelId: string,
+		discordMessageId: string,
+	): boolean {
+		const cursor = this.#sql.exec(
+			`UPDATE recent_messages SET discord_message_id = ?
+			WHERE message_id = ? AND channel_id = ? AND is_partner = 1`,
+			discordMessageId,
+			partnerMessageId,
+			channelId,
+		);
+		return cursor.rowsWritten > 0;
 	}
 
 	lastPartnerReplyAt(channelId: string): Date | null {

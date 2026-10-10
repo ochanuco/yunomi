@@ -7,7 +7,11 @@ import {
 } from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
-import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
+import {
+	type DiscordSent,
+	dedupeKey,
+	type InboundMessage,
+} from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
@@ -98,6 +102,17 @@ export class PartnerDO extends DurableObject<Env> {
 	/** 応答経路から外した D1 書き込みの完了を待つ。テストと運用確認用。 */
 	async flushBackground(): Promise<void> {
 		while (this.#pending.size > 0) await Promise.all([...this.#pending]);
+	}
+
+	/** Gateway が送信できた partner 発言の Discord message id を結び付ける。 */
+	bindSentMessage(sent: DiscordSent): { bound: boolean } {
+		return {
+			bound: this.#store.bindDiscordMessageId(
+				sent.partner_message_id,
+				sent.channel_id,
+				sent.discord_message_id,
+			),
+		};
 	}
 
 	handleDiscordMessage(inbound: InboundMessage): Promise<HandleResult> {

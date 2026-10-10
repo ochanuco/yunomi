@@ -10,6 +10,8 @@ import {
 } from "@yunomi/core";
 import {
 	type DiscordMessageCreatedEnvelope,
+	type DiscordSent,
+	discordSentPathFor,
 	type GatewayResponse,
 	gatewayResponseSchema,
 } from "@yunomi/protocol";
@@ -44,6 +46,7 @@ const parseRetryAfter = (value: string | null): number | null => {
 };
 
 export class YunomiClient {
+	readonly #baseUrl: string;
 	readonly #url: string;
 	readonly #headers: Record<string, string>;
 	readonly #timeoutMs: number;
@@ -52,7 +55,8 @@ export class YunomiClient {
 	readonly #log: Logger;
 
 	constructor(opts: YunomiClientOptions) {
-		this.#url = `${opts.baseUrl.replace(/\/+$/, "")}${EVENTS_PATH}`;
+		this.#baseUrl = opts.baseUrl.replace(/\/+$/, "");
+		this.#url = `${this.#baseUrl}${EVENTS_PATH}`;
 		this.#headers = { "content-type": "application/json" };
 		if (opts.access) {
 			this.#headers["CF-Access-Client-Id"] = opts.access.clientId;
@@ -69,10 +73,40 @@ export class YunomiClient {
 	async send(
 		envelope: DiscordMessageCreatedEnvelope,
 	): Promise<Result<GatewayResponse, DomainError>> {
-		const body = JSON.stringify(envelope);
+		return this.#withRetry(
+			this.#url,
+			JSON.stringify(envelope),
+			envelope.event_id,
+			"POST events",
+			(json) => v.safeParse(gatewayResponseSchema, json),
+		);
+	}
+
+	/** reply の送信後に、partner 発言の Discord message id を Worker へ知らせる。 */
+	async notifySent(
+		partnerId: string,
+		sent: DiscordSent,
+	): Promise<Result<void, DomainError>> {
+		const result = await this.#withRetry(
+			`${this.#baseUrl}${discordSentPathFor(partnerId)}`,
+			JSON.stringify(sent),
+			sent.discord_message_id,
+			"POST sent",
+			(json) => v.safeParse(v.unknown(), json),
+		);
+		return result.ok ? ok(undefined) : result;
+	}
+
+	async #withRetry<T>(
+		url: string,
+		body: string,
+		logId: string,
+		action: string,
+		parse: (json: unknown) => v.SafeParseResult<v.GenericSchema<unknown, T>>,
+	): Promise<Result<T, DomainError>> {
 		let last: DomainError = externalServiceUnavailable({ service: "yunomi" });
 		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-			const outcome = await this.#attempt(body);
+			const outcome = await this.#attempt(url, body, action, parse);
 			if (outcome.kind === "done") return outcome.result;
 			last = outcome.error;
 			if (attempt === MAX_ATTEMPTS - 1) break;
@@ -81,7 +115,7 @@ export class YunomiClient {
 				MAX_RETRY_AFTER_MS,
 			);
 			this.#log.warn("yunomi request failed, retrying", {
-				event_id: envelope.event_id,
+				id: logId,
 				attempt: attempt + 1,
 				reason: outcome.reason,
 				wait_ms: wait,
@@ -91,8 +125,13 @@ export class YunomiClient {
 		return err(last);
 	}
 
-	async #attempt(body: string): Promise<
-		| { kind: "done"; result: Result<GatewayResponse, DomainError> }
+	async #attempt<T>(
+		url: string,
+		body: string,
+		action: string,
+		parse: (json: unknown) => v.SafeParseResult<v.GenericSchema<unknown, T>>,
+	): Promise<
+		| { kind: "done"; result: Result<T, DomainError> }
 		| {
 				kind: "retry";
 				error: DomainError;
@@ -102,7 +141,7 @@ export class YunomiClient {
 	> {
 		let res: Response;
 		try {
-			res = await this.#fetch(this.#url, {
+			res = await this.#fetch(url, {
 				method: "POST",
 				headers: this.#headers,
 				body,
@@ -136,9 +175,7 @@ export class YunomiClient {
 		if (res.status === 401 || res.status === 403) {
 			return {
 				kind: "done",
-				result: err(
-					permissionDenied({ actor: "gateway", action: "POST events" }),
-				),
+				result: err(permissionDenied({ actor: "gateway", action })),
 			};
 		}
 		if (!res.ok) {
@@ -156,7 +193,7 @@ export class YunomiClient {
 				result: err(validationFailed({ issues: ["レスポンスが JSON でない"] })),
 			};
 		}
-		const parsed = v.safeParse(gatewayResponseSchema, json);
+		const parsed = parse(json);
 		if (!parsed.success) {
 			return {
 				kind: "done",
