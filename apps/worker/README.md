@@ -38,3 +38,24 @@
 - dev の D1 を作り、`resources.ts` の `development.d1Id` を実 UUID にする
 
 #7 が終わるまで、このパイプラインは D1 id のガードで失敗する（`OP_SA_DEPLOY` 未設定でも 1Password 認証で失敗する）。
+
+## デプロイ（prod）
+
+`.github/workflows/deploy-prod.yml` は `workflow_dispatch` のみ（main への merge では動かない）。入力 `ref`（既定 `main`）は main か既存の tag に限り、それ以外は最初の step で失敗する。dev と同じ手順で `scripts/deploy.sh production` を実行する。
+
+#### 事前に人手で用意するもの
+
+- GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `yunomi-production` を読む別の 1Password Service Account の token
+- 1Password vault `yunomi-production` の item `cloudflare-api-token`（`yunomi-deploy-prod` token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
+- prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
+
+#### dev / prod 分離チェックリスト
+
+- D1: `yunomi-dev` と `yunomi` で別 database（別 UUID）
+- Worker / DO namespace: `yunomi-dev` と `yunomi`（DO は Worker 単位で分かれる）
+- ホスト: `yunomi-dev.chanu.co` と `yunomi.chanu.co`
+- Discord bot: 別アプリ・別 token（Gateway の `.env.dev` / `.env.prod`）
+- Anthropic API key: 別 key（既定モデルは prod が Sonnet）
+- Cloudflare Access: app・AUD・service token を別にする（`cloudflare.config.ts` の `ACCESS_AUD_*` / `ACCESS_CALLERS_*`）。dev の token で prod に入れない
+- 1Password: vault `yunomi-dev` / `yunomi-production`、Service Account も別
+- GitHub Environment: `dev`（承認なし）/ `production`（承認必須）
