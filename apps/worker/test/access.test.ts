@@ -6,6 +6,7 @@ const TEAM = "team.example.com";
 const AUD = "aud-1";
 const accessEnv: AccessEnv = {
 	YUNOMI_ENV: "production",
+	ALLOW_DEV_CALLER: "0",
 	ACCESS_TEAM_DOMAIN: TEAM,
 	ACCESS_AUD: AUD,
 	ACCESS_CALLERS: { "gw.access": "gateway", "ykm.access": "ykm" },
@@ -112,12 +113,16 @@ describe("authenticate", () => {
 	});
 
 	describe("dev bypass", () => {
-		const dev = { ...accessEnv, YUNOMI_ENV: "development" };
+		const dev = {
+			...accessEnv,
+			YUNOMI_ENV: "development",
+			ALLOW_DEV_CALLER: "1",
+		};
 		const header = { "x-yunomi-dev-caller": "gateway" };
 
-		it("development かつ localhost のときだけ通る", async () => {
+		it("ALLOW_DEV_CALLER=1 のときだけ通る", async () => {
 			const r = await authenticate(
-				req(header, "http://localhost:8787/x"),
+				req(header, "https://yunomi-dev.chanu.co/x"),
 				dev,
 				keys,
 			);
@@ -127,19 +132,10 @@ describe("authenticate", () => {
 			});
 		});
 
-		it("カスタムドメイン宛ては通らない", async () => {
-			const r = await authenticate(
-				req(header, "https://yunomi-dev.chanu.co/x"),
-				dev,
-				keys,
-			);
-			expect(r).toMatchObject({ ok: false, failure: { status: 401 } });
-		});
-
-		it("production では localhost でも通らない", async () => {
+		it("ALLOW_DEV_CALLER=0 では localhost でも通らない", async () => {
 			const r = await authenticate(
 				req(header, "http://localhost:8787/x"),
-				accessEnv,
+				{ ...dev, ALLOW_DEV_CALLER: "0" },
 				keys,
 			);
 			expect(r).toMatchObject({ ok: false, failure: { status: 401 } });

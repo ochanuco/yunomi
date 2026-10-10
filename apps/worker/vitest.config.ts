@@ -15,21 +15,37 @@ const root = dirname(fileURLToPath(import.meta.url));
 
 // vitest-pool-workers は Wrangler 設定ファイルしか読めないため、
 // cloudflare.config.ts から生成して使う（設定の二重管理を避ける）。
-async function generateWranglerConfig(): Promise<string> {
+async function evaluateConfig(mode: string) {
 	const { result } = await loadAndParseConfig(
 		resolve(root, "cloudflare.config.ts"),
-		{ isPreview: false, mode: "development" },
+		{ isPreview: false, mode },
 	);
 	if (!result.success) {
-		throw new Error("cloudflare.config.ts の評価に失敗した");
+		throw new Error(`cloudflare.config.ts (${mode}) の評価に失敗した`);
 	}
+	return result.data;
+}
+
+// mode ごとの ALLOW_DEV_CALLER。local 以外で "1" にならないことをテストで確かめる。
+async function allowDevCallerByMode(): Promise<Record<string, string>> {
+	const out: Record<string, string> = {};
+	for (const mode of ["development", "production", "local"]) {
+		const config = await evaluateConfig(mode);
+		const entry = config.worker?.env?.ALLOW_DEV_CALLER;
+		out[mode] = entry && "value" in entry ? String(entry.value) : "";
+	}
+	return out;
+}
+
+async function generateWranglerConfig(): Promise<string> {
+	const data = await evaluateConfig("local");
 	const {
 		secrets: _secrets,
 		routes: _routes,
 		exports: _exports,
 		durable_objects,
 		...rest
-	} = convertToWranglerConfig(result.data);
+	} = convertToWranglerConfig(data);
 	const wrangler = {
 		...rest,
 		// pool は exports を解釈せず、DO クラスの宣言を migrations から読む。
@@ -56,7 +72,12 @@ export default defineConfig(async () => {
 		plugins: [
 			cloudflareTest({
 				wrangler: { configPath: await generateWranglerConfig() },
-				miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+				miniflare: {
+					bindings: {
+						TEST_MIGRATIONS: migrations,
+						ALLOW_DEV_CALLER_BY_MODE: await allowDevCallerByMode(),
+					},
+				},
 			}),
 		],
 		test: {

@@ -28,7 +28,7 @@ ykm audit tail [-n N] [-f]                   直近の audit。-f は 5 秒ご�
 pnpm --filter @yunomi/cli ykm status --url http://localhost:8787
 ```
 
-`cf dev` はカスタムドメインの route があると request の host を `yunomi-dev.chanu.co` に書き換える。そのため Worker 側の localhost 判定（dev caller の迂回）が効かず、`cf dev` 宛てでは 401 になる。ローカルで試すときは、`vitest.config.ts` が生成する `.wrangler/test/wrangler.json`（route を持たない）で `wrangler dev` を立てる。
+ローカルの Worker は `pnpm --filter @yunomi/worker dev`（`cf dev --mode local`）で立てる。この mode だけが `x-yunomi-dev-caller` を信用する。
 
 ## 変更系コマンドの設計（未実装）
 

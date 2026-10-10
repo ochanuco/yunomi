@@ -2,11 +2,11 @@
 
 ## 構成
 
-- 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）に切り替わる。workers.dev と preview URL は無効。
+- 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）、`--mode local` でローカル専用（`yunomi-local`、ドメインなし）に切り替わる。local は deploy しない。workers.dev と preview URL は無効。
 - `cf dev` / `cf build` の委譲先は `wrangler`（この package の devDependency）。Vite は使わない。
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
 - `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` に引く。`POST /v1/interfaces/discord/events` は `gateway` のみ。
-- ローカル開発の迂回: `YUNOMI_ENV=development` かつ request の host が `localhost` / `127.0.0.1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。カスタムドメイン宛てや production では効かない。
+- ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
 - `cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
 ## 型

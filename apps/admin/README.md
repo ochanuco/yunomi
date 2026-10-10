@@ -13,7 +13,7 @@ Yukarin の State / Memory / Audit を見る Admin Web。Vite + TypeScript + pla
 ## ローカル
 
 ```
-pnpm --filter @yunomi/worker exec wrangler dev -c .wrangler/test/wrangler.json --port 8788   # Worker
+pnpm --filter @yunomi/worker dev -- --port 8788   # Worker（cf dev --mode local）
 ADMIN_API_TARGET=http://localhost:8788 pnpm --filter @yunomi/admin dev                        # http://localhost:5173/admin/
 ```
 

@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "cf dev",
+		"dev": "cf dev --mode local",
 		"build": "node scripts/embed-admin.ts && cf build",
 		"typecheck": "node scripts/embed-admin.ts --allow-missing && cf workers types && tsc",
 		"lint": "biome check .",

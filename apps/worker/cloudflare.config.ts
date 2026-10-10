@@ -22,16 +22,24 @@ const ACCESS_CALLERS_DEV = {
 
 export default defineConfig(({ mode }) => {
 	const production = mode === "production";
+	const local = mode === "local";
 	return {
 		worker: {
-			name: production ? "yunomi" : "yunomi-dev",
+			name: local ? "yunomi-local" : production ? "yunomi" : "yunomi-dev",
 			entrypoint,
 			compatibilityDate: "2026-07-01",
-			domains: [production ? "yunomi.chanu.co" : "yunomi-dev.chanu.co"],
+			// cf dev はカスタムドメインがあると request.url を書き換えるため、local は domains を持たない。
+			...(local
+				? {}
+				: {
+						domains: [production ? "yunomi.chanu.co" : "yunomi-dev.chanu.co"],
+					}),
 			workersDev: false,
 			previewUrls: false,
 			env: {
 				YUNOMI_ENV: bindings.text(production ? "production" : "development"),
+				// x-yunomi-dev-caller を信用するのは local mode だけ。
+				ALLOW_DEV_CALLER: bindings.text(local ? "1" : "0"),
 				ACCESS_TEAM_DOMAIN: bindings.text("chanuco.cloudflareaccess.com"),
 				ACCESS_AUD: bindings.text(
 					production ? ACCESS_AUD_PROD : ACCESS_AUD_DEV,
@@ -51,7 +59,7 @@ export default defineConfig(({ mode }) => {
 					name: production ? "yunomi" : "yunomi-dev",
 				}),
 				PARTNER: bindings.durableObject({
-					worker: production ? "yunomi" : "yunomi-dev",
+					worker: local ? "yunomi-local" : production ? "yunomi" : "yunomi-dev",
 					exportName: "PartnerDO",
 				}),
 			},

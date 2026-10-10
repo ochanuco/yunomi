@@ -92,18 +92,13 @@ describe("POST /v1/interfaces/discord/events", () => {
 		expect(res.status).toBe(403);
 	});
 
-	it("dev bypass は localhost のときだけ", async () => {
-		const ok = await post(
-			{ "x-yunomi-dev-caller": "gateway" },
-			envelopeBody(inbound()),
-		);
-		expect(ok.status).toBe(200);
-		const viaDomain = await post(
+	it("local mode では dev bypass が効く（host を問わない）", async () => {
+		const res = await post(
 			{ "x-yunomi-dev-caller": "gateway" },
 			envelopeBody(inbound()),
 			"https://yunomi-dev.chanu.co/v1/interfaces/discord/events",
 		);
-		expect(viaDomain.status).toBe(401);
+		expect(res.status).toBe(200);
 	});
 
 	it("不正な body は 400", async () => {

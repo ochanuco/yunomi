@@ -16,6 +16,7 @@ export type AuthFailure = { status: 401 | 403; error: string };
 
 export type AccessEnv = {
 	YUNOMI_ENV: string;
+	ALLOW_DEV_CALLER: string;
 	ACCESS_TEAM_DOMAIN: string;
 	ACCESS_AUD: string;
 	ACCESS_CALLERS: Record<string, string>;
@@ -23,7 +24,6 @@ export type AccessEnv = {
 };
 
 export const DEV_CALLER_HEADER = "x-yunomi-dev-caller";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 // isolate 内で JWKS を使い回す（jose が取得結果と cooldown を管理する）。
 const remoteKeys = new Map<string, JWTVerifyGetKey>();
@@ -51,12 +51,12 @@ export type AuthResult =
 	| { ok: false; failure: AuthFailure };
 
 /**
- * ローカル開発用の迂回。development 環境かつ localhost 宛てのときだけ
- * `x-yunomi-dev-caller` を信用する。カスタムドメイン経由は Host が localhost にならないため通らない。
+ * ローカル開発用の迂回。`ALLOW_DEV_CALLER=1`（cf の local mode だけが設定する）のときだけ
+ * `x-yunomi-dev-caller` を信用する。cf dev はカスタムドメイン設定時に request.url を書き換えるため、
+ * host では判定しない。
  */
 const devBypass = (request: Request, env: AccessEnv): Caller | null => {
-	if (env.YUNOMI_ENV !== "development") return null;
-	if (!LOCAL_HOSTS.has(new URL(request.url).hostname)) return null;
+	if (env.ALLOW_DEV_CALLER !== "1") return null;
 	const caller = request.headers.get(DEV_CALLER_HEADER);
 	return caller && isCaller(caller) ? caller : null;
 };
