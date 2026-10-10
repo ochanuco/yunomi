@@ -27,6 +27,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。
 - 応答待ちの間は 8 秒ごとに typing を出す。
 - `reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。`ignore` は何もしない。
+- reply を送れたら `POST /v1/partners/:partnerId/discord/sent` で、応答の `partner_message_id` と送信した Discord message id を Worker に知らせる（ユーザーが Yukarin の発言に返信したとき、Worker が reply-to-partner を判定するため）。best effort で、失敗しても warn ログだけ残して処理は続ける。再送の方針は他のリクエストと同じ。
 - 5xx・429・ネットワークエラーは 1s / 2s / 4s のバックオフで最大 3 回試す（`retry-after` を優先）。それ以外の 4xx は再送しない。タイムアウトは 1 回 60 秒。
 - info 以上のログに token や本文は出さない（id と文字数のみ）。
 - SIGTERM / SIGINT で Discord 接続を閉じて終了する。

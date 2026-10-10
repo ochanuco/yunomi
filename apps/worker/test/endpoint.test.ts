@@ -121,3 +121,67 @@ describe("POST /v1/interfaces/discord/events", () => {
 		expect(res.status).toBe(200);
 	});
 });
+
+describe("POST /v1/partners/:partnerId/discord/sent", () => {
+	const URL_SENT = "http://localhost/v1/partners/yukarin/discord/sent";
+	const body = {
+		partner_message_id: "partner:none",
+		channel_id: "c1",
+		discord_message_id: "d1",
+	};
+
+	it("gateway の service token は 200", async () => {
+		mockCerts();
+		const jwt = await token({ common_name: GATEWAY_CN });
+		const res = await post(
+			{ "Cf-Access-Jwt-Assertion": jwt },
+			body,
+			"https://yunomi-dev.chanu.co/v1/partners/yukarin/discord/sent",
+		);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ bound: false });
+	});
+
+	it("認証なしは 401", async () => {
+		expect((await post({}, body, URL_SENT)).status).toBe(401);
+	});
+
+	it("owner の JWT は 403（gateway 専用）", async () => {
+		mockCerts();
+		const jwt = await token({ email: "teacatus@gmail.com" });
+		const res = await post(
+			{ "Cf-Access-Jwt-Assertion": jwt },
+			body,
+			"https://yunomi-dev.chanu.co/v1/partners/yukarin/discord/sent",
+		);
+		expect(res.status).toBe(403);
+	});
+
+	it("ykm は 403", async () => {
+		const res = await post({ "x-yunomi-dev-caller": "ykm" }, body, URL_SENT);
+		expect(res.status).toBe(403);
+	});
+
+	it("不正な body は 400", async () => {
+		const res = await post(
+			{ "x-yunomi-dev-caller": "gateway" },
+			{ nope: 1 },
+			URL_SENT,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("未知の partner は 404", async () => {
+		const res = await post(
+			{ "x-yunomi-dev-caller": "gateway" },
+			body,
+			"http://localhost/v1/partners/other/discord/sent",
+		);
+		expect(res.status).toBe(404);
+	});
+
+	it("POST 以外は 405", async () => {
+		const res = await exports.default.fetch(new Request(URL_SENT));
+		expect(res.status).toBe(405);
+	});
+});

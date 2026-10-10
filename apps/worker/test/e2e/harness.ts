@@ -101,8 +101,24 @@ export const send = async (msg: InboundMessage) => {
 		action: "reply" | "ignore";
 		content?: string;
 		reply_to_message_id?: string;
+		partner_message_id?: string;
 	}>();
 };
+
+export const SENT_URL = "http://localhost/v1/partners/yukarin/discord/sent";
+
+/** Gateway が reply を送り終えたあとの通知。 */
+export const notifySent = (body: unknown, url = SENT_URL) =>
+	exports.default.fetch(
+		new Request(url, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-yunomi-dev-caller": "gateway",
+			},
+			body: JSON.stringify(body),
+		}),
+	);
 
 const expectOk = (res: Response) => {
 	if (res.status !== 200) throw new Error(`unexpected status ${res.status}`);

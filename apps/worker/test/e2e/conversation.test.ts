@@ -9,8 +9,10 @@ import {
 	llmOk,
 	mention,
 	newScenario,
+	notifySent,
 	permanentFailure,
 	send,
+	T0,
 	transientFailure,
 	turn,
 } from "./harness.ts";
@@ -54,6 +56,7 @@ describe("reply と ignore", () => {
 			action: "reply",
 			content: "おはようございます",
 			reply_to_message_id: msg.messageId,
+			partner_message_id: expect.stringMatching(/^partner:/),
 		});
 		expect(fake.requests).toHaveLength(1);
 	});
@@ -86,6 +89,83 @@ describe("reply と ignore", () => {
 		expect(fake.requests).toHaveLength(0);
 		const [row] = await auditFor(msg.eventId);
 		expect(row).toMatchObject({ decision: "ignore", reason: "not_addressed" });
+	});
+});
+
+describe("Discord に送った発言への返信", () => {
+	const HOUR = 60 * 60 * 1000;
+
+	it("sent 通知のあと、メンションなしの返信が reply-to-partner で reply になる", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(turn({ utterance: "おはよう" }))]);
+		const first = await send(mention(s));
+		const discordId = `d-${s.channelId}`;
+
+		const res = await notifySent({
+			partner_message_id: first.partner_message_id,
+			channel_id: s.channelId,
+			discord_message_id: discordId,
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ bound: true });
+
+		const fake = await installFakeLlm([llmOk(turn({ utterance: "うん" }))], {
+			now: new Date(T0.getTime() + HOUR),
+		});
+		const reply = inbound({
+			channelId: s.channelId,
+			author: s.author,
+			content: "元気？",
+			replyToMessageId: discordId,
+		});
+		expect(await send(reply)).toMatchObject({
+			action: "reply",
+			content: "うん",
+			reply_to_message_id: reply.messageId,
+		});
+		expect(fake.requests).toHaveLength(1);
+		const [row] = await auditFor(reply.eventId);
+		expect(row).toMatchObject({ decision: "reply", reason: "llm" });
+	});
+
+	it("通知前（Discord id 未紐付け）の返信は、窓外なら無視される", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(turn())]);
+		await send(mention(s));
+
+		const fake = await installFakeLlm([], {
+			now: new Date(T0.getTime() + HOUR),
+		});
+		const reply = inbound({
+			channelId: s.channelId,
+			author: s.author,
+			replyToMessageId: `d-unbound-${s.channelId}`,
+		});
+		expect(await send(reply)).toEqual({ action: "ignore" });
+		expect(fake.requests).toHaveLength(0);
+	});
+
+	it("未知の partner_message_id は bound=false で 200 を返す", async () => {
+		const s = newScenario();
+		const res = await notifySent({
+			partner_message_id: "partner:unknown",
+			channel_id: s.channelId,
+			discord_message_id: "d-x",
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ bound: false });
+	});
+
+	it("別チャンネルの発言には紐付かない", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(turn())]);
+		const first = await send(mention(s));
+		const res = await notifySent({
+			partner_message_id: first.partner_message_id,
+			channel_id: "other-channel",
+			discord_message_id: "d-y",
+		});
+		expect(await res.json()).toEqual({ bound: false });
 	});
 });
 

@@ -1,8 +1,13 @@
 import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
-import { type GatewayResponse, toInboundMessage } from "@yunomi/protocol";
+import {
+	discordSentSchema,
+	type GatewayResponse,
+	toInboundMessage,
+} from "@yunomi/protocol";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import * as v from "valibot";
 import { handleAdminApi } from "./admin/api.ts";
 import { ADMIN_BASE, serveAdminAsset } from "./admin/static.ts";
 import { purgeExpiredAudit } from "./audit-store.ts";
@@ -13,6 +18,7 @@ import { accessEnv, partnerNamespace } from "./env.ts";
 export { PartnerDO };
 
 const DISCORD_EVENTS_PATH = "/v1/interfaces/discord/events";
+const DISCORD_SENT_PATH = /^\/v1\/partners\/([^/]+)\/discord\/sent$/;
 
 export default {
 	async fetch(request, env): Promise<Response> {
@@ -28,6 +34,10 @@ export default {
 		}
 		if (pathname === DISCORD_EVENTS_PATH) {
 			return discordEvents(request, env);
+		}
+		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];
+		if (sentPartnerId !== undefined) {
+			return discordSent(request, env, decodeURIComponent(sentPartnerId));
 		}
 		return Response.json({ error: "not_found" }, { status: 404 });
 	},
@@ -81,6 +91,52 @@ async function discordEvents(request: Request, env: Env): Promise<Response> {
 		inbound.value,
 	);
 	return Response.json(response satisfies GatewayResponse);
+}
+
+async function discordSent(
+	request: Request,
+	env: Env,
+	partnerId: string,
+): Promise<Response> {
+	if (request.method !== "POST") {
+		return Response.json({ error: "method_not_allowed" }, { status: 405 });
+	}
+	const auth = await authenticate(request, accessEnv(env));
+	if (!auth.ok) {
+		return Response.json(
+			{ error: auth.failure.error },
+			{ status: auth.failure.status },
+		);
+	}
+	if (!isGateway(auth.principal)) {
+		return Response.json({ error: "forbidden" }, { status: 403 });
+	}
+	if (partnerId !== yukarinProfile.partner_id) {
+		return Response.json({ error: "unknown_partner" }, { status: 404 });
+	}
+
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		return Response.json({ error: "invalid_json" }, { status: 400 });
+	}
+	const parsed = v.safeParse(discordSentSchema, body);
+	if (!parsed.success) {
+		return Response.json(
+			{
+				error: "validation_failed",
+				message: parsed.issues
+					.map((i) => v.getDotPath(i) ?? i.message)
+					.join(", "),
+			},
+			{ status: 400 },
+		);
+	}
+
+	const partner = partnerNamespace(env);
+	const stub = partner.get(partner.idFromName(partnerId));
+	return Response.json(await stub.bindSentMessage(parsed.output));
 }
 
 async function health(env: Env): Promise<Response> {

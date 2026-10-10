@@ -11,11 +11,11 @@ export type ChannelLike = {
 		content: string;
 		reply: { messageReference: string; failIfNotExists: boolean };
 		allowedMentions: { repliedUser: boolean; parse: never[] };
-	}) => Promise<unknown>;
+	}) => Promise<{ id: string }>;
 };
 
 export type HandlerDeps = {
-	client: Pick<YunomiClient, "send">;
+	client: Pick<YunomiClient, "send" | "notifySent">;
 	partnerId: string;
 	botUserId: string;
 	now?: () => Date;
@@ -62,8 +62,9 @@ export const createMessageHandler =
 			log.info("ignored", { message_id: message.id });
 			return;
 		}
+		let sent: { id: string };
 		try {
-			await channel.send({
+			sent = await channel.send({
 				content: response.content,
 				reply: {
 					messageReference: response.reply_to_message_id ?? message.id,
@@ -72,13 +73,37 @@ export const createMessageHandler =
 				// @everyone やロール宛 ping を許さない。返信先ユーザーにも通知しない
 				allowedMentions: { repliedUser: false, parse: [] },
 			});
-			log.info("replied", {
-				message_id: message.id,
-				length: response.content.length,
-			});
 		} catch (e) {
 			log.error("discord send failed", {
 				message_id: message.id,
+				error: e instanceof Error ? e.name : "unknown",
+			});
+			return;
+		}
+		log.info("replied", {
+			message_id: message.id,
+			length: response.content.length,
+		});
+
+		// 通知は best effort。失敗しても返信自体は済んでいる
+		if (!response.partner_message_id) return;
+		try {
+			const notified = await deps.client.notifySent(deps.partnerId, {
+				partner_message_id: response.partner_message_id,
+				channel_id: message.channelId,
+				discord_message_id: sent.id,
+			});
+			if (!notified.ok) {
+				log.warn("sent notification failed", {
+					message_id: message.id,
+					sent_message_id: sent.id,
+					error: notified.error.type,
+				});
+			}
+		} catch (e) {
+			log.warn("sent notification failed", {
+				message_id: message.id,
+				sent_message_id: sent.id,
 				error: e instanceof Error ? e.name : "unknown",
 			});
 		}
