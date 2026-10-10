@@ -14,7 +14,8 @@
 
 - `apps/worker`: Cloudflare Worker（`cf` CLI + `cloudflare.config.ts`、Wrangler を委譲先に使う。Vite は使わない）
 - `packages/core`: `@yunomi/core`。ID、ドメインエラー、Envelope、EventBus。Workers 型に依存しない
-- 今後追加: `apps/gateway` `apps/admin` `apps/cli` `partners/yukarin` `evals`
+- `apps/gateway`: Home の Discord Gateway（discord.js、`tsx` で直接実行）
+- 今後追加: `apps/admin` `apps/cli` `partners/yukarin` `evals`
 
 ## コーディング規約
 
