@@ -59,7 +59,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 #### 事前に人手で用意するもの
 
 - GitHub Environment `dev` と、その secret `OP_SA_DEPLOY`（vault `yunomi-dev` を読む 1Password Service Account の token）
-- 1Password vault `yunomi-dev` の item `cloudflare-api-token`（`credential`、`yunomi-deploy-dev` token）と `anthropic-api-key`（`credential`）。参照は `.github/deploy/dev.env.op`
+- 1Password vault `yunomi-dev` の item `yunomi-deploy-dev`（`credential`、Cloudflare API token）と `anthropic-api-key`（`credential`）。参照は `.github/deploy/dev.env.op`
 - dev の D1 を作り、`resources.ts` の `development.d1Id` を実 UUID にする
 
 #7 が終わるまで、このパイプラインは D1 id のガードで失敗する（`OP_SA_DEPLOY` 未設定でも 1Password 認証で失敗する）。
@@ -71,7 +71,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 #### 事前に人手で用意するもの
 
 - GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `yunomi-production` を読む別の 1Password Service Account の token
-- 1Password vault `yunomi-production` の item `cloudflare-api-token`（`yunomi-deploy-prod` token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
+- 1Password vault `yunomi-production` の item `yunomi-deploy-prod`（Cloudflare API token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
 
 #### dev / prod 分離チェックリスト
