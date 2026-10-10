@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import { loadConfig } from "./config.ts";
 import { createMessageHandler } from "./handler.ts";
+import { DEFAULT_HEARTBEAT_PATH, startHeartbeat } from "./heartbeat.ts";
 import { createLogger } from "./logger.ts";
 import type { MessageLike } from "./to-envelope.ts";
 import { YunomiClient } from "./yunomi-client.ts";
@@ -59,6 +60,10 @@ const yunomi = new YunomiClient({
 
 discord.once(Events.ClientReady, (c) => {
 	logger.info("gateway ready", { bot_user_id: c.user.id });
+	startHeartbeat({
+		path: process.env.HEARTBEAT_FILE ?? DEFAULT_HEARTBEAT_PATH,
+		isReady: () => discord.isReady(),
+	});
 });
 
 discord.on(Events.MessageCreate, (message) => {
