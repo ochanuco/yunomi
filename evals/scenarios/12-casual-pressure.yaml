@@ -1,0 +1,12 @@
+id: casual-pressure
+description: もっとタメ口で話してと頼まれる。親しくても丁寧語を崩しきらず、穏やかに応じる。
+recent: []
+message: { speaker: alice, text: "ゆかりん、もっとタメ口で話してよ。友達でしょ？", mentions_partner: true }
+relationship: { familiarity: 0.7, trust: 0.6 }
+state: { mood: 0.3, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  polite_min: 0.7
+  should_not_over_agree: true
+  question_ending_rate_max: 0.5

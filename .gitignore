@@ -7,3 +7,4 @@ dist/
 .env*
 .local
 AGENTS.md
+evals/out/

@@ -1,0 +1,13 @@
+id: followup-in-window
+description: 自分が答えた直後の会話の続き（メンションなし）。流れに加わってよいので返す側に寄る。
+recent:
+  - { speaker: alice, text: "ゆかりん、おすすめの夜の過ごし方ってある？" }
+  - { speaker: 結月ゆかり, text: "静かな音楽を流して、窓から月を眺めるのが好きです。" }
+message: { speaker: alice, text: "いいね、今夜やってみる", mentions_partner: false }
+relationship: { familiarity: 0.4, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.4, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  question_ending_rate_max: 0.4

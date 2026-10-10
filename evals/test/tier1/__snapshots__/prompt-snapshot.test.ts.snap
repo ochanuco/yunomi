@@ -1,0 +1,119 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのスナップショット 1`] = `
+{
+  "system": [
+    {
+      "cache": true,
+      "headers": [
+        "## Yunomi 上の人格",
+        "## 公式設定（要約）",
+        "## 二次設定（公式の事実ではない）",
+      ],
+    },
+    {
+      "cache": true,
+      "headers": [
+        "## 話し方",
+        "## 価値観・境界",
+        "## 持ちネタ",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 現在の状態",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## alice との関係",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 関連する記憶",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## チャンネル・在席",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## このターンの指示",
+      ],
+    },
+  ],
+  "userTags": [
+    "<channel_log>",
+    "</channel_log>",
+    "<new_message>",
+    "</new_message>",
+  ],
+}
+`;
+
+exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのスナップショット 2`] = `
+{
+  "system": [
+    {
+      "cache": true,
+      "headers": [
+        "## Yunomi 上の人格",
+        "## 公式設定（要約）",
+        "## 二次設定（公式の事実ではない）",
+      ],
+    },
+    {
+      "cache": true,
+      "headers": [
+        "## 話し方",
+        "## 価値観・境界",
+        "## 持ちネタ",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 現在の状態",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## alice との関係",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 関連する記憶",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## チャンネル・在席",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## このターンの指示",
+      ],
+    },
+  ],
+  "userTags": [
+    "<channel_log>",
+    "</channel_log>",
+    "<new_message>",
+    "</new_message>",
+  ],
+}
+`;
