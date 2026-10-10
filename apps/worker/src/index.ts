@@ -4,6 +4,7 @@ import { type GatewayResponse, toInboundMessage } from "@yunomi/protocol";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { handleAdminApi } from "./admin/api.ts";
+import { ADMIN_BASE, serveAdminAsset } from "./admin/static.ts";
 import { purgeExpiredAudit } from "./audit-store.ts";
 import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
@@ -21,6 +22,9 @@ export default {
 		}
 		if (pathname.startsWith(`${ADMIN_API_PREFIX}/`)) {
 			return handleAdminApi(request, env);
+		}
+		if (pathname === "/admin" || pathname.startsWith(ADMIN_BASE)) {
+			return serveAdminAsset(request);
 		}
 		if (pathname === DISCORD_EVENTS_PATH) {
 			return discordEvents(request, env);

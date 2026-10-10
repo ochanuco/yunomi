@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["es2023", "dom", "dom.iterable"],
+		"types": ["node", "vite/client"],
+		"erasableSyntaxOnly": true
+	},
+	"include": ["src/**/*.ts", "vite.config.ts"]
+}

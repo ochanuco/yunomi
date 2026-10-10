@@ -1,0 +1,24 @@
+{
+	"name": "@yunomi/admin",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"typecheck": "tsc",
+		"lint": "biome check .",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@yunomi/admin-contract": "workspace:*",
+		"valibot": "^1.5.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.19.2",
+		"happy-dom": "^20.0.0",
+		"typescript": "^7.0.2",
+		"vite": "^7.1.0",
+		"vitest": "^4.1.10"
+	}
+}

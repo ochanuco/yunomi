@@ -5,10 +5,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "cf dev",
-		"build": "cf build",
-		"typecheck": "cf workers types && tsc",
+		"build": "node scripts/embed-admin.ts && cf build",
+		"typecheck": "node scripts/embed-admin.ts --allow-missing && cf workers types && tsc",
 		"lint": "biome check .",
-		"test": "vitest run",
+		"test": "node scripts/embed-admin.ts --allow-missing && vitest run",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000000 --local"
 	},
@@ -27,6 +27,7 @@
 	"devDependencies": {
 		"@cloudflare/config": "^0.24.1",
 		"@cloudflare/vitest-pool-workers": "^0.23.0",
+		"@yunomi/admin": "workspace:*",
 		"drizzle-kit": "^0.31.11",
 		"typescript": "^7.0.2",
 		"vitest": "^4.1.11",

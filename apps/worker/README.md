@@ -40,3 +40,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 ## Admin API
 
 `/admin/api/partners/:partnerId/{status,relationships,memory,audit}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`、`audit` は新しい順で `since` を取れる。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+
+## Admin Web の配信
+
+`/admin/` 配下は `apps/admin` のビルド成果物を返す。`cloudflare.config.ts` の `assets` が配信ディレクトリを指定できないため、`scripts/embed-admin.ts` が `../admin/dist` を `src/generated/admin-assets.ts`（git 管理外）に埋め込み、`src/admin/static.ts` が返す。`typecheck` / `test` は未ビルドなら空で生成し、`build` は `dist` が無いと失敗する。詳細は `apps/admin/README.md`。
