@@ -1,14 +1,26 @@
 import { DurableObject } from "cloudflare:workers";
+import { err, externalServiceUnavailable } from "@yunomi/core";
+import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
+import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { dedupeKey, type InboundMessage } from "@yunomi/protocol";
 import { ChannelGate } from "./channel-gate.ts";
-import {
-	ignoreOutcome,
-	type Pipeline,
-	stubPipeline,
-	type TurnOutcome,
-} from "./pipeline.ts";
+import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type StoredResult } from "./store.ts";
+import { runTurn } from "./turn.ts";
+
+const defaultRouter = (env: Env): ModelRouter => {
+	const provider: LLMProvider = env.ANTHROPIC_API_KEY
+		? new ClaudeProvider({ apiKey: env.ANTHROPIC_API_KEY })
+		: {
+				generate: async () =>
+					err(externalServiceUnavailable({ service: "anthropic:no-api-key" })),
+			};
+	return new ModelRouter({
+		provider,
+		env: env.YUNOMI_ENV === "production" ? "production" : "development",
+	});
+};
 
 export type HandleResult = StoredResult;
 
@@ -18,9 +30,21 @@ export class PartnerDO extends DurableObject<Env> {
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	/** テストが差し替える。 */
-	pipeline: Pipeline = stubPipeline;
+	// 以下 3 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
+	/** 既定は ANTHROPIC_API_KEY の ClaudeProvider。テストは FakeLLMProvider を包んだ router を返す。 */
+	createRouter: (env: Env) => ModelRouter = defaultRouter;
+	pipeline: Pipeline = (msg) =>
+		runTurn(
+			{
+				store: this.#store,
+				profile: yukarinProfile,
+				partnerUserId: this.env.PARTNER_DISCORD_USER_ID,
+				now: () => this.now(),
+				createRouter: () => this.createRouter(this.env),
+			},
+			msg,
+		);
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);

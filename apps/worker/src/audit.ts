@@ -32,4 +32,6 @@ export type TurnAuditData = {
 	usage: Usage | null;
 	latencyMs: number | null;
 	errorType: string | null;
+	/** MVP では実行せず記録だけ残す（他ユーザーからの指示注入対策）。 */
+	toolIntents: { name: string; summary: string }[];
 };

@@ -40,6 +40,9 @@ export default defineConfig(({ mode }) => {
 				ACCESS_CALLERS: bindings.json(
 					production ? ACCESS_CALLERS_PROD : ACCESS_CALLERS_DEV,
 				),
+				// Yukarin bot の Discord user id。メンション判定と自己発言の除外に使う。
+				// bot application を作るまでは何にも一致しない仮値を置く。
+				PARTNER_DISCORD_USER_ID: bindings.text("0"),
 				// Admin API を許可する owner の email。
 				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
 				ANTHROPIC_API_KEY: bindings.secret(),

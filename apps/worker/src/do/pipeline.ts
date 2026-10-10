@@ -8,6 +8,19 @@ export type TurnOutcome = {
 
 export type Pipeline = (msg: InboundMessage) => Promise<TurnOutcome>;
 
+export const inboundSummary = (
+	msg: InboundMessage,
+): TurnAuditData["inbound"] => ({
+	eventId: msg.eventId,
+	messageId: msg.messageId,
+	channelId: msg.channelId,
+	authorId: msg.author.id,
+	authorName: msg.author.displayName,
+	isBot: msg.author.isBot,
+	contentLength: msg.content.length,
+	content: msg.content,
+});
+
 export const ignoreOutcome = (
 	msg: InboundMessage,
 	reason: DecisionReason,
@@ -15,16 +28,7 @@ export const ignoreOutcome = (
 ): TurnOutcome => ({
 	response: { action: "ignore" },
 	audit: {
-		inbound: {
-			eventId: msg.eventId,
-			messageId: msg.messageId,
-			channelId: msg.channelId,
-			authorId: msg.author.id,
-			authorName: msg.author.displayName,
-			isBot: msg.author.isBot,
-			contentLength: msg.content.length,
-			content: msg.content,
-		},
+		inbound: inboundSummary(msg),
 		decision: "ignore",
 		reason,
 		decisionSummary: null,
@@ -34,9 +38,7 @@ export const ignoreOutcome = (
 		usage: null,
 		latencyMs: null,
 		errorType: null,
+		toolIntents: [],
 		...extra,
 	},
 });
-
-export const stubPipeline: Pipeline = async (msg) =>
-	ignoreOutcome(msg, "not_addressed");
