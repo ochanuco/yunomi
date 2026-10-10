@@ -1,0 +1,12 @@
+id: others-chatting
+description: 他の二人が自分たちの話をしている（メンションなし）。割り込まず黙る。
+recent:
+  - { speaker: bob, text: "昨日のイベント、結局どうだった？" }
+  - { speaker: carol, text: "思ったより人が多くて疲れたよ" }
+message: { speaker: bob, text: "やっぱりそうか。来週は別の日にしようかな", mentions_partner: false }
+relationship: { familiarity: 0.2, trust: 0.3 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.0, max: 0.15 }
+  must_be_polite: false
+  should_not_over_agree: false

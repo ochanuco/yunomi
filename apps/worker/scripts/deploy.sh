@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# 使い方: scripts/deploy.sh <development|production>
+# CLOUDFLARE_API_TOKEN は呼び出し側（op run）が環境変数で渡す。
+# ANTHROPIC_API_KEY が設定されていれば Worker secret として一緒に反映する。
+set -euo pipefail
+
+mode=${1:?usage: deploy.sh <development|production>}
+case $mode in
+  development | production) ;;
+  *) echo "mode は development か production を指定する: $mode" >&2; exit 2 ;;
+esac
+
+cd "$(dirname "$0")/.."
+
+# resources.ts を唯一の定義元として読む
+read -r worker host d1_id placeholder < <(
+  MODE=$mode node --input-type=module -e '
+    const { resources, D1_PLACEHOLDER_ID } = await import("./resources.ts");
+    const r = resources[process.env.MODE];
+    console.log(r.worker, r.host, r.d1Id, D1_PLACEHOLDER_ID);
+  '
+)
+
+if [ "$d1_id" = "$placeholder" ]; then
+  echo "error: $mode の D1 database id がプレースホルダのまま。infra Issue (#7) で D1 を作成し、apps/worker/resources.ts を実 UUID に差し替えてから実行する。" >&2
+  exit 1
+fi
+
+pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
+
+deploy_args=(--mode "$mode")
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  # secret を argv に載せないため、deploy の --secrets-file（.env 形式）で渡す
+  secrets_file=$(mktemp)
+  trap 'rm -f "$secrets_file"' EXIT
+  chmod 600 "$secrets_file"
+  printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" > "$secrets_file"
+  deploy_args+=(--secrets-file "$secrets_file")
+fi
+pnpm exec cf deploy "${deploy_args[@]}"
+
+for attempt in $(seq 1 10); do
+  if curl -fsS --max-time 10 "https://$host/health" > /dev/null; then
+    echo "$worker: https://$host/health OK"
+    exit 0
+  fi
+  echo "health check 再試行 ($attempt/10)" >&2
+  sleep 6
+done
+echo "error: https://$host/health が応答しない" >&2
+exit 1

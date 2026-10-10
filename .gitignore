@@ -1,0 +1,11 @@
+node_modules/
+.turbo/
+dist/
+.wrangler/
+.cloudflare/
+.dev.vars*
+.env*
+.local
+AGENTS.md
+apps/worker/src/generated/
+evals/out/

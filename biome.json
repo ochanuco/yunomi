@@ -1,0 +1,15 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+	"files": {
+		"includes": [
+			"**",
+			"!**/migrations",
+			"!**/.cloudflare",
+			"!**/worker-configuration.d.ts",
+			"!**/generated"
+		]
+	},
+	"formatter": { "indentStyle": "tab" },
+	"linter": { "enabled": true }
+}

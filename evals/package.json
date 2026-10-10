@@ -1,0 +1,26 @@
+{
+	"name": "@yunomi/evals",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc",
+		"lint": "biome check .",
+		"test": "vitest run",
+		"eval": "vitest run test/tier1",
+		"eval:tier2": "node scripts/tier2.ts"
+	},
+	"dependencies": {
+		"@yunomi/conversation": "workspace:*",
+		"@yunomi/core": "workspace:*",
+		"@yunomi/llm": "workspace:*",
+		"@yunomi/partner-yukarin": "workspace:*",
+		"valibot": "^1.5.0",
+		"yaml": "^2.8.1"
+	},
+	"devDependencies": {
+		"@types/node": "^24.19.2",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.10"
+	}
+}

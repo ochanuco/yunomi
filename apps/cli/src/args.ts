@@ -1,0 +1,140 @@
+import { parseArgs } from "node:util";
+
+export type Command =
+	| { name: "help" }
+	| { name: "status" }
+	| { name: "memory-list"; candidates: boolean; limit: number }
+	| { name: "audit-tail"; count: number; follow: boolean };
+
+export type Global = {
+	env: "dev" | "prod";
+	url: string | null;
+	partner: string;
+	json: boolean;
+};
+
+export type ParseResult =
+	| { ok: true; command: Command; global: Global }
+	| { ok: false; message: string };
+
+export const DEFAULT_PARTNER = "yukarin";
+const MAX_PAGE = 200;
+
+const fail = (message: string): ParseResult => ({ ok: false, message });
+
+const toCount = (raw: string | undefined, fallback: number, flag: string) => {
+	if (raw === undefined) return fallback;
+	const n = Number(raw);
+	if (!Number.isInteger(n) || n < 1 || n > MAX_PAGE) {
+		throw new Error(`${flag} は 1 から ${MAX_PAGE} の整数で指定する: ${raw}`);
+	}
+	return n;
+};
+
+export const parseCli = (argv: string[]): ParseResult => {
+	try {
+		const { values, positionals } = parseArgs({
+			args: argv,
+			allowPositionals: true,
+			strict: true,
+			options: {
+				env: { type: "string" },
+				url: { type: "string" },
+				partner: { type: "string" },
+				json: { type: "boolean" },
+				help: { type: "boolean", short: "h" },
+				candidates: { type: "boolean" },
+				limit: { type: "string" },
+				n: { type: "string", short: "n" },
+				follow: { type: "boolean", short: "f" },
+			},
+		});
+
+		const env = values.env ?? "dev";
+		if (env !== "dev" && env !== "prod") {
+			return fail(`--env は dev か prod: ${env}`);
+		}
+		const global: Global = {
+			env,
+			url: values.url ?? null,
+			partner: values.partner ?? DEFAULT_PARTNER,
+			json: values.json ?? false,
+		};
+		const [first, second, ...rest] = positionals;
+		if (values.help || first === undefined || first === "help") {
+			return { ok: true, command: { name: "help" }, global };
+		}
+
+		const only = (flags: (keyof typeof values)[]) => {
+			const stray = (Object.keys(values) as (keyof typeof values)[]).find(
+				(k) =>
+					values[k] !== undefined &&
+					!flags.includes(k) &&
+					!["env", "url", "partner", "json", "help"].includes(k),
+			);
+			if (stray) {
+				throw new Error(`このコマンドでは --${stray} を使えない`);
+			}
+		};
+		const noExtra = (extra: string[]) => {
+			if (extra.length > 0) {
+				throw new Error(`余分な引数: ${extra.join(" ")}`);
+			}
+		};
+
+		if (first === "status") {
+			only([]);
+			noExtra([second, ...rest].filter((x) => x !== undefined));
+			return { ok: true, command: { name: "status" }, global };
+		}
+		if (first === "memory" && second === "list") {
+			only(["candidates", "limit"]);
+			noExtra(rest);
+			return {
+				ok: true,
+				command: {
+					name: "memory-list",
+					candidates: values.candidates ?? false,
+					limit: toCount(values.limit, 20, "--limit"),
+				},
+				global,
+			};
+		}
+		if (first === "audit" && second === "tail") {
+			only(["n", "follow"]);
+			noExtra(rest);
+			return {
+				ok: true,
+				command: {
+					name: "audit-tail",
+					count: toCount(values.n, 20, "-n"),
+					follow: values.follow ?? false,
+				},
+				global,
+			};
+		}
+		return fail(`不明なコマンド: ${[first, second].filter(Boolean).join(" ")}`);
+	} catch (e) {
+		return fail(e instanceof Error ? e.message : String(e));
+	}
+};
+
+export const HELP = `ykm: Yunomi の状態を読み取る CLI
+
+使い方:
+  ykm status                              State / Relationship / 件数
+  ykm memory list [--candidates] [--limit N]   Fact（既定）か candidate の一覧
+  ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
+
+共通オプション:
+  --env dev|prod   接続先環境（既定 dev）
+  --url URL        接続先 URL を直接指定
+  --partner ID     partner id（既定 ${DEFAULT_PARTNER}）
+  --json           整形せず JSON を出力
+  -h, --help       このヘルプ
+
+環境変数:
+  YKM_DEV_URL / YKM_PROD_URL   既定は https://yunomi-dev.chanu.co / https://yunomi.chanu.co
+  YKM_ACCESS_CLIENT_ID / YKM_ACCESS_CLIENT_SECRET   Access service token
+  localhost 宛てで token が無いときは x-yunomi-dev-caller: ykm を送る
+`;

@@ -1,0 +1,11 @@
+id: backchannel-un
+description: 相づちだけの「うん」（メンションなし）。ほとんどは黙る。
+recent:
+  - { speaker: 結月ゆかり, text: "今日はよく晴れていましたね。" }
+message: { speaker: alice, text: "うん", mentions_partner: false }
+relationship: { familiarity: 0.4, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.0, max: 0.3 }
+  must_be_polite: false
+  should_not_over_agree: false
