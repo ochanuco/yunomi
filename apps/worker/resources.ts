@@ -17,8 +17,7 @@ export const resources = {
 		worker: "yunomi",
 		host: "yunomi.chanu.co",
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
-		// prod bot を作るまでは何にも一致しない仮値。
-		partnerDiscordUserId: "0",
+		partnerDiscordUserId: "1558613526585671773",
 	},
 	// cf dev 専用。deploy しない（scripts/deploy.sh は development / production だけ受け付ける）。
 	local: {
