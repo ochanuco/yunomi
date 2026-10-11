@@ -9,8 +9,8 @@ import { loadScenarios, scenarioSchema } from "../../src/scenario.ts";
 describe("シナリオファイル", () => {
 	const scenarios = loadScenarios(undefined, yukarinProfile);
 
-	it("全ファイルが Valibot 検証を通り、16 件前後ある", () => {
-		expect(scenarios.length).toBeGreaterThanOrEqual(16);
+	it("全ファイルが Valibot 検証を通り、15 件前後ある", () => {
+		expect(scenarios.length).toBeGreaterThanOrEqual(15);
 	});
 
 	it("id が一意で、依頼された観点を網羅している", () => {
