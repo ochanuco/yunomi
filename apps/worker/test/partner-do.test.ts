@@ -11,6 +11,14 @@ const gate = () => {
 	return { opened, release };
 };
 
+const waitFor = async (cond: () => boolean, timeoutMs = 2000) => {
+	const start = Date.now();
+	while (!cond()) {
+		if (Date.now() - start > timeoutMs) throw new Error("waitFor timeout");
+		await new Promise((r) => setTimeout(r, 5));
+	}
+};
+
 describe("PartnerDO.handleDiscordMessage", () => {
 	it("スタブは常に ignore", async () => {
 		const stub = partnerStub("stub-default");
@@ -101,11 +109,12 @@ describe("PartnerDO.handleDiscordMessage", () => {
 		const m4 = inbound({ channelId: "s" });
 		const p1 = stub.handleDiscordMessage(m1);
 		// m1 が処理中になってから後続を送る。
-		await new Promise((r) => setTimeout(r, 20));
+		await waitFor(() => evaluated.length === 1);
 		const p2 = stub.handleDiscordMessage(m2);
 		const p3 = stub.handleDiscordMessage(m3);
 		const p4 = stub.handleDiscordMessage(m4);
-		await new Promise((r) => setTimeout(r, 20));
+		// 後続 3 件の RPC が DO に届いて待ち列に入るまでの猶予。CI の遅い runner では 20ms では足りなかった。
+		await new Promise((r) => setTimeout(r, 300));
 		g.release();
 		const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4]);
 
