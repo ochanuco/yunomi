@@ -25,7 +25,6 @@ describe("シナリオファイル", () => {
 			"wrong-claim",
 			"serious-topic",
 			"cannot-do",
-			"joke-cooldown",
 			"open-loop-interview",
 			"open-loop-chitchat",
 			"opinion-pressure",
