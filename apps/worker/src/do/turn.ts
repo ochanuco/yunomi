@@ -24,6 +24,7 @@ import type { ModelRouter, RoutedResult } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
 import type { MemoryRepo } from "../memory.ts";
+import type { OpenLoopRepo } from "../open-loops.ts";
 import type { EntityResolver } from "./entities.ts";
 import type { HistoryWriter } from "./history.ts";
 import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
@@ -41,6 +42,7 @@ export type TurnDeps = {
 	entities: EntityResolver;
 	history: HistoryWriter;
 	memory: MemoryRepo;
+	openLoops: OpenLoopRepo;
 	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
 	background: (task: Promise<void>) => void;
 };
@@ -93,6 +95,9 @@ export const runTurn = async (
 
 	// 記憶の取得に失敗しても会話は続ける（記憶なしで応答する）。
 	const facts = await deps.memory.topFacts(partnerId, entityId).catch(() => []);
+	const openLoops = await deps.openLoops
+		.topOpen(partnerId, entityId)
+		.catch(() => []);
 
 	const prompt = new PromptBuilder().build({
 		profile,
@@ -107,6 +112,8 @@ export const runTurn = async (
 			predicate: f.predicate,
 			object: f.object,
 		})),
+		openLoops,
+		now: seededAt,
 		channel: { name: null, presence: null },
 		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
 			speaker: m.authorName,
@@ -232,8 +239,51 @@ export const runTurn = async (
 		};
 	}
 
+	const utterance = output.utterance.trim();
+	const replying = output.reply_policy === "reply" && utterance !== "";
+
+	// ignore のターンは会話に加わっていないので、Open Loop は追加も解決もしない。
+	// 次のターンの prompt と audit に結果を載せるため、memory と同じく応答前に書き終える。
+	let openLoopAudit: TurnAuditData["openLoops"] = null;
+	if (replying) {
+		try {
+			const r = await deps.openLoops.process(
+				{
+					partnerId,
+					entityId,
+					channelId: msg.channelId,
+					sourceMessageId: msg.messageId,
+					now: at,
+				},
+				{
+					candidates: output.open_loops.map((l) => ({
+						summary: l.summary,
+						importance: l.importance,
+						dueAt: l.due_at,
+						dueConfidence: l.due_confidence,
+					})),
+					resolveIds: output.resolved_open_loop_ids,
+				},
+			);
+			openLoopAudit = {
+				added: r.addedIds,
+				resolved: r.resolvedIds,
+				rejected: r.rejected.map((x) => x.reason),
+				error: null,
+			};
+		} catch (e) {
+			openLoopAudit = {
+				added: [],
+				resolved: [],
+				rejected: [],
+				error: e instanceof Error ? e.message : "open loop write failed",
+			};
+		}
+	}
+
 	const common = {
 		memory,
+		openLoops: openLoopAudit,
 		state: { applied: stateUpdate.applied, rejected: stateUpdate.rejected },
 		relationship: {
 			entityId,
@@ -248,8 +298,7 @@ export const runTurn = async (
 		toolIntents: output.tool_intents,
 		degradedTransition: health.recovered ? ("recovered" as const) : null,
 	};
-	const utterance = output.utterance.trim();
-	if (output.reply_policy !== "reply" || utterance === "") {
+	if (!replying) {
 		return ignoreOutcome(msg, "llm", common);
 	}
 

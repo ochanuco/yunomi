@@ -4,6 +4,8 @@ import {
 	type AuditItem,
 	AuditResponseSchema,
 	MemoryResponseSchema,
+	OpenLoopsResponseSchema,
+	type OpenLoopView,
 	StatusResponseSchema,
 } from "./index.ts";
 
@@ -78,5 +80,32 @@ describe("admin-contract schemas", () => {
 				last_audit_at: null,
 			}).success,
 		).toBe(true);
+	});
+
+	it("open-loops 応答を受理し、status の逸脱や欠落は拒否する", () => {
+		const loop: OpenLoopView = {
+			id: "ol1",
+			entity_id: "e1",
+			entity_display_name: null,
+			channel_id: "c",
+			summary: "面接の結果",
+			importance: 0.7,
+			due_at: null,
+			due_confidence: null,
+			follow_up_interval_hours: null,
+			status: "open",
+			source_message_id: "m1",
+			created_at: "2026-10-11T03:00:00.000Z",
+			updated_at: "2026-10-11T03:00:00.000Z",
+			resolved_at: null,
+			last_followed_up_at: null,
+		};
+		const ok = (items: unknown[]) =>
+			v.safeParse(OpenLoopsResponseSchema, { items, next_cursor: null })
+				.success;
+		expect(ok([loop])).toBe(true);
+		expect(ok([{ ...loop, status: "closed" }])).toBe(false);
+		const { summary: _, ...noSummary } = loop;
+		expect(ok([noSummary])).toBe(false);
 	});
 });

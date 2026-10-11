@@ -40,6 +40,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
+        "## 未解決の話題（Open Loop）",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
         "## チャンネル・在席",
       ],
     },
@@ -94,6 +100,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
       "cache": false,
       "headers": [
         "## 関連する記憶",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 未解決の話題（Open Loop）",
       ],
     },
     {

@@ -137,6 +137,42 @@ export const memoryCandidates = sqliteTable(
 	(t) => [index("memory_candidates_status").on(t.partnerId, t.status)],
 );
 
+export const openLoops = sqliteTable(
+	"open_loops",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		// 話し相手。prompt への注入と解決は、この entity の行だけを対象にする。
+		entityId: text("entity_id")
+			.notNull()
+			.references(() => entities.id),
+		channelId: text("channel_id").notNull(),
+		summary: text("summary").notNull(),
+		importance: real("importance").notNull(),
+		dueAt: text("due_at"),
+		dueConfidence: real("due_confidence"),
+		// フォローアップ発話の実装まで使わない。
+		followUpIntervalHours: real("follow_up_interval_hours"),
+		status: text("status", { enum: ["open", "resolved", "dropped"] })
+			.notNull()
+			.default("open"),
+		sourceMessageId: text("source_message_id").notNull(),
+		createdAt: text("created_at").notNull(),
+		updatedAt: text("updated_at").notNull(),
+		resolvedAt: text("resolved_at"),
+		lastFollowedUpAt: text("last_followed_up_at"),
+	},
+	(t) => [
+		index("open_loops_entity_status").on(
+			t.partnerId,
+			t.entityId,
+			t.status,
+			t.importance,
+		),
+		index("open_loops_partner_created").on(t.partnerId, t.createdAt),
+	],
+);
+
 export const auditEvents = sqliteTable(
 	"audit_events",
 	{

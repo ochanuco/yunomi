@@ -1,4 +1,8 @@
-import type { PartnerProfile } from "@yunomi/core";
+import {
+	formatJst,
+	OPEN_LOOP_PROMPT_LIMIT,
+	type PartnerProfile,
+} from "@yunomi/core";
 import type { ChatMessage, SystemBlock } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
 
@@ -8,6 +12,13 @@ export type MemoryFact = {
 	subject: string;
 	predicate: string;
 	object: string;
+};
+
+export type OpenLoopLine = {
+	id: string;
+	summary: string;
+	/** UTC の ISO 8601。表示は JST にする。 */
+	dueAt: string | null;
 };
 
 export type ChannelLine = { speaker: string; text: string };
@@ -20,6 +31,10 @@ export type PromptInput = {
 	relationship: { speakerName: string; familiarity: number; trust: number };
 	/** 重要度順に並べて渡す。予算超過時は末尾から削る。 */
 	memory: MemoryFact[];
+	/** 話し相手の open な Open Loop。重要度順で渡す。先頭から OPEN_LOOP_PROMPT_LIMIT 件だけ使う。 */
+	openLoops: OpenLoopLine[];
+	/** 相手の「明日」などを日時に直す基準。 */
+	now: Date;
 	channel: { name: string | null; presence: string | null };
 	/** 古い順。予算超過時は古いものから削る。 */
 	recent: ChannelLine[];
@@ -122,6 +137,18 @@ const memoryBlock = (facts: MemoryFact[]): string =>
 			: ["（なし）"]),
 	].join("\n");
 
+const openLoopBlock = (loops: OpenLoopLine[], now: Date): string =>
+	[
+		"## 未解決の話題（Open Loop）",
+		`- 現在日時: ${formatJst(now)} JST`,
+		...(loops.length
+			? loops.map(
+					(l) =>
+						`- [${l.id}] ${l.summary}${l.dueAt ? `（期限の目安: ${formatJst(new Date(l.dueAt))} JST）` : ""}`,
+				)
+			: ["（なし）"]),
+	].join("\n");
+
 const channelBlock = (c: PromptInput["channel"]): string =>
 	[
 		"## チャンネル・在席",
@@ -144,6 +171,9 @@ const TASK_BLOCK = [
 	"- decision_summary は判断の運用サマリを 1 文で書く。思考の過程や理由づけの手順は書かない。",
 	"- emotion_delta / relationship_delta / interest_delta は、このターンで起きた小さな変化の提案値にとどめる。変化がなければ 0 または空配列。",
 	"- memory_candidates には、相手が自分について明示的に述べた事実を優先して入れる。推測は source を inferred にする。",
+	"- open_loops には、相手自身の予定・結果待ち・困りごとの続きなど、あとで聞き返したくなる未解決の話題だけを入れる（最大 2 件、なければ空配列）。雑談の相槌、一般論、すでに終わった話は入れない。「未解決の話題」にある内容は重複して入れない。",
+	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601（タイムゾーン付き）で書く。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
+	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
 	"- 迷う内容は needs_review を true にする。",
 	"- utterance は 2000 文字以内。",
 ].join("\n");
@@ -175,6 +205,10 @@ export class PromptBuilder {
 		const state = stateBlock(input.state);
 		const relationship = relationshipBlock(input.relationship);
 		const channel = channelBlock(input.channel);
+		const openLoop = openLoopBlock(
+			input.openLoops.slice(0, OPEN_LOOP_PROMPT_LIMIT),
+			input.now,
+		);
 
 		const m = input.message;
 		const newMessage = `${m.speaker}${m.mentionsPartner ? "（あなたへのメンションあり）" : ""}: ${m.text}`;
@@ -189,6 +223,7 @@ export class PromptBuilder {
 			estimateTokens(state) +
 			estimateTokens(relationship) +
 			estimateTokens(channel) +
+			estimateTokens(openLoop) +
 			estimateTokens(TASK_BLOCK);
 		const total = () =>
 			fixed + memTokens() + transcriptTokens(recent, newMessage);
@@ -213,6 +248,7 @@ export class PromptBuilder {
 				{ text: state, cache: false },
 				{ text: relationship, cache: false },
 				{ text: memoryBlock(memory), cache: false },
+				{ text: openLoop, cache: false },
 				{ text: channel, cache: false },
 				{ text: TASK_BLOCK, cache: false },
 			],

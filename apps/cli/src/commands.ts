@@ -8,6 +8,7 @@ import {
 	formatCandidates,
 	formatFacts,
 	formatKpis,
+	formatOpenLoops,
 	formatStatus,
 } from "./format.ts";
 
@@ -80,6 +81,21 @@ const execute = async (
 			else if (page.kind === "facts") {
 				deps.out(formatFacts(page.items, deps.now()));
 			} else deps.out(formatCandidates(page.items));
+			if (!global.json && page.next_cursor) {
+				deps.err(`(続きあり: --limit を増やすと ${MAX_PAGE} 件まで見られる)`);
+			}
+			return;
+		}
+		case "open-loops": {
+			const page = await client.openLoops({
+				status: command.all ? "all" : undefined,
+				limit: command.limit,
+			});
+			deps.out(
+				global.json
+					? JSON.stringify(page, null, 2)
+					: formatOpenLoops(page.items),
+			);
 			if (!global.json && page.next_cursor) {
 				deps.err(`(続きあり: --limit を増やすと ${MAX_PAGE} 件まで見られる)`);
 			}

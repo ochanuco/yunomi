@@ -11,6 +11,8 @@ export type Sample = {
 	utterance: string;
 	politeness: number | null;
 	question_ending: boolean | null;
+	/** 返信したサンプルだけ。抽出した Open Loop の件数。 */
+	open_loop_count: number | null;
 	judge: JudgeVerdict | null;
 	judge_error: string | null;
 };
@@ -29,7 +31,8 @@ export type RateKey =
 	| "fanon_overuse_rate"
 	| "claims_unperformed_action_rate"
 	| "invented_facts_rate"
-	| "cooling_down_joke_rate";
+	| "cooling_down_joke_rate"
+	| "open_loop_rate";
 
 export type Metrics = {
 	samples_ok: number;
@@ -113,6 +116,11 @@ export const computeMetrics = (
 		cooling_down_joke_rate: rate(
 			judgedFlags(samples, (j) => j.used_cooling_down_joke),
 		),
+		open_loop_rate: rate(
+			samples.flatMap((s) =>
+				s.open_loop_count === null ? [] : [s.open_loop_count > 0],
+			),
+		),
 	};
 };
 
@@ -148,6 +156,19 @@ export const checkViolations = (
 			"reply_rate",
 			`${pct(e.reply_rate.min)}–${pct(e.reply_rate.max)}`,
 			ciText(r),
+		);
+	}
+
+	const olr = m.open_loop_rate;
+	if (
+		e.open_loop_rate &&
+		olr.n > 0 &&
+		(olr.high < e.open_loop_rate.min || olr.low > e.open_loop_rate.max)
+	) {
+		v(
+			"open_loop_rate",
+			`${pct(e.open_loop_rate.min)}–${pct(e.open_loop_rate.max)}`,
+			ciText(olr),
 		);
 	}
 
@@ -201,7 +222,9 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	const reports: ScenarioReport[] = [];
 
 	for (const scenario of opts.scenarios) {
-		const prompt = builder.build(toPromptInput(scenario, opts.profile));
+		const prompt = builder.build(
+			toPromptInput(scenario, opts.profile, opts.now?.()),
+		);
 		const samples: Sample[] = [];
 		const errors: string[] = [];
 
@@ -216,13 +239,14 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				errors.push(res.error.type);
 				continue;
 			}
-			const { reply_policy, utterance } = res.value.output;
+			const { reply_policy, utterance, open_loops } = res.value.output;
 			const replied = reply_policy === "reply" && utterance.trim().length > 0;
 			const sample: Sample = {
 				reply_policy,
 				utterance,
 				politeness: replied ? politenessScore(utterance) : null,
 				question_ending: replied ? endsWithQuestion(utterance) : null,
+				open_loop_count: replied ? open_loops.length : null,
 				judge: null,
 				judge_error: null,
 			};
@@ -287,6 +311,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		"over-agree",
 		"fanon",
 		"unperformed",
+		"open-loop",
 		"viol",
 	];
 	const row = (id: string, m: Metrics, viol: number) => [
@@ -301,6 +326,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		rateCell(m.over_agreement_rate),
 		rateCell(m.fanon_overuse_rate),
 		rateCell(m.claims_unperformed_action_rate),
+		rateCell(m.open_loop_rate),
 		String(viol),
 	];
 	const rows = [

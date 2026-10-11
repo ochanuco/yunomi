@@ -30,7 +30,7 @@ describe("PromptBuilder × シナリオ", () => {
 		const s = scenarios.find((x) => x.id === id);
 		if (!s) throw new Error(id);
 		const p = builder.build(toPromptInput(s, yukarinProfile));
-		expect(p.system).toHaveLength(7);
+		expect(p.system).toHaveLength(8);
 		const user = p.messages[0]?.content ?? "";
 		expect(user).toContain(`${s.message.speaker}`);
 		expect(user).toContain(s.message.text);

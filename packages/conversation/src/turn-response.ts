@@ -27,9 +27,17 @@ export const turnResponseSchema = v.object({
 			source: v.picklist(["user_statement", "inferred"]),
 		}),
 	),
-	open_loop_updates: v.array(
-		v.object({ summary: v.string(), importance: unit }),
+	/** 相手との間で未解決の話題。なければ空配列。due_at は読み取れたときだけ ISO 8601 で、なければ null。 */
+	open_loops: v.array(
+		v.object({
+			summary: v.string(),
+			importance: unit,
+			due_at: v.nullable(v.string()),
+			due_confidence: v.nullable(unit),
+		}),
 	),
+	/** prompt に示した open の Open Loop のうち、この発言で片づいたものの id。 */
+	resolved_open_loop_ids: v.array(v.string()),
 	tool_intents: v.array(v.object({ name: v.string(), summary: v.string() })),
 	needs_review: v.boolean(),
 });

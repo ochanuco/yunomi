@@ -27,7 +27,8 @@ const response = (memory: Candidate[]): TurnResponse => ({
 	relationship_delta: { familiarity: 0, trust: 0 },
 	interest_delta: [],
 	memory_candidates: memory,
-	open_loop_updates: [],
+	open_loops: [],
+	resolved_open_loop_ids: [],
 	tool_intents: [],
 	needs_review: false,
 });

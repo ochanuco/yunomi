@@ -50,6 +50,8 @@ export const baseInput = (): PromptInput => ({
 		{ subject: "alice", predicate: "好きな飲み物", object: "緑茶" },
 		{ subject: "alice", predicate: "職業", object: "エンジニア" },
 	],
+	openLoops: [],
+	now: new Date("2026-10-11T03:00:00Z"),
 	channel: { name: "general", presence: "alice がオンライン" },
 	recent: [
 		{ speaker: "alice", text: "おはよう" },

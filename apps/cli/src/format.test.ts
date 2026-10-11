@@ -3,6 +3,7 @@ import {
 	auditItem,
 	candidate,
 	fact,
+	openLoop,
 	relationship,
 	status,
 } from "./fixtures.ts";
@@ -12,6 +13,7 @@ import {
 	formatAuditRow,
 	formatCandidates,
 	formatFacts,
+	formatOpenLoops,
 	formatStatus,
 	jst,
 	table,
@@ -110,5 +112,30 @@ describe("audit", () => {
 			auditItem({ fallback_used: true, degraded: true }),
 		);
 		expect(row).toContain("fallback,degraded");
+	});
+});
+
+describe("formatOpenLoops", () => {
+	it("時刻は JST で、期限が無ければ - を出す", () => {
+		const out = formatOpenLoops([
+			openLoop,
+			{
+				...openLoop,
+				id: "ol2",
+				status: "resolved",
+				due_at: null,
+				due_confidence: null,
+				entity_display_name: null,
+			},
+		]);
+		expect(out).toContain("2026-10-12 00:30:00");
+		expect(out).toContain("open");
+		expect(out).toContain("resolved");
+		expect(out).toContain("0.60");
+		expect(out.split("\n")[2]).toMatch(/-\s+-$/);
+	});
+
+	it("空のときは明示する", () => {
+		expect(formatOpenLoops([])).toBe("(Open Loop なし)");
 	});
 });

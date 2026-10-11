@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import {
 	AuditResponseSchema,
 	MemoryResponseSchema,
+	OpenLoopsResponseSchema,
 	RelationshipsResponseSchema,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
@@ -81,6 +82,26 @@ describe("認可", () => {
 			await jwtHeader({ common_name: YKM_CN }),
 		);
 		expect(res.status).toBe(200);
+	});
+
+	it("open-loops も gateway は 403、JWT なしは 401", async () => {
+		expect(
+			(
+				await get(
+					`${BASE}/open-loops`,
+					await jwtHeader({ common_name: GATEWAY_CN }),
+				)
+			).status,
+		).toBe(403);
+		expect((await get(`${BASE}/open-loops`)).status).toBe(401);
+		expect(
+			(
+				await get(
+					`${BASE}/open-loops`,
+					await jwtHeader({ common_name: YKM_CN }),
+				)
+			).status,
+		).toBe(200);
 	});
 
 	it("gateway の service token は 403", async () => {
@@ -362,5 +383,77 @@ describe("memory", () => {
 
 	it("不明な kind は 400", async () => {
 		expect((await local(`${BASE}/memory?kind=x`)).status).toBe(400);
+	});
+});
+
+describe("open-loops", () => {
+	const seed = async () => {
+		await env.DB.prepare(
+			"INSERT OR IGNORE INTO entities (id, kind, display_name, created_at) VALUES ('adm-ol-e', 'person', 'dave', '2032-01-01T00:00:00Z')",
+		).run();
+		await env.DB.prepare(
+			`INSERT OR IGNORE INTO open_loops (id, partner_id, entity_id, channel_id, summary, importance, due_at, due_confidence, status, source_message_id, created_at, updated_at, resolved_at)
+			VALUES ('ol1', ?1, 'adm-ol-e', 'c1', '面接の結果', 0.7, '2032-02-02T00:00:00Z', 0.5, 'open', 'm1', '2032-02-01T00:00:00Z', '2032-02-01T00:00:00Z', NULL),
+			('ol2', ?1, 'adm-ol-e', 'c1', '引っ越しの手続き', 0.4, NULL, NULL, 'resolved', 'm2', '2032-02-02T00:00:00Z', '2032-02-03T00:00:00Z', '2032-02-03T00:00:00Z'),
+			('ol3', ?1, 'adm-ol-e', 'c1', '気が変わった件', 0.2, NULL, NULL, 'dropped', 'm3', '2032-02-03T00:00:00Z', '2032-02-03T00:00:00Z', NULL)`,
+		)
+			.bind(PARTNER_ID)
+			.run();
+	};
+	const ids = (r: { items: { id: string }[] }) =>
+		r.items.map((i) => i.id).filter((id) => /^ol\d$/.test(id));
+
+	it("既定は open だけ。status=all で全件を新しい順に返す", async () => {
+		await seed();
+		const open = await parse(
+			await local(`${BASE}/open-loops`),
+			OpenLoopsResponseSchema,
+		);
+		expect(ids(open)).toEqual(["ol1"]);
+		expect(open.items.find((i) => i.id === "ol1")).toEqual({
+			id: "ol1",
+			entity_id: "adm-ol-e",
+			entity_display_name: "dave",
+			channel_id: "c1",
+			summary: "面接の結果",
+			importance: 0.7,
+			due_at: "2032-02-02T00:00:00Z",
+			due_confidence: 0.5,
+			follow_up_interval_hours: null,
+			status: "open",
+			source_message_id: "m1",
+			created_at: "2032-02-01T00:00:00Z",
+			updated_at: "2032-02-01T00:00:00Z",
+			resolved_at: null,
+			last_followed_up_at: null,
+		});
+
+		const all = await parse(
+			await local(`${BASE}/open-loops?status=all`),
+			OpenLoopsResponseSchema,
+		);
+		expect(ids(all)).toEqual(["ol3", "ol2", "ol1"]);
+	});
+
+	it("limit と cursor でたどれる", async () => {
+		await seed();
+		const first = await parse(
+			await local(`${BASE}/open-loops?status=all&limit=1`),
+			OpenLoopsResponseSchema,
+		);
+		expect(first.items).toHaveLength(1);
+		expect(first.next_cursor).not.toBeNull();
+		const second = await parse(
+			await local(
+				`${BASE}/open-loops?status=all&limit=1&cursor=${first.next_cursor}`,
+			),
+			OpenLoopsResponseSchema,
+		);
+		expect(second.items[0]?.id).not.toBe(first.items[0]?.id);
+	});
+
+	it("不正な status / limit は 400", async () => {
+		expect((await local(`${BASE}/open-loops?status=x`)).status).toBe(400);
+		expect((await local(`${BASE}/open-loops?limit=0`)).status).toBe(400);
 	});
 });

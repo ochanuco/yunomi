@@ -2,6 +2,7 @@ import type {
 	AuditItem,
 	CandidateView,
 	FactView,
+	OpenLoopView,
 	RelationshipView,
 } from "@yunomi/admin-contract";
 import type { Relationship } from "@yunomi/core";
@@ -23,6 +24,7 @@ import {
 	entities,
 	facts,
 	memoryCandidates,
+	openLoops,
 } from "../db/schema.ts";
 import { type Cursor, encodeCursor } from "./cursor.ts";
 
@@ -199,6 +201,57 @@ export const createAdminQueries = (db: DrizzleD1Database) => ({
 				source_event_id: r.sourceEventId,
 			}),
 			(r) => ({ at: r.createdAt, id: r.id }),
+		);
+	},
+
+	async openLoops(
+		partnerId: string,
+		limit: number,
+		cursor: Cursor | null,
+		openOnly: boolean,
+	): Promise<Page<OpenLoopView>> {
+		const rows = await db
+			.select({ loop: openLoops, entityName: entities.displayName })
+			.from(openLoops)
+			.leftJoin(entities, eq(entities.id, openLoops.entityId))
+			.where(
+				and(
+					eq(openLoops.partnerId, partnerId),
+					openOnly ? eq(openLoops.status, "open") : undefined,
+					cursor
+						? or(
+								lt(openLoops.createdAt, cursor.at),
+								and(
+									eq(openLoops.createdAt, cursor.at),
+									lt(openLoops.id, cursor.id),
+								),
+							)
+						: undefined,
+				),
+			)
+			.orderBy(desc(openLoops.createdAt), desc(openLoops.id))
+			.limit(limit + 1);
+		return paginate(
+			rows,
+			limit,
+			({ loop: r, entityName }) => ({
+				id: r.id,
+				entity_id: r.entityId,
+				entity_display_name: entityName,
+				channel_id: r.channelId,
+				summary: r.summary,
+				importance: r.importance,
+				due_at: r.dueAt,
+				due_confidence: r.dueConfidence,
+				follow_up_interval_hours: r.followUpIntervalHours,
+				status: r.status,
+				source_message_id: r.sourceMessageId,
+				created_at: r.createdAt,
+				updated_at: r.updatedAt,
+				resolved_at: r.resolvedAt,
+				last_followed_up_at: r.lastFollowedUpAt,
+			}),
+			({ loop: r }) => ({ at: r.createdAt, id: r.id }),
 		);
 	},
 

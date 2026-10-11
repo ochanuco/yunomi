@@ -37,9 +37,19 @@ LLM 障害は `degradedMode` / `systemStress` に自動で反映する（`applyL
 
 LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。prompt には話者の現行 Fact を importance 降順・observed_at 降順で上位 12 件入れる。書き込みは次のターンが読めるよう応答前に完了させる。
 
+## Open Loop
+
+会話中の未解決の話題・あとで聞き返したい続き（結果待ち、相手自身の予定、困りごとの続き）。タスクやリマインダーではなく、今回は抽出・保存・解決の記録までで、フォローアップ発話や期限の評価はしない（`follow_up_interval_hours` と `last_followed_up_at` は常に null）。
+
+LLM の応答は `open_loops`（`summary` / `importance` / `due_at` / `due_confidence`、不在は空配列か null）と `resolved_open_loop_ids` を返す。D1 の `open_loops` に保存し、`reply` で終わったターンだけが対象になる。前段ルールで決まったターン、LLM の `ignore`、LLM 障害（degraded）では追加も解決もしない。書き込みは次のターンの prompt に載るよう memory と同じく応答前に完了させ、失敗しても返信は止めず audit の `error` に残す。
+
+- 検証と重複排除は `@yunomi/core` の `open-loop.ts`。数値は clamp せず範囲外の候補を捨てる。`summary` は NFKC・小文字化・空白圧縮した値が、同じ partner・entity の open な行と同じなら追加しない。1 ターンの追加は `OPEN_LOOP_MAX_PER_TURN`（2）件、entity あたりの open は `OPEN_LOOP_MAX_OPEN_PER_ENTITY`（20）件まで。
+- prompt には話し相手の open な行を importance 降順（同点は新しい順）で `OPEN_LOOP_PROMPT_LIMIT`（5）件、id 付きで入れる。LLM が返した `resolved_open_loop_ids` のうち、その entity の open な行だけを `resolved`（`resolved_at` 付き）にする。他人の行、open でない行、存在しない id は無視する。
+- 解決を先に適用するので、同じターンで片づいた分の枠は追加の上限判定に使える。同時に走る別チャンネルのターンが同じ summary を同時に追加した場合の二重登録は防がない。
+
 ## Audit
 
-1 メッセージにつき `audit_events`（D1）へ 1 行を書く。自己発言は書かない。書き込みは `#background`（`ctx.waitUntil`）に載せ、`flushBackground()` が待つ。思考過程は持たず、判断サマリ・モデル・fallback・token・latency・受信本文と、state / relationship / memory / tool_intents の詳細（`detail_json`）だけを残す。`created_at` が `AUDIT_RETENTION_DAYS`（30）より古い行は、毎日 04:17 JST（`17 19 * * *` UTC）の `scheduled` が削除する。
+1 メッセージにつき `audit_events`（D1）へ 1 行を書く。自己発言は書かない。書き込みは `#background`（`ctx.waitUntil`）に載せ、`flushBackground()` が待つ。思考過程は持たず、判断サマリ・モデル・fallback・token・latency・受信本文と、state / relationship / memory / openLoops / tool_intents の詳細（`detail_json`）だけを残す。`created_at` が `AUDIT_RETENTION_DAYS`（30）より古い行は、毎日 04:17 JST（`17 19 * * *` UTC）の `scheduled` が削除する。
 
 ### 日次 KPI
 
@@ -47,7 +57,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 
 ## Admin API
 
-`/admin/api/partners/:partnerId/{status,relationships,memory,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+`/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
 
 ## Admin Web の配信
 

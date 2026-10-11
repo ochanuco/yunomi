@@ -9,6 +9,9 @@ import {
 	type MemoryKind,
 	type MemoryResponse,
 	MemoryResponseSchema,
+	type OpenLoopsFilter,
+	type OpenLoopsResponse,
+	OpenLoopsResponseSchema,
 	type RelationshipsResponse,
 	RelationshipsResponseSchema,
 	type StatusResponse,
@@ -30,6 +33,11 @@ export type AdminClient = {
 		cursor?: string;
 		include?: MemoryInclude;
 	}): Promise<MemoryResponse>;
+	openLoops(q: {
+		status?: OpenLoopsFilter;
+		limit: number;
+		cursor?: string;
+	}): Promise<OpenLoopsResponse>;
 	kpis(q: { days: number }): Promise<KpisResponse>;
 	audit(q: {
 		limit: number;
@@ -92,6 +100,7 @@ export const createClient = (
 		status: () => call("status", StatusResponseSchema),
 		relationships: () => call("relationships", RelationshipsResponseSchema),
 		memory: (q) => call("memory", MemoryResponseSchema, q),
+		openLoops: (q) => call("open-loops", OpenLoopsResponseSchema, q),
 		kpis: (q) => call("kpis", KpisResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
 	};

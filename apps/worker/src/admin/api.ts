@@ -3,6 +3,7 @@ import {
 	type AuditResponse,
 	type KpisResponse,
 	type MemoryResponse,
+	type OpenLoopsResponse,
 	type RelationshipsResponse,
 	type StatusResponse,
 } from "@yunomi/admin-contract";
@@ -21,7 +22,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
-	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|audit|kpis)$`,
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|audit|kpis)$`,
 );
 
 type Params = { limit: number; cursor: ReturnType<typeof decodeCursor> };
@@ -130,6 +131,24 @@ export async function handleAdminApi(
 				items: r.items,
 				next_cursor: r.nextCursor,
 			} satisfies MemoryResponse);
+		}
+		case "open-loops": {
+			const status = url.searchParams.get("status") ?? "open";
+			if (status !== "open" && status !== "all") {
+				return fail(400, "invalid_status");
+			}
+			const page = parsePage(url);
+			if (page instanceof Response) return page;
+			const r = await queries.openLoops(
+				partnerId,
+				page.limit,
+				page.cursor,
+				status === "open",
+			);
+			return json({
+				items: r.items,
+				next_cursor: r.nextCursor,
+			} satisfies OpenLoopsResponse);
 		}
 		case "kpis": {
 			const rawDays = url.searchParams.get("days");

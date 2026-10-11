@@ -3,6 +3,7 @@ import type {
 	CandidateView,
 	FactView,
 	KpiDay,
+	OpenLoopView,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -65,6 +66,24 @@ export const candidate: CandidateView = {
 	expires_at: "2026-11-11T03:00:00.000Z",
 	created_at: "2026-10-11T03:00:00.000Z",
 	source_event_id: "ev",
+};
+
+export const openLoop: OpenLoopView = {
+	id: "ol1",
+	entity_id: "e1",
+	entity_display_name: "alice",
+	channel_id: "c",
+	summary: "明日の面接の結果",
+	importance: 0.7,
+	due_at: "2026-10-11T15:30:00.000Z",
+	due_confidence: 0.6,
+	follow_up_interval_hours: null,
+	status: "open",
+	source_message_id: "m1",
+	created_at: "2026-10-11T03:00:00.000Z",
+	updated_at: "2026-10-11T03:00:00.000Z",
+	resolved_at: null,
+	last_followed_up_at: null,
 };
 
 export const auditItem = (over: Partial<AuditItem> = {}): AuditItem => ({

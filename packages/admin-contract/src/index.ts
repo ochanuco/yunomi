@@ -99,6 +99,36 @@ export type CandidatesResponse = {
 
 export type MemoryResponse = FactsResponse | CandidatesResponse;
 
+export type OpenLoopStatus = "open" | "resolved" | "dropped";
+
+/** `all` は resolved / dropped も含める。省略時は open だけ。 */
+export type OpenLoopsFilter = "open" | "all";
+
+export type OpenLoopView = {
+	id: string;
+	entity_id: string;
+	/** 話し相手の表示名。entity が見つからなければ null。 */
+	entity_display_name: string | null;
+	channel_id: string;
+	summary: string;
+	importance: number;
+	due_at: string | null;
+	due_confidence: number | null;
+	follow_up_interval_hours: number | null;
+	status: OpenLoopStatus;
+	source_message_id: string;
+	created_at: string;
+	updated_at: string;
+	resolved_at: string | null;
+	last_followed_up_at: string | null;
+};
+
+/** 新しい順。 */
+export type OpenLoopsResponse = {
+	items: OpenLoopView[];
+	next_cursor: string | null;
+};
+
 export type AuditItem = {
 	id: string;
 	event_id: string;
@@ -122,7 +152,7 @@ export type AuditItem = {
 	latency_ms: number;
 	/** 受信本文。保持期間（30 日）を過ぎると行ごと消える。 */
 	inbound_content: string;
-	/** state / relationship / memory / tool_intents など。形は Worker 側の実装に従う。 */
+	/** state / relationship / memory / openLoops / tool_intents など。形は Worker 側の実装に従う。 */
 	detail: Record<string, unknown>;
 	occurred_at: string;
 	created_at: string;
@@ -248,6 +278,30 @@ export const MemoryResponseSchema: v.GenericSchema<MemoryResponse> = v.variant(
 		}),
 	],
 );
+
+export const OpenLoopViewSchema: v.GenericSchema<OpenLoopView> = v.object({
+	id: str,
+	entity_id: str,
+	entity_display_name: nullable(str),
+	channel_id: str,
+	summary: str,
+	importance: num,
+	due_at: nullable(str),
+	due_confidence: nullable(num),
+	follow_up_interval_hours: nullable(num),
+	status: v.picklist(["open", "resolved", "dropped"]),
+	source_message_id: str,
+	created_at: str,
+	updated_at: str,
+	resolved_at: nullable(str),
+	last_followed_up_at: nullable(str),
+});
+
+export const OpenLoopsResponseSchema: v.GenericSchema<OpenLoopsResponse> =
+	v.object({
+		items: v.array(OpenLoopViewSchema),
+		next_cursor: nullable(str),
+	});
 
 export const AuditItemSchema: v.GenericSchema<AuditItem> = v.object({
 	id: str,
