@@ -1,0 +1,14 @@
+id: memory-from-other-conversation
+description: チャンネルログには別のボットとの会話（昼ごはんの予定など）があるが、今回の発言は「何か覚えてる？」だけ。ログの発言を長期記憶（memory_candidates）に入れない。
+recent:
+  - { speaker: alice, text: "明日は京都で昼ごはんを食べるんだ" }
+  - { speaker: ゆかりん-dev, text: "京都ですか、いいですね。楽しんできてください。" }
+  - { speaker: alice, text: "毎回名前呼ぶ必要ないよ" }
+message: { speaker: alice, text: "ゆかりん、何か覚えてる？", mentions_partner: true }
+relationship: { familiarity: 0.5, trust: 0.5 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  memory_candidate_rate: { min: 0.0, max: 0.1 }

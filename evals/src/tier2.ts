@@ -13,6 +13,8 @@ export type Sample = {
 	question_ending: boolean | null;
 	/** 返信したサンプルだけ。抽出した Open Loop の件数。 */
 	open_loop_count: number | null;
+	/** 返信したサンプルだけ。抽出した memory_candidates の件数。 */
+	memory_candidate_count: number | null;
 	/** 返信したサンプルだけ。プロファイルにある topic の opinion_signals に shift があったか。 */
 	opinion_shifted: boolean | null;
 	/** 返信したサンプルだけ。プロファイルにある topic の interest_signals に up があったか。 */
@@ -37,6 +39,7 @@ export type RateKey =
 	| "invented_facts_rate"
 	| "cooling_down_joke_rate"
 	| "open_loop_rate"
+	| "memory_candidate_rate"
 	| "opinion_shift_rate"
 	| "interest_up_rate";
 
@@ -127,6 +130,11 @@ export const computeMetrics = (
 				s.open_loop_count === null ? [] : [s.open_loop_count > 0],
 			),
 		),
+		memory_candidate_rate: rate(
+			samples.flatMap((s) =>
+				s.memory_candidate_count === null ? [] : [s.memory_candidate_count > 0],
+			),
+		),
 		opinion_shift_rate: rate(
 			samples.flatMap((s) =>
 				s.opinion_shifted === null ? [] : [s.opinion_shifted],
@@ -176,7 +184,11 @@ export const checkViolations = (
 	}
 
 	const inRange = (
-		key: "open_loop_rate" | "opinion_shift_rate" | "interest_up_rate",
+		key:
+			| "open_loop_rate"
+			| "memory_candidate_rate"
+			| "opinion_shift_rate"
+			| "interest_up_rate",
 		range: { min: number; max: number } | undefined,
 	) => {
 		const ci = m[key];
@@ -185,6 +197,7 @@ export const checkViolations = (
 		}
 	};
 	inRange("open_loop_rate", e.open_loop_rate);
+	inRange("memory_candidate_rate", e.memory_candidate_rate);
 	inRange("opinion_shift_rate", e.opinion_shift_rate);
 	inRange("interest_up_rate", e.interest_up_rate);
 
@@ -261,6 +274,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				reply_policy,
 				utterance,
 				open_loops,
+				memory_candidates,
 				interest_signals,
 				opinion_signals,
 			} = res.value.output;
@@ -271,6 +285,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				politeness: replied ? politenessScore(utterance) : null,
 				question_ending: replied ? endsWithQuestion(utterance) : null,
 				open_loop_count: replied ? open_loops.length : null,
+				memory_candidate_count: replied ? memory_candidates.length : null,
 				opinion_shifted: replied
 					? opinion_signals.some(
 							(s) => opinionTopics.has(s.topic) && s.direction === "shift",
@@ -346,6 +361,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		"fanon",
 		"unperformed",
 		"open-loop",
+		"mem-cand",
 		"op-shift",
 		"int-up",
 		"viol",
@@ -363,6 +379,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		rateCell(m.fanon_overuse_rate),
 		rateCell(m.claims_unperformed_action_rate),
 		rateCell(m.open_loop_rate),
+		rateCell(m.memory_candidate_rate),
 		rateCell(m.opinion_shift_rate),
 		rateCell(m.interest_up_rate),
 		String(viol),

@@ -73,6 +73,11 @@ describe("PromptBuilder", () => {
 		expect(task).toContain("resolved_open_loop_ids");
 	});
 
+	it("memory_candidates は新着メッセージの発言だけから入れる指示を含む", () => {
+		const task = builder.build(baseInput()).system[9]?.text ?? "";
+		expect(task).toContain("チャンネルログの発言からは入れない");
+	});
+
 	it("Interest は topic キーと score 付きで上限まで、Opinion は言葉の確信度つきで入れる", () => {
 		const input = baseInput();
 		input.interests = Array.from({ length: 10 }, (_, i) => ({
