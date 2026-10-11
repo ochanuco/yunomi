@@ -94,6 +94,7 @@ living_rhythm:
   timezone: Asia/Tokyo
   lifestyle_day_boundary: "05:00"
   typical_sleep: "26:00-08:00"
+recurring_jokes: []
 initial_state:
   mood: 0.2
   energy: 0.6
