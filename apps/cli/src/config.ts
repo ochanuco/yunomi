@@ -24,8 +24,11 @@ export const resolveTarget = (
 		throw new ConfigError(`接続先 URL が不正: ${raw}`);
 	}
 
-	const id = env.YKM_ACCESS_CLIENT_ID;
-	const secret = env.YKM_ACCESS_CLIENT_SECRET;
+	// dev と prod は別の Access service token を使うため、env 別の指定を優先する。seed は両方に接続する。
+	const prefix = global.env === "dev" ? "YKM_DEV" : "YKM_PROD";
+	const id = env[`${prefix}_ACCESS_CLIENT_ID`] || env.YKM_ACCESS_CLIENT_ID;
+	const secret =
+		env[`${prefix}_ACCESS_CLIENT_SECRET`] || env.YKM_ACCESS_CLIENT_SECRET;
 	const headers: Record<string, string> = {};
 	if (id && secret) {
 		headers["CF-Access-Client-Id"] = id;

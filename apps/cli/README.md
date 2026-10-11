@@ -23,7 +23,7 @@ ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し
 | 項目 | 指定 |
 | --- | --- |
 | URL | `--url` > `YKM_DEV_URL` / `YKM_PROD_URL` > `https://yunomi-dev.chanu.co` / `https://yunomi.chanu.co` |
-| 認証 | `YKM_ACCESS_CLIENT_ID` と `YKM_ACCESS_CLIENT_SECRET` を `CF-Access-Client-Id` / `CF-Access-Client-Secret` で送る |
+| 認証 | `YKM_DEV_ACCESS_CLIENT_ID` / `YKM_DEV_ACCESS_CLIENT_SECRET`（prod は `YKM_PROD_...`）を `CF-Access-Client-Id` / `CF-Access-Client-Secret` で送る。env 別の指定が無ければ `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` を使う |
 | ローカル | URL が `localhost` / `127.0.0.1` で token が無いときは `x-yunomi-dev-caller: ykm` を送る |
 
 応答は `@yunomi/admin-contract` のスキーマで検証する。契約に合わなければエラーにする。終了コードは 0（成功）、1（接続・認証・設定の失敗）、2（使い方の誤り）。
@@ -46,6 +46,10 @@ pnpm --filter @yunomi/cli ykm status --url http://localhost:8787
 
 ```
 YKM_AGE_IDENTITY=op://Personal/yunomi-prod-snapshot-age/credential \
+YKM_PROD_ACCESS_CLIENT_ID=op://Personal/yunomi-ykm/client_id \
+YKM_PROD_ACCESS_CLIENT_SECRET=op://Personal/yunomi-ykm/client_secret \
+YKM_DEV_ACCESS_CLIENT_ID=op://Personal/yunomi-dev-ykm/client_id \
+YKM_DEV_ACCESS_CLIENT_SECRET=op://Personal/yunomi-dev-ykm/client_secret \
   op run -- ykm snapshot seed <id> --from prod --to dev
 ```
 
@@ -53,7 +57,7 @@ YKM_AGE_IDENTITY=op://Personal/yunomi-prod-snapshot-age/credential \
 2. 手元で `YKM_AGE_IDENTITY`（age の秘密鍵文字列）で復号し、gzip を展開して `SnapshotSchema` で検証する
 3. `--to` の `POST /admin/api/partners/:partnerId/snapshots/restore` に送る
 
-復号した平文はメモリの上だけで扱い、ディスクに書かない。`--to` は `dev` だけで、`prod` は CLI でも拒否する（Worker も production の restore を 403 にする）。`--url` は使えず、接続先は `YKM_DEV_URL` / `YKM_PROD_URL` で決まる。`--from` の env を読む Access service token が、`--to` の dev にも通る必要がある（両方に同じ `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` を送る）。
+復号した平文はメモリの上だけで扱い、ディスクに書かない。`--to` は `dev` だけで、`prod` は CLI でも拒否する（Worker も production の restore を 403 にする）。`--url` は使えず、接続先は `YKM_DEV_URL` / `YKM_PROD_URL` で決まる。`--from` と `--to` にはそれぞれの env の service token（`YKM_PROD_ACCESS_*` / `YKM_DEV_ACCESS_*`）を送る。
 
 ## 未実装の変更系コマンド
 

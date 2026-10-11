@@ -28,6 +28,30 @@ describe("resolveTarget", () => {
 		);
 	});
 
+	it("env 別の service token を共通の指定より優先する", () => {
+		const env = {
+			...token,
+			YKM_DEV_ACCESS_CLIENT_ID: "dev-id",
+			YKM_DEV_ACCESS_CLIENT_SECRET: "dev-secret",
+			YKM_PROD_ACCESS_CLIENT_ID: "prod-id",
+			YKM_PROD_ACCESS_CLIENT_SECRET: "prod-secret",
+		};
+		expect(resolveTarget(g(), env).headers["CF-Access-Client-Id"]).toBe(
+			"dev-id",
+		);
+		expect(
+			resolveTarget(g({ env: "prod" }), env).headers["CF-Access-Client-Id"],
+		).toBe("prod-id");
+		const devOnly = {
+			...token,
+			YKM_DEV_ACCESS_CLIENT_ID: "dev-id",
+			YKM_DEV_ACCESS_CLIENT_SECRET: "dev-secret",
+		};
+		expect(
+			resolveTarget(g({ env: "prod" }), devOnly).headers["CF-Access-Client-Id"],
+		).toBe("id");
+	});
+
 	it("環境変数の URL は既定を上書きし、--url はさらに優先する", () => {
 		const env = { ...token, YKM_DEV_URL: "https://example.test/" };
 		expect(resolveTarget(g(), env).baseUrl).toBe("https://example.test");
