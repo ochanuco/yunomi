@@ -9,3 +9,5 @@ dist/
 AGENTS.md
 apps/worker/src/generated/
 evals/out/
+*.age
+/snapshots/

@@ -68,7 +68,47 @@ LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `
 
 ## Admin API
 
-`/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,interests,opinions,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`interests`（score の降順）と `opinions`（プロファイルの定義順）は現在値で、行の無い topic は初期値を返し、各行に `source: "profile" | "learned"` が付く。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+`/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,interests,opinions,audit,kpis}` は読み取り専用（Snapshot は次節）。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`interests`（score の降順）と `opinions`（プロファイルの定義順）は現在値で、行の無い topic は初期値を返し、各行に `source: "profile" | "learned"` が付く。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+
+## Partner Snapshot
+
+Yukarin の長期記憶と現在値の時点コピー。日次バックアップと、prod から dev への seed に使う。実データなので、リポジトリには Snapshot・テスト鍵以外の鍵・seed を置かない（`*.age` と `/snapshots/` は `.gitignore`）。
+
+#### 中身
+
+JSON（`schema_version` 1、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
+
+- `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states`。`entities` と `external_identities` は partner を持たないので全行
+- `do`: `state`（`partner_state`）と `relationships`（日次累積の `acc_*` を含む全列）
+
+含めない: `audit_events`・`audit_daily_kpis`・履歴（`state_transitions` / `relationship_events` / `interest_changes` / `opinion_changes`）、DO の `recent_messages`（会話本文）・`processed_events`・`channel_state`・`entity_cache`・`llm_health`、secret。会話要約は未実装で項目が無い。D1 の対象列は `src/snapshot.ts` の `D1_SNAPSHOT_TABLES` で、テストが実スキーマとの一致を確かめる。
+
+#### 保存
+
+JSON → gzip（`CompressionStream`）→ age（`age-encryption`、公開鍵方式）。Worker は recipient だけを持ち、復号できない。R2 の binding は `SNAPSHOTS`、キーは `snapshots/<partner_id>/<snapshot_id>.json.gz.age`、`customMetadata` に `schema_version` / `created_at` / `env`。bucket は `resources.ts` の mode ごとの値（development は `yunomi-dev-snapshots`、production は `yunomi-snapshots`、local は `yunomi-local-snapshots`）で、事前に作る。
+
+recipient は `SNAPSHOT_AGE_RECIPIENT`（`resources.ts` の `snapshotAgeRecipient`、公開鍵なので commit する）。秘密鍵は 1Password（`op://Personal/yunomi-dev-snapshot-age/credential`、`op://Personal/yunomi-prod-snapshot-age/credential`）にあり、リポジトリにも Worker にも置かない。local mode はテスト用の鍵ペアで、identity は `test/snapshot-keys.ts`。
+
+`scripts/deploy.sh` は recipient が `AGE_RECIPIENT_PATTERN`（`age1` + bech32 の 58 文字）に合わなければ失敗する。プレースホルダや秘密鍵の取り違えがここで止まる。パターンと各 mode の値の整合は `test/snapshot.test.ts` が確かめる。
+
+#### 作成と削除
+
+毎日 04:17 JST の `scheduled` が、KPI 集計・audit 削除より前に Snapshot を作り、`SNAPSHOT_RETENTION_DAYS`（30）より古いものを `customMetadata.created_at` で削除する。作成・削除の失敗は `console.error` に残すだけで、KPI 集計と audit 削除は続ける。手動作成は `POST /admin/api/partners/:partnerId/snapshots`。
+
+#### API
+
+owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。
+
+- `GET .../snapshots`: `{ items: [{ id, created_at, size, schema_version, env }] }`（新しい順）
+- `POST .../snapshots`: 作成して 201 と同じ形の 1 件を返す
+- `GET .../snapshots/:snapshotId`: 暗号化済みの blob（`application/octet-stream`）をそのまま返す。無ければ 404
+- `POST .../snapshots/restore`: body は復号済みの Snapshot JSON。`YUNOMI_ENV=production` では 403 `restore_disabled_in_production`。検証に失敗すれば 400、`partner_id` の不一致や DB の失敗は 422。成功すると `{ snapshot_id, source_env, counts }`
+
+restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
+
+#### seed の運用
+
+dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot・別 Worker・別 Access）で担保する。手順は `apps/cli/README.md`。
 
 ## Admin Web の配信
 
@@ -80,7 +120,7 @@ LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `
 
 `scripts/deploy.sh <development|production>` の流れ:
 
-1. `resources.ts` から D1 id を読む。プレースホルダのままなら、#7 を案内して失敗する。
+1. `resources.ts` から D1 id と `snapshotAgeRecipient` を読む。D1 id がプレースホルダのままなら #7 を案内して失敗し、recipient が age の公開鍵の形式でなければ失敗する。
 2. `cf d1 migrations apply <id> --dir migrations`（remote）
 3. `cf deploy --mode <mode>`。`ANTHROPIC_API_KEY` が環境にあれば `--secrets-file`（権限 600 の一時 `.env`、終了時に削除）で渡す。`cf workers secrets update` は `--text` しか持たず値が argv に載るため使わない。
 4. `https://<host>/health` を最大 10 回（6 秒間隔）確認する。
@@ -90,6 +130,7 @@ LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `
 - GitHub Environment `dev` と、その secret `OP_SA_DEPLOY`（vault `yunomi-dev` を読む 1Password Service Account の token）
 - 1Password vault `yunomi-dev` の item `yunomi-deploy-dev`（`credential`、Cloudflare API token）と `anthropic-api-key`（`credential`）。参照は `.github/deploy/dev.env.op`
 - dev の D1 を作り、`resources.ts` の `development.d1Id` を実 UUID にする
+- R2 bucket `yunomi-dev-snapshots` を作る
 
 #7 が終わるまで、このパイプラインは D1 id のガードで失敗する（`OP_SA_DEPLOY` 未設定でも 1Password 認証で失敗する）。
 
@@ -102,6 +143,7 @@ LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `
 - GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `yunomi-production` を読む別の 1Password Service Account の token
 - 1Password vault `yunomi-production` の item `yunomi-deploy-prod`（Cloudflare API token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
+- R2 bucket `yunomi-snapshots` を作る
 
 #### dev / prod 分離チェックリスト
 

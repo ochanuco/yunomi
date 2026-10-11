@@ -17,6 +17,7 @@ import { createInterestOpinionRepo } from "../interest-opinion.ts";
 import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
+import { handleSnapshots } from "./snapshots.ts";
 
 export const DEFAULT_PAGE_LIMIT = 50;
 export const MAX_PAGE_LIMIT = 200;
@@ -26,6 +27,10 @@ const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
 	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|interests|opinions|audit|kpis)$`,
+);
+
+const SNAPSHOT_ROUTE = new RegExp(
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/snapshots(?:/([^/]+))?$`,
 );
 
 type Params = { limit: number; cursor: ReturnType<typeof decodeCursor> };
@@ -45,7 +50,10 @@ const parsePage = (url: URL): Params | Response => {
 	return cursor ? { limit, cursor } : fail(400, "invalid_cursor");
 };
 
-/** 読み取り専用。owner（Access の email）と service caller `ykm` だけが使える。 */
+/**
+ * owner（Access の email）と service caller `ykm` だけが使える。
+ * 読み取り専用だが、Snapshot の作成（POST）と development だけの restore は書き込む。
+ */
 export async function handleAdminApi(
 	request: Request,
 	env: Env,
@@ -58,6 +66,12 @@ export async function handleAdminApi(
 	}
 
 	const url = new URL(request.url);
+	const snapshotMatch = SNAPSHOT_ROUTE.exec(url.pathname);
+	if (snapshotMatch) {
+		const id = decodeURIComponent(snapshotMatch[1] ?? "");
+		if (id !== yukarinProfile.partner_id) return fail(404, "unknown_partner");
+		return handleSnapshots(request, env, id, snapshotMatch[2] ?? "");
+	}
 	const match = ROUTE.exec(url.pathname);
 	if (!match) return fail(404, "not_found");
 	if (request.method !== "GET") return fail(405, "method_not_allowed");

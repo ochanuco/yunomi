@@ -13,16 +13,22 @@ esac
 cd "$(dirname "$0")/.."
 
 # resources.ts を唯一の定義元として読む
-read -r worker host d1_id placeholder < <(
+read -r worker host d1_id placeholder age_recipient age_pattern < <(
   MODE=$mode node --input-type=module -e '
-    const { resources, D1_PLACEHOLDER_ID } = await import("./resources.ts");
+    const { resources, D1_PLACEHOLDER_ID, AGE_RECIPIENT_PATTERN } = await import("./resources.ts");
     const r = resources[process.env.MODE];
-    console.log(r.worker, r.host, r.d1Id, D1_PLACEHOLDER_ID);
+    console.log(r.worker, r.host, r.d1Id, D1_PLACEHOLDER_ID, r.snapshotAgeRecipient, AGE_RECIPIENT_PATTERN);
   '
 )
 
 if [ "$d1_id" = "$placeholder" ]; then
   echo "error: $mode の D1 database id がプレースホルダのまま。infra Issue (#7) で D1 を作成し、apps/worker/resources.ts を実 UUID に差し替えてから実行する。" >&2
+  exit 1
+fi
+
+# 暗号化先が age の公開鍵でないと、Snapshot を誰も復号できなくなる
+if ! printf '%s' "$age_recipient" | grep -Eq "$age_pattern"; then
+  echo "error: $mode の SNAPSHOT_AGE_RECIPIENT が age の公開鍵（age1...）の形式ではない: $age_recipient。apps/worker/resources.ts を実際の公開鍵に差し替えてから実行する。" >&2
   exit 1
 fi
 

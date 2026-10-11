@@ -25,7 +25,7 @@ import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
-import { DoStore, type StoredResult } from "./store.ts";
+import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
 import { runTurn } from "./turn.ts";
 
 const defaultRouter = (env: Env): ModelRouter => {
@@ -100,6 +100,27 @@ export class PartnerDO extends DurableObject<Env> {
 
 	adminRelationships(): Relationship[] {
 		return this.#store.listRelationships(yukarinProfile.partner_id);
+	}
+
+	/** Snapshot 用。会話本文・dedupe・channel_state は含めない。 */
+	snapshotDoState(): {
+		state: PartnerState | null;
+		relationships: RelationshipRow[];
+	} {
+		return {
+			state: this.#store.getState(),
+			relationships: this.#store.allRelationshipRows(),
+		};
+	}
+
+	/** dev の restore 用。DO の SQLite への書き込みを 1 つの transaction にする。 */
+	restoreDoState(
+		state: PartnerState | null,
+		relationships: RelationshipRow[],
+	): void {
+		this.ctx.storage.transactionSync(() =>
+			this.#store.replaceSnapshotState(state, relationships),
+		);
 	}
 
 	#background(task: Promise<void>): void {

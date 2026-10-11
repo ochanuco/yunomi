@@ -6,18 +6,28 @@ export const D1_PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000";
 // Yukarin bot の Discord user id（= Application ID）。local は dev bot をそのまま使う。
 const DEV_BOT_USER_ID = "1558605895758389250";
 
+// age の recipient（公開鍵）。Worker は暗号化にしか使わず、復号鍵は持たない。
+// deploy.sh が AGE_RECIPIENT_PATTERN に合わない値を拒否する（D1 id のプレースホルダ拒否と同じ位置づけ）。
+export const AGE_RECIPIENT_PATTERN = "^age1[02-9ac-hj-np-z]{58}$";
+
 export const resources = {
 	development: {
 		worker: "yunomi-dev",
 		host: "yunomi-dev.chanu.co",
 		d1Id: "df215ab3-5b7d-48c0-862b-f0057320e491",
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		snapshotBucket: "yunomi-dev-snapshots",
+		snapshotAgeRecipient:
+			"age13g33j0raad3fhl7xeutrf7pkp2f3decwax2udr950mqq3stxnd2qvj2md7",
 	},
 	production: {
 		worker: "yunomi",
 		host: "yunomi.chanu.co",
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
 		partnerDiscordUserId: "1558613526585671773",
+		snapshotBucket: "yunomi-snapshots",
+		snapshotAgeRecipient:
+			"age1ss5ud6wync43k5mu2zghpdt4tg5lumljvggs26jlxgzu60y3qshsyf0m0e",
 	},
 	// cf dev 専用。deploy しない（scripts/deploy.sh は development / production だけ受け付ける）。
 	local: {
@@ -25,6 +35,10 @@ export const resources = {
 		host: null,
 		d1Id: D1_PLACEHOLDER_ID,
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		snapshotBucket: "yunomi-local-snapshots",
+		// テスト用の鍵ペア（対応する identity は test/snapshot-keys.ts）。
+		snapshotAgeRecipient:
+			"age1s23p452q2n8p2wv5cuqd8trvld0rw80kzrremgsrxdw7lxnx997qmpusg2",
 	},
 } as const;
 

@@ -15,6 +15,8 @@ import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
+import { createSnapshot } from "./snapshot.ts";
+import { purgeExpiredSnapshots } from "./snapshot-store.ts";
 
 export { PartnerDO };
 
@@ -46,6 +48,8 @@ export default {
 	async scheduled(controller, env): Promise<void> {
 		const db = drizzle(env.DB);
 		const now = new Date(controller.scheduledTime);
+		// Snapshot の失敗で KPI 集計と audit 削除を止めない。audit が先に消えても Snapshot は影響を受けない。
+		await snapshotDaily(env, now);
 		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
 		await aggregateDailyKpis(
 			db,
@@ -55,6 +59,30 @@ export default {
 		await purgeExpiredAudit(db, now);
 	},
 } satisfies ExportedHandler<Env>;
+
+const snapshotDaily = async (env: Env, now: Date): Promise<void> => {
+	const partnerId = yukarinProfile.partner_id;
+	try {
+		const partner = partnerNamespace(env);
+		const created = await createSnapshot({
+			db: env.DB,
+			partner: partner.get(partner.idFromName(partnerId)),
+			partnerId,
+			env: env.YUNOMI_ENV,
+			now,
+			bucket: env.SNAPSHOTS,
+			recipient: env.SNAPSHOT_AGE_RECIPIENT,
+		});
+		if (!created.ok) console.error("snapshot create failed", created.error);
+	} catch (e) {
+		console.error("snapshot create failed", e);
+	}
+	try {
+		await purgeExpiredSnapshots(env.SNAPSHOTS, partnerId, now);
+	} catch (e) {
+		console.error("snapshot purge failed", e);
+	}
+};
 
 const isGateway = (p: Principal) =>
 	p.kind === "service" && p.caller === "gateway";

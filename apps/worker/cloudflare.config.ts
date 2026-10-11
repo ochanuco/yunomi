@@ -45,7 +45,10 @@ export default defineConfig(({ mode }) => {
 				PARTNER_DISCORD_USER_ID: bindings.text(r.partnerDiscordUserId),
 				// Admin API を許可する owner の email。
 				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
+				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
+				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。
+				SNAPSHOTS: bindings.r2({ name: r.snapshotBucket }),
 				DB: bindings.d1({
 					id: r.d1Id,
 					name: r.worker,
@@ -55,7 +58,7 @@ export default defineConfig(({ mode }) => {
 					exportName: "PartnerDO",
 				}),
 			},
-			// 04:17 JST。詳細 audit の保持期間切れを削除する。
+			// 04:17 JST。Snapshot の作成と期限切れ削除、日次 KPI 集計、詳細 audit の保持期間切れ削除。
 			triggers: [triggers.scheduled({ schedule: "17 19 * * *" })],
 			exports: {
 				PartnerDO: exports.durableObject({ storage: "sqlite" }),
