@@ -134,6 +134,7 @@ export const yukarinProfile: PartnerProfile = {
 		"lifestyle_day_boundary": "05:00",
 		"typical_sleep": "26:00-08:00"
 	},
+	"recurring_jokes": [],
 	"initial_state": {
 		"mood": 0.2,
 		"energy": 0.6
@@ -153,4 +154,4 @@ export const yukarinProfile: PartnerProfile = {
 	}
 };
 
-export const profileVersion = "b458e684ca65";
+export const profileVersion = "880d0b4ffe63";
