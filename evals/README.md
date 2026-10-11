@@ -50,6 +50,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 | `invented_facts_rate` | judge が設定にない事実を作っていると判定した割合 |
 | `cooling_down_joke_rate` | cooldown 中の持ちネタを使った割合 |
 | `open_loop_rate` | 返信のうち `open_loops` を 1 件以上返した割合。黙ったサンプルは分母に入れない |
+| `memory_candidate_rate` | 返信のうち `memory_candidates` を 1 件以上返した割合。黙ったサンプルは分母に入れない |
 | `opinion_shift_rate` | 返信のうち、プロファイルにある topic の `opinion_signals` に `shift` を含めた割合。黙ったサンプルは分母に入れない |
 | `interest_up_rate` | 返信のうち、プロファイルにある topic の `interest_signals` に `up` を含めた割合。黙ったサンプルは分母に入れない |
 
@@ -60,7 +61,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 LLM の出力は確率的であり、ばらつきそのものは失敗ではない。完全一致ではなく閾値と信頼区間で判定する。
 
 - 率の指標は、Wilson 区間全体が許容範囲の外にあるときだけ違反にする。サンプルが少ないときの偶然のぶれは違反にならない。
-- `reply_rate` と `open_loop_rate` / `opinion_shift_rate` / `interest_up_rate`（シナリオが期待を書いたときだけ）は期待範囲の min / max の両側、他の率は上限（`over_agreement_rate` は 0.2、`fanon_overuse_rate` は 0.3、未実行の行動・作り話・cooldown 違反は 0、質問終わりはシナリオの `question_ending_rate_max`）を見る。
+- `reply_rate` と `open_loop_rate` / `memory_candidate_rate` / `opinion_shift_rate` / `interest_up_rate`（シナリオが期待を書いたときだけ）は期待範囲の min / max の両側、他の率は上限（`over_agreement_rate` は 0.2、`fanon_overuse_rate` は 0.3、未実行の行動・作り話・cooldown 違反は 0、質問終わりはシナリオの `question_ending_rate_max`）を見る。
 - `politeness_score` と `persona_consistency` は平均が下限を下回ったとき違反にする。
 - 生成や judge の失敗は違反ではなく、`generation_errors` と各サンプルの `judge_error` に記録する。全サンプルが失敗したシナリオは違反にする。
 

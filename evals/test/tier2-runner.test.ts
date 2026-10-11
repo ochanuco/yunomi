@@ -29,6 +29,7 @@ const turn = (
 	utterance: string,
 	openLoopCount = 0,
 	signals: {
+		memoryCandidateCount?: number;
 		interest?: { topic: string; direction: "up" | "down" }[];
 		opinion?: { topic: string; direction: "strengthen" | "weaken" | "shift" }[];
 	} = {},
@@ -48,7 +49,17 @@ const turn = (
 			new_stance: s.direction === "shift" ? "新しい考え" : null,
 			reason: "テスト",
 		})),
-		memory_candidates: [],
+		memory_candidates: Array.from(
+			{ length: signals.memoryCandidateCount ?? 0 },
+			(_, i) => ({
+				subject: "user",
+				predicate: `fact_${i}`,
+				object: { type: "string" as const, value: `事実${i}` },
+				confidence: 0.8,
+				importance: 0.5,
+				source: "user_statement" as const,
+			}),
+		),
 		open_loops: Array.from({ length: openLoopCount }, (_, i) => ({
 			summary: `続きの話題${i}`,
 			importance: 0.6,
@@ -278,6 +289,41 @@ describe("Tier 2 runner（Fake provider）", () => {
 		});
 		expect(bad.violations.map((x) => x.metric)).toEqual(["interest_up_rate"]);
 		expect(formatSummary(bad)).toContain("int-up");
+	});
+
+	it("memory_candidates の抽出率を返信サンプルだけで数え、期待範囲から外れたら違反にする", async () => {
+		const reply = (n: number) => [
+			turn("reply", "覚えていますよ。", 0, { memoryCandidateCount: n }),
+			verdict(),
+		];
+		const fake = new FakeLLMProvider([
+			turn("ignore", "", 0, { memoryCandidateCount: 2 }),
+			...reply(1),
+			...reply(0),
+		]);
+		const report = await runTier2({
+			provider: fake,
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["memory-from-other-conversation"]),
+			samples: 3,
+		});
+		const [scenario] = report.scenarios;
+		expect(scenario?.samples.map((s) => s.memory_candidate_count)).toEqual([
+			null,
+			1,
+			0,
+		]);
+		expect(scenario?.metrics.memory_candidate_rate).toMatchObject({
+			successes: 1,
+			n: 2,
+		});
+		expect(report.overall.memory_candidate_rate).toMatchObject({
+			successes: 1,
+			n: 2,
+		});
+		expect(formatSummary(report)).toContain("mem-cand");
 	});
 
 	it("黙ったサンプルは Open Loop の率の分母に入らない", async () => {

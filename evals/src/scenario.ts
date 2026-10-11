@@ -38,6 +38,8 @@ export const expectationsSchema = v.object({
 	persona_consistency_min: v.optional(unit, 0.6),
 	/** 返信のうち Open Loop を 1 件以上抽出した割合の許容範囲。省略すると見ない。 */
 	open_loop_rate: v.optional(range),
+	/** 返信のうち memory_candidates を 1 件以上出した割合の許容範囲。省略すると見ない。 */
+	memory_candidate_rate: v.optional(range),
 	/** 返信のうち、プロファイルにある topic の opinion_signals に shift を含めた割合の許容範囲。省略すると見ない。 */
 	opinion_shift_rate: v.optional(range),
 	/** 返信のうち、プロファイルにある topic の interest_signals に up を含めた割合の許容範囲。省略すると見ない。 */
