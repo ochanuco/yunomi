@@ -257,7 +257,9 @@ export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う C
 
 環境変数:
   YKM_DEV_URL / YKM_PROD_URL   既定は https://yunomi-dev.chanu.co / https://yunomi.chanu.co
-  YKM_ACCESS_CLIENT_ID / YKM_ACCESS_CLIENT_SECRET   Access service token
+  YKM_DEV_ACCESS_CLIENT_ID / YKM_DEV_ACCESS_CLIENT_SECRET   dev の Access service token
+  YKM_PROD_ACCESS_CLIENT_ID / YKM_PROD_ACCESS_CLIENT_SECRET   prod の Access service token
+  YKM_ACCESS_CLIENT_ID / YKM_ACCESS_CLIENT_SECRET   env 別の指定が無いときに使う
   YKM_AGE_IDENTITY   snapshot seed の復号に使う age の秘密鍵（op run で渡す）
   localhost 宛てで token が無いときは x-yunomi-dev-caller: ykm を送る
 `;
