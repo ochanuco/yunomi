@@ -10,6 +10,8 @@ export type Command =
 			limit: number;
 	  }
 	| { name: "open-loops"; all: boolean; limit: number }
+	| { name: "interests" }
+	| { name: "opinions" }
 	| { name: "kpi"; days: number }
 	| { name: "audit-tail"; count: number; follow: boolean };
 
@@ -138,6 +140,11 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (first === "interests" || first === "opinions") {
+			only([]);
+			noExtra([second, ...rest].filter((x) => x !== undefined));
+			return { ok: true, command: { name: first }, global };
+		}
 		if (first === "kpi") {
 			only(["days"]);
 			noExtra([second, ...rest].filter((x) => x !== undefined));
@@ -175,6 +182,9 @@ export const HELP = `ykm: Yunomi の状態を読み取る CLI
                                           --all で置き換え済み・期限切れも含める
   ykm open-loops [--all] [--limit N]      未解決の話題（Open Loop）の一覧。既定は open だけで、
                                           --all で resolved / dropped も含める
+  ykm interests                           現在の Interest（score の降順）。行の無い topic は
+                                          プロファイルの初期値（source: profile）
+  ykm opinions                            現在の Opinion（stance と confidence）
   ykm kpi [--days N]                      生活日ごとの KPI（既定 30 日、当日は含まない）
   ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
 

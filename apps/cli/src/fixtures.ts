@@ -2,8 +2,10 @@ import type {
 	AuditItem,
 	CandidateView,
 	FactView,
+	InterestView,
 	KpiDay,
 	OpenLoopView,
+	OpinionView,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -84,6 +86,29 @@ export const openLoop: OpenLoopView = {
 	updated_at: "2026-10-11T03:00:00.000Z",
 	resolved_at: null,
 	last_followed_up_at: null,
+};
+
+export const interest: InterestView = {
+	topic: "music-voice",
+	label: "音楽と声",
+	score: 0.73,
+	baseline: 0.7,
+	learned_delta: 0.03,
+	summary: "歌や声の表現に耳が向く。",
+	updated_at: "2026-10-11T03:00:00.000Z",
+	source: "learned",
+};
+
+export const opinion: OpinionView = {
+	topic: "honesty",
+	label: "分からないことの扱い",
+	stance: "知らないことは知らないと言うほうがよい。",
+	confidence: 0.8,
+	stability: 0.85,
+	reasons: [],
+	source_memory_ids: [],
+	updated_at: null,
+	source: "profile",
 };
 
 export const auditItem = (over: Partial<AuditItem> = {}): AuditItem => ({

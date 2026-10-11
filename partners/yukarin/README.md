@@ -8,3 +8,12 @@
 - Yunomi 固有の振る舞い原則は `identity/yunomi.md` に書きます。
 
 `profile.yaml` または `identity/` を変えたら `pnpm --filter @yunomi/partner-yukarin gen` で `src/generated/profile.ts` を再生成します。
+
+## Interest / Opinion の初期値
+
+`profile.yaml` の `interests` と `opinions` が初期値で、topic のキーが識別子になる。公式の文章は転載せず、`identity/` と `values` の内容を要約・言い換えて書く。
+
+- `interests`: `topic`、`label`（表示名）、`baseline`（0〜1。学習で動くのはこの値から ±0.3 まで）、`summary`。
+- `opinions`: `topic`、`label`、`stance`（短い一文）、`confidence`（0〜1）、`stability`（0〜1。高いほど経験で confidence が動きにくい）。
+
+キーを変えると、D1 に学習済みの行がある topic とは対応しなくなる。キーは変えず、増やすだけにする。

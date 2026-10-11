@@ -58,6 +58,7 @@ export const toAuditRow = (
 			relationship: audit.relationship,
 			memory: audit.memory,
 			openLoops: audit.openLoops,
+			interestOpinion: audit.interestOpinion,
 			toolIntents: audit.toolIntents,
 			degradedTransition: audit.degradedTransition,
 		}),

@@ -3,7 +3,9 @@ import {
 	auditItem,
 	candidate,
 	fact,
+	interest,
 	openLoop,
+	opinion,
 	relationship,
 	status,
 } from "./fixtures.ts";
@@ -13,7 +15,9 @@ import {
 	formatAuditRow,
 	formatCandidates,
 	formatFacts,
+	formatInterests,
 	formatOpenLoops,
+	formatOpinions,
 	formatStatus,
 	jst,
 	table,
@@ -137,5 +141,41 @@ describe("formatOpenLoops", () => {
 
 	it("空のときは明示する", () => {
 		expect(formatOpenLoops([])).toBe("(Open Loop なし)");
+	});
+});
+
+describe("formatInterests / formatOpinions", () => {
+	it("Interest は score・baseline・差分を符号付きで、未学習は updated を - にする", () => {
+		const out = formatInterests([
+			interest,
+			{
+				...interest,
+				topic: "words",
+				label: "言葉",
+				score: 0.5,
+				baseline: 0.5,
+				learned_delta: 0,
+				updated_at: null,
+				source: "profile",
+			},
+		]);
+		expect(out).toContain("0.73");
+		expect(out).toContain("+0.03");
+		expect(out).toContain("2026-10-11 12:00:00");
+		expect(out.split("\n")[2]).toMatch(
+			/words.*0\.50\s+0\.50\s+0\.00\s+profile\s+-$/,
+		);
+	});
+
+	it("Opinion は stance と confidence / stability を出す", () => {
+		const out = formatOpinions([opinion]);
+		expect(out).toContain("知らないことは知らないと言うほうがよい。");
+		expect(out).toContain("0.80");
+		expect(out).toContain("0.85");
+	});
+
+	it("空のときは明示する", () => {
+		expect(formatInterests([])).toBe("(Interest なし)");
+		expect(formatOpinions([])).toBe("(Opinion なし)");
 	});
 });

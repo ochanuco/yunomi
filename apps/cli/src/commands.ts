@@ -7,8 +7,10 @@ import {
 	formatAuditRow,
 	formatCandidates,
 	formatFacts,
+	formatInterests,
 	formatKpis,
 	formatOpenLoops,
+	formatOpinions,
 	formatStatus,
 } from "./format.ts";
 
@@ -99,6 +101,20 @@ const execute = async (
 			if (!global.json && page.next_cursor) {
 				deps.err(`(続きあり: --limit を増やすと ${MAX_PAGE} 件まで見られる)`);
 			}
+			return;
+		}
+		case "interests": {
+			const r = await client.interests();
+			deps.out(
+				global.json ? JSON.stringify(r, null, 2) : formatInterests(r.items),
+			);
+			return;
+		}
+		case "opinions": {
+			const r = await client.opinions();
+			deps.out(
+				global.json ? JSON.stringify(r, null, 2) : formatOpinions(r.items),
+			);
 			return;
 		}
 		case "kpi": {

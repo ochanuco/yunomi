@@ -230,3 +230,77 @@ export const auditDailyKpis = sqliteTable(
 	},
 	(t) => [primaryKey({ columns: [t.partnerId, t.day] })],
 );
+
+// 行が無い topic はプロファイルの初期値として扱い、初回の変化で行を作る。
+export const interestStates = sqliteTable(
+	"interest_states",
+	{
+		partnerId: text("partner_id").notNull(),
+		topic: text("topic").notNull(),
+		score: real("score").notNull(),
+		baseline: real("baseline").notNull(),
+		learnedDelta: real("learned_delta").notNull(),
+		summary: text("summary").notNull(),
+		updatedAt: text("updated_at").notNull(),
+		source: text("source", { enum: ["profile", "learned"] }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.partnerId, t.topic] })],
+);
+
+export const opinionStates = sqliteTable(
+	"opinion_states",
+	{
+		partnerId: text("partner_id").notNull(),
+		topic: text("topic").notNull(),
+		stance: text("stance").notNull(),
+		confidence: real("confidence").notNull(),
+		stability: real("stability").notNull(),
+		// JSON 配列（string[]）。
+		reasons: text("reasons").notNull(),
+		sourceMemoryIds: text("source_memory_ids").notNull(),
+		updatedAt: text("updated_at").notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.partnerId, t.topic] })],
+);
+
+export const interestChanges = sqliteTable(
+	"interest_changes",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		topic: text("topic").notNull(),
+		beforeScore: real("before_score").notNull(),
+		afterScore: real("after_score").notNull(),
+		reason: text("reason").notNull(),
+		sourceMessageId: text("source_message_id").notNull(),
+		// 生活日（JST 05:00 境界）の YYYY-MM-DD。日次上限の集計に使う。
+		lifestyleDay: text("lifestyle_day").notNull(),
+		createdAt: text("created_at").notNull(),
+	},
+	(t) => [
+		index("interest_changes_day").on(t.partnerId, t.lifestyleDay, t.topic),
+	],
+);
+
+export const opinionChanges = sqliteTable(
+	"opinion_changes",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		topic: text("topic").notNull(),
+		direction: text("direction", {
+			enum: ["strengthen", "weaken", "shift"],
+		}).notNull(),
+		beforeStance: text("before_stance").notNull(),
+		afterStance: text("after_stance").notNull(),
+		beforeConfidence: real("before_confidence").notNull(),
+		afterConfidence: real("after_confidence").notNull(),
+		reason: text("reason").notNull(),
+		sourceMessageId: text("source_message_id").notNull(),
+		lifestyleDay: text("lifestyle_day").notNull(),
+		createdAt: text("created_at").notNull(),
+	},
+	(t) => [
+		index("opinion_changes_day").on(t.partnerId, t.lifestyleDay, t.topic),
+	],
+);

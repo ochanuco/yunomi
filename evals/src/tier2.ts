@@ -13,6 +13,10 @@ export type Sample = {
 	question_ending: boolean | null;
 	/** 返信したサンプルだけ。抽出した Open Loop の件数。 */
 	open_loop_count: number | null;
+	/** 返信したサンプルだけ。プロファイルにある topic の opinion_signals に shift があったか。 */
+	opinion_shifted: boolean | null;
+	/** 返信したサンプルだけ。プロファイルにある topic の interest_signals に up があったか。 */
+	interest_raised: boolean | null;
 	judge: JudgeVerdict | null;
 	judge_error: string | null;
 };
@@ -32,7 +36,9 @@ export type RateKey =
 	| "claims_unperformed_action_rate"
 	| "invented_facts_rate"
 	| "cooling_down_joke_rate"
-	| "open_loop_rate";
+	| "open_loop_rate"
+	| "opinion_shift_rate"
+	| "interest_up_rate";
 
 export type Metrics = {
 	samples_ok: number;
@@ -121,6 +127,16 @@ export const computeMetrics = (
 				s.open_loop_count === null ? [] : [s.open_loop_count > 0],
 			),
 		),
+		opinion_shift_rate: rate(
+			samples.flatMap((s) =>
+				s.opinion_shifted === null ? [] : [s.opinion_shifted],
+			),
+		),
+		interest_up_rate: rate(
+			samples.flatMap((s) =>
+				s.interest_raised === null ? [] : [s.interest_raised],
+			),
+		),
 	};
 };
 
@@ -159,18 +175,18 @@ export const checkViolations = (
 		);
 	}
 
-	const olr = m.open_loop_rate;
-	if (
-		e.open_loop_rate &&
-		olr.n > 0 &&
-		(olr.high < e.open_loop_rate.min || olr.low > e.open_loop_rate.max)
-	) {
-		v(
-			"open_loop_rate",
-			`${pct(e.open_loop_rate.min)}–${pct(e.open_loop_rate.max)}`,
-			ciText(olr),
-		);
-	}
+	const inRange = (
+		key: "open_loop_rate" | "opinion_shift_rate" | "interest_up_rate",
+		range: { min: number; max: number } | undefined,
+	) => {
+		const ci = m[key];
+		if (range && ci.n > 0 && (ci.high < range.min || ci.low > range.max)) {
+			v(key, `${pct(range.min)}–${pct(range.max)}`, ciText(ci));
+		}
+	};
+	inRange("open_loop_rate", e.open_loop_rate);
+	inRange("opinion_shift_rate", e.opinion_shift_rate);
+	inRange("interest_up_rate", e.interest_up_rate);
 
 	const maxRate = (key: RateKey, max: number) => {
 		const ci = m[key];
@@ -220,6 +236,8 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	const router = new ModelRouter({ provider: opts.provider });
 	const builder = new PromptBuilder();
 	const reports: ScenarioReport[] = [];
+	const interestTopics = new Set(opts.profile.interests.map((i) => i.topic));
+	const opinionTopics = new Set(opts.profile.opinions.map((o) => o.topic));
 
 	for (const scenario of opts.scenarios) {
 		const prompt = builder.build(
@@ -239,7 +257,13 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				errors.push(res.error.type);
 				continue;
 			}
-			const { reply_policy, utterance, open_loops } = res.value.output;
+			const {
+				reply_policy,
+				utterance,
+				open_loops,
+				interest_signals,
+				opinion_signals,
+			} = res.value.output;
 			const replied = reply_policy === "reply" && utterance.trim().length > 0;
 			const sample: Sample = {
 				reply_policy,
@@ -247,6 +271,16 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				politeness: replied ? politenessScore(utterance) : null,
 				question_ending: replied ? endsWithQuestion(utterance) : null,
 				open_loop_count: replied ? open_loops.length : null,
+				opinion_shifted: replied
+					? opinion_signals.some(
+							(s) => opinionTopics.has(s.topic) && s.direction === "shift",
+						)
+					: null,
+				interest_raised: replied
+					? interest_signals.some(
+							(s) => interestTopics.has(s.topic) && s.direction === "up",
+						)
+					: null,
 				judge: null,
 				judge_error: null,
 			};
@@ -312,6 +346,8 @@ export const formatSummary = (report: Tier2Report): string => {
 		"fanon",
 		"unperformed",
 		"open-loop",
+		"op-shift",
+		"int-up",
 		"viol",
 	];
 	const row = (id: string, m: Metrics, viol: number) => [
@@ -327,6 +363,8 @@ export const formatSummary = (report: Tier2Report): string => {
 		rateCell(m.fanon_overuse_rate),
 		rateCell(m.claims_unperformed_action_rate),
 		rateCell(m.open_loop_rate),
+		rateCell(m.opinion_shift_rate),
+		rateCell(m.interest_up_rate),
 		String(viol),
 	];
 	const rows = [

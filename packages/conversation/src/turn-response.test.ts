@@ -8,7 +8,17 @@ const valid = () => ({
 	decision_summary: "挨拶に返答する。",
 	emotion_delta: { mood: 0.1, energy: 0 },
 	relationship_delta: { familiarity: 0.02, trust: 0 },
-	interest_delta: [{ topic: "音楽", delta: 0.1 }],
+	interest_signals: [
+		{ topic: "music", direction: "up", reason: "歌の話で盛り上がった" },
+	],
+	opinion_signals: [
+		{
+			topic: "pace",
+			direction: "shift",
+			new_stance: "速いのも悪くない",
+			reason: "実体験を聞いた",
+		},
+	],
 	memory_candidates: [
 		{
 			subject: "alice",
@@ -85,6 +95,38 @@ describe("turnResponseSchema", () => {
 		expect(ok(missing)).toBe(false);
 	});
 
+	it("interest_signals / opinion_signals は向きの列挙と null の new_stance を受け、不正は拒否する", () => {
+		const opinion = (over: object = {}) => ({
+			topic: "pace",
+			direction: "weaken",
+			new_stance: null,
+			reason: "理由",
+			...over,
+		});
+		expect(ok({ ...valid(), opinion_signals: [opinion()] })).toBe(true);
+		expect(
+			ok({ ...valid(), opinion_signals: [opinion({ direction: "flip" })] }),
+		).toBe(false);
+		const { new_stance: _, ...noStance } = opinion();
+		expect(ok({ ...valid(), opinion_signals: [noStance] })).toBe(false);
+		expect(
+			ok({
+				...valid(),
+				interest_signals: [
+					{ topic: "music", direction: "sideways", reason: "" },
+				],
+			}),
+		).toBe(false);
+		expect(
+			ok({
+				...valid(),
+				interest_signals: [
+					{ topic: "music", direction: "down", reason: "a".repeat(201) },
+				],
+			}),
+		).toBe(false);
+	});
+
 	it("JSON Schema は structured outputs の要件を満たす", () => {
 		const walk = (n: unknown): void => {
 			if (Array.isArray(n)) {
@@ -103,6 +145,6 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(11);
+		).toHaveLength(12);
 	});
 });
