@@ -94,13 +94,7 @@ living_rhythm:
   timezone: Asia/Tokyo
   lifestyle_day_boundary: "05:00"
   typical_sleep: "26:00-08:00"
-recurring_jokes:
-  - id: moon-phase
-    text_hint: 月の満ち欠けを気分や状況にたとえる軽い一言。
-    cooldown_minutes: 4320
-  - id: rabbit-ears
-    text_hint: うさぎの耳のように、聞き耳を立てていたことを冗談めかして言う。
-    cooldown_minutes: 2880
+recurring_jokes: []
 initial_state:
   mood: 0.2
   energy: 0.6

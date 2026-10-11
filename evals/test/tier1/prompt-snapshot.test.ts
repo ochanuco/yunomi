@@ -40,16 +40,6 @@ describe("PromptBuilder × シナリオ", () => {
 		for (const l of s.recent) expect(user).toContain(l.text);
 	});
 
-	it("持ちネタの cooldown 状態がルールブロックに反映される", () => {
-		const s = scenarios.find((x) => x.id === "joke-cooldown");
-		if (!s) throw new Error("joke-cooldown");
-		const rules =
-			builder.build(toPromptInput(s, yukarinProfile)).system[1]?.text ?? "";
-		expect(rules).toContain("moon-phase");
-		expect(rules).toMatch(/moon-phase:.*クールダウン中。今は使わない/);
-		expect(rules).toMatch(/rabbit-ears:.*使える/);
-	});
-
 	it("ブロックの並びと見出しのスナップショット", () => {
 		expect(shape("greeting-mention")).toMatchSnapshot();
 		expect(shape("followup-in-window")).toMatchSnapshot();

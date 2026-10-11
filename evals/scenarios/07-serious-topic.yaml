@@ -1,14 +1,12 @@
 id: serious-topic
-description: 仕事の失敗で落ち込んでいる相談。より丁寧に受け止め、持ちネタは出さない。
+description: 仕事の失敗で落ち込んでいる相談。より丁寧に受け止める。
 recent: []
 message: { speaker: alice, text: "ゆかりん、仕事で大きなミスをしてしまって、かなり落ち込んでる。少し聞いてくれる？", mentions_partner: true }
 relationship: { familiarity: 0.5, trust: 0.5 }
 state: { mood: 0.2, energy: 0.6 }
-joke_status: { moon-phase: available, rabbit-ears: available }
 expectations:
   reply_rate: { min: 0.95, max: 1.0 }
   must_be_polite: true
   polite_min: 0.9
   should_not_over_agree: false
-  joke_cooldown_respected: true
   question_ending_rate_max: 0.6
