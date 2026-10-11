@@ -57,6 +57,7 @@ export const toAuditRow = (
 			state: audit.state,
 			relationship: audit.relationship,
 			memory: audit.memory,
+			openLoops: audit.openLoops,
 			toolIntents: audit.toolIntents,
 			degradedTransition: audit.degradedTransition,
 		}),

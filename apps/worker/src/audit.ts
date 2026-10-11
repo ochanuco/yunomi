@@ -5,6 +5,7 @@ import type {
 } from "@yunomi/core";
 import type { Usage } from "@yunomi/llm";
 import type { CandidateOutcome } from "./memory.ts";
+import type { OpenLoopOutcome } from "./open-loops.ts";
 
 export type DecisionReason =
 	| "llm"
@@ -48,6 +49,13 @@ export type TurnAuditData = {
 		rejected: RelationshipUpdateRejected[];
 	} | null;
 	memory: { outcomes: CandidateOutcome[]; error: string | null } | null;
+	/** reply ターンだけ。追加・解決した Open Loop の id と、追加しなかった理由。 */
+	openLoops: {
+		added: string[];
+		resolved: string[];
+		rejected: OpenLoopOutcome["rejected"][number]["reason"][];
+		error: string | null;
+	} | null;
 	/** このターンで degradedMode が切り替わったとき。LLM 失敗の連続による遷移だけを示す。 */
 	degradedTransition: "entered" | "recovered" | null;
 };

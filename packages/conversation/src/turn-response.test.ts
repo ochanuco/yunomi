@@ -19,7 +19,15 @@ const valid = () => ({
 			source: "user_statement",
 		},
 	],
-	open_loop_updates: [{ summary: "予定を聞く", importance: 0.3 }],
+	open_loops: [
+		{
+			summary: "面接の結果を聞く",
+			importance: 0.6,
+			due_at: "2026-10-12T01:00:00Z",
+			due_confidence: 0.5,
+		},
+	],
+	resolved_open_loop_ids: ["01900000-0000-7000-8000-000000000000"],
 	tool_intents: [],
 	needs_review: false,
 });
@@ -55,6 +63,28 @@ describe("turnResponseSchema", () => {
 		expect(ok(bad)).toBe(false);
 	});
 
+	it("open_loops は due_at / due_confidence を null にでき、範囲外や欠落は拒否する", () => {
+		const loop = (over: object = {}) => ({
+			summary: "結果待ち",
+			importance: 0.5,
+			due_at: null,
+			due_confidence: null,
+			...over,
+		});
+		expect(ok({ ...valid(), open_loops: [loop()] })).toBe(true);
+		expect(ok({ ...valid(), open_loops: [loop({ importance: 1.5 })] })).toBe(
+			false,
+		);
+		expect(
+			ok({ ...valid(), open_loops: [loop({ due_confidence: -0.1 })] }),
+		).toBe(false);
+		const { due_at: _, ...noDue } = loop();
+		expect(ok({ ...valid(), open_loops: [noDue] })).toBe(false);
+		expect(ok({ ...valid(), resolved_open_loop_ids: [1] })).toBe(false);
+		const { resolved_open_loop_ids: __, ...missing } = valid();
+		expect(ok(missing)).toBe(false);
+	});
+
 	it("JSON Schema は structured outputs の要件を満たす", () => {
 		const walk = (n: unknown): void => {
 			if (Array.isArray(n)) {
@@ -73,6 +103,6 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(10);
+		).toHaveLength(11);
 	});
 });

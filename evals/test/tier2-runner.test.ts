@@ -24,7 +24,11 @@ const result = (output: unknown) =>
 		stopReason: "end_turn",
 	});
 
-const turn = (reply_policy: "reply" | "ignore", utterance: string) =>
+const turn = (
+	reply_policy: "reply" | "ignore",
+	utterance: string,
+	openLoopCount = 0,
+) =>
 	result({
 		utterance,
 		reply_policy,
@@ -33,7 +37,13 @@ const turn = (reply_policy: "reply" | "ignore", utterance: string) =>
 		relationship_delta: { familiarity: 0, trust: 0 },
 		interest_delta: [],
 		memory_candidates: [],
-		open_loop_updates: [],
+		open_loops: Array.from({ length: openLoopCount }, (_, i) => ({
+			summary: `続きの話題${i}`,
+			importance: 0.6,
+			due_at: null,
+			due_confidence: null,
+		})),
+		resolved_open_loop_ids: [],
 		tool_intents: [],
 		needs_review: false,
 	});
@@ -113,6 +123,71 @@ describe("Tier 2 runner（Fake provider）", () => {
 			timestamp: "2026-01-01T00:00:00.000Z",
 		});
 		expect(formatSummary(report)).toContain("(overall)");
+	});
+
+	it("Open Loop の抽出率を返信サンプルだけで数え、期待範囲から外れたら違反にする", async () => {
+		const reply = (loops: number) => [
+			turn("reply", "結果が出たら教えてくださいね。", loops),
+			verdict(),
+		];
+		const fake = new FakeLLMProvider([
+			// open-loop-interview: 3 回とも抽出する（期待 60–100%）
+			...reply(1),
+			...reply(2),
+			...reply(1),
+			// open-loop-chitchat: 3 回中 2 回抽出してしまう（期待 0–10%）
+			...reply(1),
+			...reply(0),
+			...reply(1),
+		]);
+		const report = await runTier2({
+			provider: fake,
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["open-loop-interview", "open-loop-chitchat"]),
+			samples: 3,
+		});
+		const [interview, chitchat] = report.scenarios;
+		expect(interview?.samples.map((s) => s.open_loop_count)).toEqual([1, 2, 1]);
+		expect(interview?.metrics.open_loop_rate).toMatchObject({
+			successes: 3,
+			n: 3,
+			rate: 1,
+		});
+		expect(chitchat?.metrics.open_loop_rate).toMatchObject({
+			successes: 2,
+			n: 3,
+		});
+		expect(report.overall.open_loop_rate).toMatchObject({ successes: 5, n: 6 });
+		expect(report.violations.map((x) => `${x.scenario}:${x.metric}`)).toEqual([
+			"open-loop-chitchat:open_loop_rate",
+		]);
+		expect(formatSummary(report)).toContain("open-loop");
+	});
+
+	it("黙ったサンプルは Open Loop の率の分母に入らない", async () => {
+		const fake = new FakeLLMProvider([
+			turn("ignore", "", 2),
+			turn("reply", "了解です。", 1),
+			verdict(),
+		]);
+		const report = await runTier2({
+			provider: fake,
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["open-loop-interview"]),
+			samples: 2,
+		});
+		expect(report.scenarios[0]?.samples.map((s) => s.open_loop_count)).toEqual([
+			null,
+			1,
+		]);
+		expect(report.scenarios[0]?.metrics.open_loop_rate).toMatchObject({
+			successes: 1,
+			n: 1,
+		});
 	});
 
 	it("production は主モデルが Sonnet になる", async () => {

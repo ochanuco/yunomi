@@ -32,6 +32,8 @@ export const expectationsSchema = v.object({
 	/** cooling_down の持ちネタを使わない。 */
 	joke_cooldown_respected: v.optional(v.boolean(), false),
 	persona_consistency_min: v.optional(unit, 0.6),
+	/** 返信のうち Open Loop を 1 件以上抽出した割合の許容範囲。省略すると見ない。 */
+	open_loop_rate: v.optional(range),
 });
 
 export const scenarioSchema = v.object({
@@ -105,6 +107,7 @@ export const loadScenarios = (
 export const toPromptInput = (
 	scenario: Scenario,
 	profile: PartnerProfile,
+	now: Date = new Date(),
 ): PromptInput => ({
 	profile,
 	jokeStatus: scenario.joke_status,
@@ -114,6 +117,8 @@ export const toPromptInput = (
 		...scenario.relationship,
 	},
 	memory: [],
+	openLoops: [],
+	now,
 	channel: {
 		name: "general",
 		presence: `${scenario.message.speaker} がオンライン`,

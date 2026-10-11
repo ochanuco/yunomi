@@ -52,7 +52,8 @@ const turnJson = (utterance: string, policy = "reply") => ({
 	relationship_delta: { familiarity: 0.01, trust: 0 },
 	interest_delta: [],
 	memory_candidates: [],
-	open_loop_updates: [],
+	open_loops: [],
+	resolved_open_loop_ids: [],
 	tool_intents: [],
 	needs_review: false,
 });
@@ -190,6 +191,7 @@ describe("保持期間", () => {
 				state: null,
 				relationship: null,
 				memory: null,
+				openLoops: null,
 				degradedTransition: null,
 			},
 		);

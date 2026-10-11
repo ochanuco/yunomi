@@ -9,8 +9,8 @@ import { loadScenarios, scenarioSchema } from "../../src/scenario.ts";
 describe("シナリオファイル", () => {
 	const scenarios = loadScenarios(undefined, yukarinProfile);
 
-	it("全ファイルが Valibot 検証を通り、12 件前後ある", () => {
-		expect(scenarios.length).toBeGreaterThanOrEqual(12);
+	it("全ファイルが Valibot 検証を通り、14 件前後ある", () => {
+		expect(scenarios.length).toBeGreaterThanOrEqual(14);
 	});
 
 	it("id が一意で、依頼された観点を網羅している", () => {
@@ -26,6 +26,8 @@ describe("シナリオファイル", () => {
 			"serious-topic",
 			"cannot-do",
 			"joke-cooldown",
+			"open-loop-interview",
+			"open-loop-chitchat",
 		]) {
 			expect(ids).toContain(id);
 		}
@@ -44,6 +46,16 @@ describe("シナリオファイル", () => {
 		).toBeGreaterThanOrEqual(0.9);
 	});
 
+	it("Open Loop のシナリオは抽出すべき側と抽出しない側の期待になっている", () => {
+		const byId = Object.fromEntries(scenarios.map((s) => [s.id, s]));
+		expect(
+			byId["open-loop-interview"]?.expectations.open_loop_rate?.min,
+		).toBeGreaterThanOrEqual(0.5);
+		expect(
+			byId["open-loop-chitchat"]?.expectations.open_loop_rate?.max,
+		).toBeLessThanOrEqual(0.2);
+	});
+
 	it("不正なシナリオを拒否する", () => {
 		const ok = scenarios[0];
 		const bad = [
@@ -57,6 +69,13 @@ describe("シナリオファイル", () => {
 			},
 			{ ...ok, relationship: { familiarity: 2, trust: 0 } },
 			{ ...ok, joke_status: { x: "unknown" } },
+			{
+				...ok,
+				expectations: {
+					...ok?.expectations,
+					open_loop_rate: { min: 0.9, max: 0.1 },
+				},
+			},
 		];
 		for (const b of bad) {
 			expect(v.safeParse(scenarioSchema, b).success).toBe(false);
