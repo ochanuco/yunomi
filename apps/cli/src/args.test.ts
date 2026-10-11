@@ -60,6 +60,13 @@ describe("parseCli", () => {
 		expect(parseCli(["open-loops", "extra"]).ok).toBe(false);
 	});
 
+	it("interests / opinions は引数を取らない", () => {
+		expect(ok(["interests"]).command).toEqual({ name: "interests" });
+		expect(ok(["opinions", "--json"]).command).toEqual({ name: "opinions" });
+		expect(parseCli(["interests", "--all"]).ok).toBe(false);
+		expect(parseCli(["opinions", "extra"]).ok).toBe(false);
+	});
+
 	it("kpi の既定は 30 日、--days で変える", () => {
 		expect(ok(["kpi"]).command).toEqual({ name: "kpi", days: 30 });
 		expect(ok(["kpi", "--days", "7", "--json"]).command).toEqual({

@@ -3,6 +3,8 @@ import {
 	ApiErrorSchema,
 	type AuditResponse,
 	AuditResponseSchema,
+	type InterestsResponse,
+	InterestsResponseSchema,
 	type KpisResponse,
 	KpisResponseSchema,
 	type MemoryInclude,
@@ -12,6 +14,8 @@ import {
 	type OpenLoopsFilter,
 	type OpenLoopsResponse,
 	OpenLoopsResponseSchema,
+	type OpinionsResponse,
+	OpinionsResponseSchema,
 	type RelationshipsResponse,
 	RelationshipsResponseSchema,
 	type StatusResponse,
@@ -38,6 +42,8 @@ export type AdminClient = {
 		limit: number;
 		cursor?: string;
 	}): Promise<OpenLoopsResponse>;
+	interests(): Promise<InterestsResponse>;
+	opinions(): Promise<OpinionsResponse>;
 	kpis(q: { days: number }): Promise<KpisResponse>;
 	audit(q: {
 		limit: number;
@@ -101,6 +107,8 @@ export const createClient = (
 		relationships: () => call("relationships", RelationshipsResponseSchema),
 		memory: (q) => call("memory", MemoryResponseSchema, q),
 		openLoops: (q) => call("open-loops", OpenLoopsResponseSchema, q),
+		interests: () => call("interests", InterestsResponseSchema),
+		opinions: () => call("opinions", OpinionsResponseSchema),
 		kpis: (q) => call("kpis", KpisResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
 	};

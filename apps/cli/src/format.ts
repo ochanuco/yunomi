@@ -2,8 +2,10 @@ import type {
 	AuditItem,
 	CandidateView,
 	FactView,
+	InterestView,
 	KpiDay,
 	OpenLoopView,
+	OpinionView,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -67,6 +69,7 @@ export const table = (header: string[], rows: string[][]): string => {
 };
 
 const num = (n: number) => n.toFixed(2);
+const signed = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 
 export const formatStatus = (
 	s: StatusResponse,
@@ -177,6 +180,45 @@ export const formatOpenLoops = (items: OpenLoopView[]): string =>
 					num(l.importance),
 					jst(l.due_at),
 					l.due_confidence === null ? "-" : num(l.due_confidence),
+				]),
+			);
+
+export const formatInterests = (items: InterestView[]): string =>
+	items.length === 0
+		? "(Interest なし)"
+		: table(
+				[
+					"TOPIC",
+					"LABEL",
+					"SCORE",
+					"BASELINE",
+					"DELTA",
+					"SOURCE",
+					"UPDATED (JST)",
+				],
+				items.map((i) => [
+					i.topic,
+					truncate(i.label, 20),
+					num(i.score),
+					num(i.baseline),
+					signed(i.learned_delta),
+					i.source,
+					jst(i.updated_at),
+				]),
+			);
+
+export const formatOpinions = (items: OpinionView[]): string =>
+	items.length === 0
+		? "(Opinion なし)"
+		: table(
+				["TOPIC", "STANCE", "CONF", "STAB", "SOURCE", "UPDATED (JST)"],
+				items.map((o) => [
+					o.topic,
+					truncate(o.stance, 60),
+					num(o.confidence),
+					num(o.stability),
+					o.source,
+					jst(o.updated_at),
 				]),
 			);
 

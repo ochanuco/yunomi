@@ -4,8 +4,10 @@ import {
 	auditItem,
 	candidate,
 	fact,
+	interest,
 	kpiDay,
 	openLoop,
+	opinion,
 	relationship,
 	status,
 } from "./fixtures.ts";
@@ -39,6 +41,8 @@ const api = (url: URL) => {
 	if (path === "open-loops") {
 		return { items: [openLoop], next_cursor: null };
 	}
+	if (path === "interests") return { items: [interest] };
+	if (path === "opinions") return { items: [opinion] };
 	if (path === "kpis") return { items: [kpiDay] };
 	if (path === "memory") {
 		return url.searchParams.get("kind") === "candidates"
@@ -105,6 +109,34 @@ describe("run", () => {
 	it("open-loops の応答が契約に合わなければ 1", async () => {
 		const h = harness(() => ({ items: [{ id: "x" }], next_cursor: null }));
 		expect(await run(["open-loops"], h.deps)).toBe(1);
+		expect(h.err.join("\n")).toContain("admin-contract");
+	});
+
+	it("interests / opinions は表で出す", async () => {
+		const h = harness(api);
+		expect(await run(["interests"], h.deps)).toBe(0);
+		expect(h.urls[0]?.pathname).toBe("/admin/api/partners/yukarin/interests");
+		expect(h.out[0]).toContain("music-voice");
+		expect(h.out[0]).toContain("+0.03");
+		expect(h.out[0]).toContain("learned");
+		expect(await run(["opinions"], h.deps)).toBe(0);
+		expect(h.urls[1]?.pathname).toBe("/admin/api/partners/yukarin/opinions");
+		expect(h.out[1]).toContain("honesty");
+		expect(h.out[1]).toContain("0.80");
+		expect(h.out[1]).toContain("profile");
+	});
+
+	it("interests / opinions --json は応答をそのまま出す", async () => {
+		const h = harness(api);
+		await run(["interests", "--json"], h.deps);
+		await run(["opinions", "--json"], h.deps);
+		expect(JSON.parse(h.out[0] ?? "").items[0].topic).toBe("music-voice");
+		expect(JSON.parse(h.out[1] ?? "").items[0].topic).toBe("honesty");
+	});
+
+	it("interests の応答が契約に合わなければ 1", async () => {
+		const h = harness(() => ({ items: [{ topic: "x" }] }));
+		expect(await run(["interests"], h.deps)).toBe(1);
 		expect(h.err.join("\n")).toContain("admin-contract");
 	});
 
