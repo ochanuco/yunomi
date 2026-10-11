@@ -45,6 +45,21 @@ describe("parseCli", () => {
 		);
 	});
 
+	it("open-loops は --all と --limit を受け、他のオプションは拒否する", () => {
+		expect(ok(["open-loops"]).command).toEqual({
+			name: "open-loops",
+			all: false,
+			limit: 20,
+		});
+		expect(ok(["open-loops", "--all", "--limit", "7"]).command).toEqual({
+			name: "open-loops",
+			all: true,
+			limit: 7,
+		});
+		expect(parseCli(["open-loops", "--days", "3"]).ok).toBe(false);
+		expect(parseCli(["open-loops", "extra"]).ok).toBe(false);
+	});
+
 	it("kpi の既定は 30 日、--days で変える", () => {
 		expect(ok(["kpi"]).command).toEqual({ name: "kpi", days: 30 });
 		expect(ok(["kpi", "--days", "7", "--json"]).command).toEqual({

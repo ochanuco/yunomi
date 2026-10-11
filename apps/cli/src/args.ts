@@ -9,6 +9,7 @@ export type Command =
 			all: boolean;
 			limit: number;
 	  }
+	| { name: "open-loops"; all: boolean; limit: number }
 	| { name: "kpi"; days: number }
 	| { name: "audit-tail"; count: number; follow: boolean };
 
@@ -124,6 +125,19 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (first === "open-loops") {
+			only(["all", "limit"]);
+			noExtra([second, ...rest].filter((x) => x !== undefined));
+			return {
+				ok: true,
+				command: {
+					name: "open-loops",
+					all: values.all ?? false,
+					limit: toCount(values.limit, 20, "--limit"),
+				},
+				global,
+			};
+		}
 		if (first === "kpi") {
 			only(["days"]);
 			noExtra([second, ...rest].filter((x) => x !== undefined));
@@ -159,6 +173,8 @@ export const HELP = `ykm: Yunomi の状態を読み取る CLI
   ykm memory list [--candidates] [--all] [--limit N]
                                           Fact（既定）か candidate の一覧。Fact は現行だけで、
                                           --all で置き換え済み・期限切れも含める
+  ykm open-loops [--all] [--limit N]      未解決の話題（Open Loop）の一覧。既定は open だけで、
+                                          --all で resolved / dropped も含める
   ykm kpi [--days N]                      生活日ごとの KPI（既定 30 日、当日は含まない）
   ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
 

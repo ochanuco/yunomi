@@ -5,6 +5,7 @@ import {
 	candidate,
 	fact,
 	kpiDay,
+	openLoop,
 	relationship,
 	status,
 } from "./fixtures.ts";
@@ -35,6 +36,9 @@ const api = (url: URL) => {
 	const path = url.pathname.replace("/admin/api/partners/yukarin/", "");
 	if (path === "status") return status;
 	if (path === "relationships") return { items: [relationship] };
+	if (path === "open-loops") {
+		return { items: [openLoop], next_cursor: null };
+	}
 	if (path === "kpis") return { items: [kpiDay] };
 	if (path === "memory") {
 		return url.searchParams.get("kind") === "candidates"
@@ -78,6 +82,30 @@ describe("run", () => {
 		await run(["memory", "list", "--all"], h.deps);
 		expect(h.urls[0]?.searchParams.get("include")).toBeNull();
 		expect(h.urls[1]?.searchParams.get("include")).toBe("all");
+	});
+
+	it("open-loops は既定で status を付けず、--all で status=all を付ける", async () => {
+		const h = harness(api);
+		expect(await run(["open-loops"], h.deps)).toBe(0);
+		await run(["open-loops", "--all", "--limit", "5"], h.deps);
+		expect(h.urls[0]?.pathname).toBe("/admin/api/partners/yukarin/open-loops");
+		expect(h.urls[0]?.searchParams.get("status")).toBeNull();
+		expect(h.urls[1]?.searchParams.get("status")).toBe("all");
+		expect(h.urls[1]?.searchParams.get("limit")).toBe("5");
+		expect(h.out[0]).toContain("明日の面接の結果");
+		expect(h.out[0]).toContain("2026-10-12 00:30:00");
+	});
+
+	it("open-loops --json は応答をそのまま出す", async () => {
+		const h = harness(api);
+		await run(["open-loops", "--json"], h.deps);
+		expect(JSON.parse(h.out[0] ?? "").items[0].id).toBe("ol1");
+	});
+
+	it("open-loops の応答が契約に合わなければ 1", async () => {
+		const h = harness(() => ({ items: [{ id: "x" }], next_cursor: null }));
+		expect(await run(["open-loops"], h.deps)).toBe(1);
+		expect(h.err.join("\n")).toContain("admin-contract");
 	});
 
 	it("kpi は days を渡して表で出す", async () => {

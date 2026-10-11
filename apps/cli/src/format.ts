@@ -3,6 +3,7 @@ import type {
 	CandidateView,
 	FactView,
 	KpiDay,
+	OpenLoopView,
 	RelationshipView,
 	StatusResponse,
 } from "@yunomi/admin-contract";
@@ -152,6 +153,30 @@ export const formatCandidates = (items: CandidateView[]): string =>
 					truncate(c.object_value, 30),
 					num(c.confidence),
 					c.source,
+				]),
+			);
+
+export const formatOpenLoops = (items: OpenLoopView[]): string =>
+	items.length === 0
+		? "(Open Loop なし)"
+		: table(
+				[
+					"CREATED (JST)",
+					"STATUS",
+					"WHO",
+					"SUMMARY",
+					"IMP",
+					"DUE (JST)",
+					"DUE CONF",
+				],
+				items.map((l) => [
+					jst(l.created_at),
+					l.status,
+					truncate(l.entity_display_name ?? l.entity_id, 16),
+					truncate(l.summary, 40),
+					num(l.importance),
+					jst(l.due_at),
+					l.due_confidence === null ? "-" : num(l.due_confidence),
 				]),
 			);
 
