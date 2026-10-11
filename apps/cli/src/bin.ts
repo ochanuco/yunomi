@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { run } from "./commands.ts";
 
@@ -14,5 +15,6 @@ const code = await run(process.argv.slice(2), {
 	sleep: (ms, signal) =>
 		sleep(ms, undefined, { signal }).catch(() => undefined),
 	signal: controller.signal,
+	writeFile: (path, bytes) => writeFile(path, bytes),
 });
 process.exitCode = code;

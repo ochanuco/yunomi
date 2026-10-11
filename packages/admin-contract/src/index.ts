@@ -424,3 +424,178 @@ export const KpisResponseSchema: v.GenericSchema<KpisResponse> = v.object({
 export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
 	error: str,
 });
+
+/**
+ * Partner Snapshot。D1 の長期記憶と DO の現在値の時点コピー。
+ * 会話本文（recent_messages）、audit、KPI、履歴テーブル、secret は含めない。
+ * 行は partner_id を持たない（Snapshot 全体の partner_id に従う）。
+ */
+export const SNAPSHOT_SCHEMA_VERSION = 1;
+
+/** R2 の customMetadata。一覧はこの値から組み立てる。 */
+export type SnapshotSummary = {
+	id: string;
+	created_at: string;
+	size: number;
+	schema_version: number;
+	env: string;
+};
+
+export type SnapshotsResponse = { items: SnapshotSummary[] };
+
+export type SnapshotRestoreCounts = {
+	entities: number;
+	external_identities: number;
+	facts: number;
+	memory_candidates: number;
+	open_loops: number;
+	interest_states: number;
+	opinion_states: number;
+	relationships: number;
+};
+
+export type SnapshotRestoreResponse = {
+	snapshot_id: string;
+	source_env: string;
+	counts: SnapshotRestoreCounts;
+};
+
+const int = v.pipe(v.number(), v.integer());
+
+export const SnapshotSchema = v.strictObject({
+	schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+	snapshot_id: str,
+	partner_id: str,
+	env: str,
+	created_at: str,
+	d1: v.strictObject({
+		entities: v.array(
+			v.strictObject({
+				id: str,
+				kind: str,
+				display_name: str,
+				created_at: str,
+			}),
+		),
+		external_identities: v.array(
+			v.strictObject({ provider: str, external_id: str, entity_id: str }),
+		),
+		facts: v.array(
+			v.strictObject({
+				id: str,
+				subject_entity_id: str,
+				predicate: str,
+				object_type: str,
+				object_value: str,
+				object_display: nullable(str),
+				confidence: num,
+				importance: num,
+				source: str,
+				observed_at: str,
+				valid_from: str,
+				valid_to: nullable(str),
+				decay_policy: str,
+				superseded_by: nullable(str),
+			}),
+		),
+		memory_candidates: v.array(
+			v.strictObject({
+				id: str,
+				subject_entity_id: nullable(str),
+				subject_text: nullable(str),
+				predicate: str,
+				object_type: str,
+				object_value: str,
+				confidence: num,
+				importance: num,
+				source: str,
+				status: v.picklist(["pending", "promoted", "conflict", "rejected"]),
+				conflict_fact_id: nullable(str),
+				expires_at: str,
+				created_at: str,
+				source_event_id: str,
+			}),
+		),
+		open_loops: v.array(
+			v.strictObject({
+				id: str,
+				entity_id: str,
+				channel_id: str,
+				summary: str,
+				importance: num,
+				due_at: nullable(str),
+				due_confidence: nullable(num),
+				follow_up_interval_hours: nullable(num),
+				status: v.picklist(["open", "resolved", "dropped"]),
+				source_message_id: str,
+				created_at: str,
+				updated_at: str,
+				resolved_at: nullable(str),
+				last_followed_up_at: nullable(str),
+			}),
+		),
+		interest_states: v.array(
+			v.strictObject({
+				topic: str,
+				score: num,
+				baseline: num,
+				learned_delta: num,
+				summary: str,
+				updated_at: str,
+				source: interestOpinionSource,
+			}),
+		),
+		opinion_states: v.array(
+			v.strictObject({
+				topic: str,
+				stance: str,
+				confidence: num,
+				stability: num,
+				reasons: str,
+				source_memory_ids: str,
+				updated_at: str,
+			}),
+		),
+	}),
+	do: v.strictObject({
+		state: nullable(PartnerStateViewSchema),
+		relationships: v.array(
+			v.strictObject({
+				entity_id: str,
+				familiarity: num,
+				trust: num,
+				summary: nullable(str),
+				version: int,
+				updated_at: str,
+				acc_day: str,
+				acc_familiarity: num,
+				acc_trust: num,
+			}),
+		),
+	}),
+});
+
+export type Snapshot = v.InferOutput<typeof SnapshotSchema>;
+
+export const SnapshotSummarySchema: v.GenericSchema<SnapshotSummary> = v.object(
+	{ id: str, created_at: str, size: num, schema_version: num, env: str },
+);
+
+export const SnapshotsResponseSchema: v.GenericSchema<SnapshotsResponse> =
+	v.object({ items: v.array(SnapshotSummarySchema) });
+
+export const SnapshotRestoreResponseSchema: v.GenericSchema<SnapshotRestoreResponse> =
+	v.object({
+		snapshot_id: str,
+		source_env: str,
+		counts: v.object({
+			entities: num,
+			external_identities: num,
+			facts: num,
+			memory_candidates: num,
+			open_loops: num,
+			interest_states: num,
+			opinion_states: num,
+			relationships: num,
+		}),
+	});

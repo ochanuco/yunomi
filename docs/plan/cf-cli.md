@@ -12,6 +12,7 @@
 | DO | `exports: { PartnerDO: exports.durableObject({ storage: "sqlite" }) }` と `bindings.durableObject({ exportName: "PartnerDO" })`。migration tag はなく、クラスの状態を宣言する。 |
 | D1 migration | `cloudflare.config.ts` では表現できない。`drizzle-kit` で `apps/worker/migrations/*.sql` を生成し、リモートは `cf d1 migrations apply <database-uuid>`（名前ではなく UUID を渡す）で適用する。`--local` は `cf dev` と別の state を見て確認待ちで止まるため、ローカルは `wrangler d1 migrations apply --local --persist-to .wrangler/state` で適用する（`pnpm db:migrate:local`）。 |
 | secret | 名前を `bindings.secret()` で宣言する。デプロイ時は `cf deploy --secrets-file`（.env 形式の一時ファイル）で渡す。`cf workers secrets update` は値を `--text` でしか受け取らず argv に残るため使わない。ローカルは `.dev.vars.<mode>`。 |
+| R2 | `SNAPSHOTS: bindings.r2({ name: "<bucket>" })`。`name` が bucket 名で、binding 名（`SNAPSHOTS`）とは別。bucket は `cf` では作られないので事前に作る。bucket 名は `resources.ts` に mode ごとに置く。vitest では local mode の設定から生成した wrangler.json の `r2_buckets` を Miniflare がそのまま扱うため、追加の設定は要らない。 |
 | 静的アセット | `bindings.assets` は `directory` を指定できず `cf build` が失敗する。Admin Web のビルド成果物は `scripts/embed-admin.ts` で Worker に埋め込んで配信する。 |
 | 型 | `cf workers types` はオフラインで動く。`cf-worker` の import attribute のため `tsconfig` は `module: preserve` にする。 |
 | テスト | `@cloudflare/vitest-plugin` は Wrangler 設定しか読まない。`vitest.config.ts` で `loadAndParseConfig` と `convertToWranglerConfig`（`@cloudflare/config`）を使い、local mode の設定から `.wrangler/test/wrangler.json` を生成して渡す。`exports` は plugin が解釈しないため、DO クラスは `migrations` の `new_sqlite_classes` として補う。 |

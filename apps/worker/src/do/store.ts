@@ -23,6 +23,18 @@ export type RecentMessage = {
 
 export type StoredResult = GatewayResponse & { audit: TurnAuditData };
 
+export type RelationshipRow = {
+	entity_id: string;
+	familiarity: number;
+	trust: number;
+	summary: string | null;
+	version: number;
+	updated_at: string;
+	acc_day: string;
+	acc_familiarity: number;
+	acc_trust: number;
+};
+
 type RecentRow = {
 	channel_id: string;
 	message_id: string;
@@ -329,5 +341,41 @@ export class DoStore {
 			externalId,
 			entityId,
 		);
+	}
+
+	/** Snapshot 用。日次累積（acc_*）も含めた全行。 */
+	allRelationshipRows(): RelationshipRow[] {
+		return this.#sql
+			.exec<RelationshipRow>("SELECT * FROM relationships ORDER BY entity_id")
+			.toArray();
+	}
+
+	/**
+	 * Snapshot の内容で state と relationships を置き換える。
+	 * entity_cache は D1 の entities から引き直せる派生物なので捨てる。
+	 * llm_health・recent_messages・dedupe は Snapshot の対象外なので触らない。
+	 */
+	replaceSnapshotState(
+		state: PartnerState | null,
+		relationships: RelationshipRow[],
+	): void {
+		this.#sql.exec("DELETE FROM partner_state");
+		this.#sql.exec("DELETE FROM relationships");
+		this.#sql.exec("DELETE FROM entity_cache");
+		if (state) this.putState(state);
+		for (const r of relationships) {
+			this.putRelationship(
+				{
+					partnerId: "",
+					entityId: r.entity_id,
+					familiarity: r.familiarity,
+					trust: r.trust,
+					summary: r.summary,
+					version: r.version,
+					updatedAt: r.updated_at,
+				},
+				{ day: r.acc_day, familiarity: r.acc_familiarity, trust: r.acc_trust },
+			);
+		}
 	}
 }

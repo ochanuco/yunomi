@@ -11,8 +11,10 @@ import {
 	formatKpis,
 	formatOpenLoops,
 	formatOpinions,
+	formatSnapshots,
 	formatStatus,
 } from "./format.ts";
+import { decryptSnapshot } from "./snapshot-codec.ts";
 
 export const FOLLOW_INTERVAL_MS = 5000;
 const MAX_PAGE = 200;
@@ -25,6 +27,8 @@ export type Deps = {
 	now: () => Date;
 	sleep: (ms: number, signal: AbortSignal) => Promise<void>;
 	signal: AbortSignal;
+	/** 暗号化済みの Snapshot を保存する。復号した平文には使わない。 */
+	writeFile: (path: string, bytes: Uint8Array) => Promise<void>;
 };
 
 const oldestFirst = (items: AuditItem[]) => [...items].reverse();
@@ -125,7 +129,78 @@ const execute = async (
 		case "audit-tail":
 			await auditTail(command, global, deps, client);
 			return;
+		case "snapshot-list": {
+			const r = await client.snapshots();
+			deps.out(
+				global.json ? JSON.stringify(r, null, 2) : formatSnapshots(r.items),
+			);
+			return;
+		}
+		case "snapshot-create": {
+			const r = await client.createSnapshot();
+			deps.out(
+				global.json
+					? JSON.stringify(r, null, 2)
+					: `作成した: ${r.id}（${r.size} bytes）`,
+			);
+			return;
+		}
+		case "snapshot-pull": {
+			const bytes = await client.downloadSnapshot(command.id);
+			await deps.writeFile(command.output, bytes);
+			deps.out(
+				`保存した（暗号化のまま）: ${command.output}（${bytes.length} bytes）`,
+			);
+			return;
+		}
+		case "snapshot-seed":
+			await seed(command, global, deps);
+			return;
 	}
+};
+
+const seed = async (
+	command: Extract<Command, { name: "snapshot-seed" }>,
+	global: Global,
+	deps: Deps,
+): Promise<void> => {
+	// restore は dev のみ。パース時に弾いているが、書き込み先を取り違えないようここでも確かめる。
+	if (command.to !== "dev") throw new ConfigError("seed の送り先は dev のみ");
+	const identity = deps.env.YKM_AGE_IDENTITY;
+	if (!identity) {
+		throw new ConfigError(
+			"YKM_AGE_IDENTITY（age の秘密鍵）を設定する。op run で渡す",
+		);
+	}
+	const source = createClient(
+		resolveTarget({ ...global, env: command.from, url: null }, deps.env),
+		global.partner,
+		deps.fetch,
+	);
+	const dest = createClient(
+		resolveTarget({ ...global, env: command.to, url: null }, deps.env),
+		global.partner,
+		deps.fetch,
+	);
+	const encrypted = await source.downloadSnapshot(command.id);
+	const decrypted = await decryptSnapshot(encrypted, identity);
+	if (!decrypted.ok) throw new ApiError(decrypted.message);
+	const snapshot = decrypted.value;
+	if (snapshot.partner_id !== global.partner) {
+		throw new ApiError(
+			`Snapshot の partner_id (${snapshot.partner_id}) が --partner (${global.partner}) と違う`,
+		);
+	}
+	const r = await dest.restoreSnapshot(snapshot);
+	deps.out(
+		global.json
+			? JSON.stringify(r, null, 2)
+			: `restore した: ${r.snapshot_id}（元 env: ${r.source_env}）\n${Object.entries(
+					r.counts,
+				)
+					.map(([k, n]) => `  ${k}: ${n}`)
+					.join("\n")}`,
+	);
 };
 
 const auditTail = async (
