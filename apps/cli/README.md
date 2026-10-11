@@ -1,6 +1,6 @@
 # @yunomi/cli (`ykm`)
 
-Admin 読み取り API（`/admin/api/...`）を叩いて、Yukarin の状態・記憶・判断履歴をターミナルで見る。
+Admin API（`/admin/api/...`）を叩いて、Yukarin の状態・記憶・判断履歴をターミナルで見て、Partner Snapshot を扱う。
 
 ```
 ykm status                                   State / Relationship / 件数
@@ -10,6 +10,10 @@ ykm interests                                現在の Interest（score の降�
 ykm opinions                                 現在の Opinion（stance・confidence・stability）
 ykm kpi [--days N]                          生活日ごとの KPI（既定 30 日、当日は含まない）
 ykm audit tail [-n N] [-f]                   直近の audit。-f は 5 秒ごとに since で追う
+ykm snapshot list                            Snapshot の一覧（id、作成時刻、size、schema_version、env）
+ykm snapshot create                          Snapshot を今すぐ作成
+ykm snapshot pull <id> -o <file>             暗号化のまま保存
+ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し込む
 ```
 
 共通オプション: `--env dev|prod`（既定 dev）、`--url`、`--partner`（既定 `yukarin`）、`--json`。`--json` は整形せず JSON を出す（`status` は `{status, relationships}`、`open-loops` は応答（`{items, next_cursor}`）、`interests` / `opinions` は応答（`{items}`）そのまま、`audit tail` は 1 行 1 件）。人間向けの出力は表で、時刻は JST。
@@ -34,10 +38,26 @@ pnpm --filter @yunomi/cli ykm status --url http://localhost:8787
 
 ローカルの Worker は `pnpm --filter @yunomi/worker dev`（`cf dev --mode local`）で立てる。この mode だけが `x-yunomi-dev-caller` を信用する。
 
-## 変更系コマンドの設計（未実装）
+## Snapshot
 
-読み取り API は Access 経由の `ykm` に read だけを許している。次のコマンドは未実装で、実装時は Admin API に書き込み系の endpoint と別の認可（owner の操作として audit に残す）を足す。
+`snapshot list` / `create` / `pull` は共通オプションの `--env`（既定 dev）の Worker に対して動く。`pull` は R2 の暗号化済み blob をそのまま `-o` に保存する。
 
-- `ykm snapshot create`: state・relationship・facts の時点コピーを取る。復元の前提になる。
+#### seed
+
+```
+YKM_AGE_IDENTITY=op://Personal/yunomi-prod-snapshot-age/credential \
+  op run -- ykm snapshot seed <id> --from prod --to dev
+```
+
+1. `--from` の env から暗号化済み Snapshot を取得する
+2. 手元で `YKM_AGE_IDENTITY`（age の秘密鍵文字列）で復号し、gzip を展開して `SnapshotSchema` で検証する
+3. `--to` の `POST /admin/api/partners/:partnerId/snapshots/restore` に送る
+
+復号した平文はメモリの上だけで扱い、ディスクに書かない。`--to` は `dev` だけで、`prod` は CLI でも拒否する（Worker も production の restore を 403 にする）。`--url` は使えず、接続先は `YKM_DEV_URL` / `YKM_PROD_URL` で決まる。`--from` の env を読む Access service token が、`--to` の dev にも通る必要がある（両方に同じ `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` を送る）。
+
+## 未実装の変更系コマンド
+
+実装時は Admin API に書き込み系の endpoint と別の認可（owner の操作として audit に残す）を足す。
+
 - `ykm memory delete <fact-id>`: Fact を `valid_to` で失効させる（行は消さず、履歴に残す）。
 - `ykm memory candidates review <id> --promote|--reject`: pending / conflict の candidate を人が昇格・棄却する。

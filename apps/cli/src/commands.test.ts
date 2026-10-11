@@ -29,6 +29,7 @@ const harness = (routes: (url: URL) => unknown, over: Partial<Deps> = {}) => {
 		now: () => new Date("2026-10-11T03:00:00Z"),
 		sleep: async () => {},
 		signal: controller.signal,
+		writeFile: async () => {},
 		...over,
 	};
 	return { deps, out, err, urls, controller };

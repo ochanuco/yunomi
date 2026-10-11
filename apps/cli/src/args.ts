@@ -13,7 +13,11 @@ export type Command =
 	| { name: "interests" }
 	| { name: "opinions" }
 	| { name: "kpi"; days: number }
-	| { name: "audit-tail"; count: number; follow: boolean };
+	| { name: "audit-tail"; count: number; follow: boolean }
+	| { name: "snapshot-list" }
+	| { name: "snapshot-create" }
+	| { name: "snapshot-pull"; id: string; output: string }
+	| { name: "snapshot-seed"; id: string; from: "prod" | "dev"; to: "dev" };
 
 export type Global = {
 	env: "dev" | "prod";
@@ -70,6 +74,9 @@ export const parseCli = (argv: string[]): ParseResult => {
 				limit: { type: "string" },
 				n: { type: "string", short: "n" },
 				follow: { type: "boolean", short: "f" },
+				output: { type: "string", short: "o" },
+				from: { type: "string" },
+				to: { type: "string" },
 			},
 		});
 
@@ -167,13 +174,60 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (first === "snapshot" && second === "list") {
+			only([]);
+			noExtra(rest);
+			return { ok: true, command: { name: "snapshot-list" }, global };
+		}
+		if (first === "snapshot" && second === "create") {
+			only([]);
+			noExtra(rest);
+			return { ok: true, command: { name: "snapshot-create" }, global };
+		}
+		if (first === "snapshot" && second === "pull") {
+			only(["output"]);
+			const [id, ...extra] = rest;
+			noExtra(extra);
+			if (!id) throw new Error("snapshot id を指定する");
+			if (!values.output) throw new Error("-o <file> を指定する");
+			return {
+				ok: true,
+				command: { name: "snapshot-pull", id, output: values.output },
+				global,
+			};
+		}
+		if (first === "snapshot" && second === "seed") {
+			only(["from", "to"]);
+			const [id, ...extra] = rest;
+			noExtra(extra);
+			if (!id) throw new Error("snapshot id を指定する");
+			if (values.url) {
+				throw new Error(
+					"seed では --url を使えない（YKM_DEV_URL / YKM_PROD_URL で指定する）",
+				);
+			}
+			const { from, to } = values;
+			if (to === "prod") {
+				throw new Error("--to prod は指定できない（prod への restore は禁止）");
+			}
+			if (to !== "dev") throw new Error("--to dev を指定する");
+			if (from !== "prod" && from !== "dev") {
+				throw new Error("--from は dev か prod を指定する");
+			}
+			if (from === to) throw new Error("--from と --to が同じ環境");
+			return {
+				ok: true,
+				command: { name: "snapshot-seed", id, from, to },
+				global,
+			};
+		}
 		return fail(`不明なコマンド: ${[first, second].filter(Boolean).join(" ")}`);
 	} catch (e) {
 		return fail(e instanceof Error ? e.message : String(e));
 	}
 };
 
-export const HELP = `ykm: Yunomi の状態を読み取る CLI
+export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う CLI
 
 使い方:
   ykm status                              State / Relationship / 件数
@@ -187,6 +241,12 @@ export const HELP = `ykm: Yunomi の状態を読み取る CLI
   ykm opinions                            現在の Opinion（stance と confidence）
   ykm kpi [--days N]                      生活日ごとの KPI（既定 30 日、当日は含まない）
   ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
+  ykm snapshot list                       Partner Snapshot の一覧（暗号化済み）
+  ykm snapshot create                     Snapshot を今すぐ作成
+  ykm snapshot pull <id> -o <file>        暗号化のまま保存（--env prod など）
+  ykm snapshot seed <id> --from prod --to dev
+                                          元の env から取得し、YKM_AGE_IDENTITY で手元で復号して
+                                          dev に restore する。--to は dev のみ
 
 共通オプション:
   --env dev|prod   接続先環境（既定 dev）
@@ -198,5 +258,6 @@ export const HELP = `ykm: Yunomi の状態を読み取る CLI
 環境変数:
   YKM_DEV_URL / YKM_PROD_URL   既定は https://yunomi-dev.chanu.co / https://yunomi.chanu.co
   YKM_ACCESS_CLIENT_ID / YKM_ACCESS_CLIENT_SECRET   Access service token
+  YKM_AGE_IDENTITY   snapshot seed の復号に使う age の秘密鍵（op run で渡す）
   localhost 宛てで token が無いときは x-yunomi-dev-caller: ykm を送る
 `;

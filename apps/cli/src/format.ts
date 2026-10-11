@@ -7,6 +7,7 @@ import type {
 	OpenLoopView,
 	OpinionView,
 	RelationshipView,
+	SnapshotSummary,
 	StatusResponse,
 } from "@yunomi/admin-contract";
 
@@ -293,3 +294,17 @@ export const formatAuditRow = (a: AuditItem): string =>
 		flags(a),
 		truncate(a.inbound_content, 40),
 	]);
+
+export const formatSnapshots = (items: SnapshotSummary[]): string =>
+	items.length === 0
+		? "(Snapshot なし)"
+		: table(
+				["ID", "CREATED (JST)", "SIZE", "SCHEMA", "ENV"],
+				items.map((s) => [
+					s.id,
+					jst(s.created_at),
+					String(s.size),
+					String(s.schema_version),
+					s.env,
+				]),
+			);

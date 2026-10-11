@@ -18,6 +18,13 @@ import {
 	OpinionsResponseSchema,
 	type RelationshipsResponse,
 	RelationshipsResponseSchema,
+	type Snapshot,
+	type SnapshotRestoreResponse,
+	SnapshotRestoreResponseSchema,
+	type SnapshotSummary,
+	SnapshotSummarySchema,
+	type SnapshotsResponse,
+	SnapshotsResponseSchema,
 	type StatusResponse,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
@@ -50,6 +57,11 @@ export type AdminClient = {
 		cursor?: string;
 		since?: string;
 	}): Promise<AuditResponse>;
+	snapshots(): Promise<SnapshotsResponse>;
+	createSnapshot(): Promise<SnapshotSummary>;
+	/** 暗号化されたまま取得する。 */
+	downloadSnapshot(id: string): Promise<Uint8Array>;
+	restoreSnapshot(snapshot: Snapshot): Promise<SnapshotRestoreResponse>;
 };
 
 export const createClient = (
@@ -57,11 +69,11 @@ export const createClient = (
 	partner: string,
 	fetchImpl: Fetch = fetch,
 ): AdminClient => {
-	const call = async <T extends v.GenericSchema>(
+	const send = async (
 		path: string,
-		schema: T,
+		init: { method?: string; body?: string; accept?: string } = {},
 		query: Record<string, string | number | undefined> = {},
-	): Promise<v.InferOutput<T>> => {
+	): Promise<Response> => {
 		const url = new URL(
 			`${ADMIN_API_PREFIX}/partners/${encodeURIComponent(partner)}/${path}`,
 			target.baseUrl,
@@ -72,7 +84,15 @@ export const createClient = (
 		let res: Response;
 		try {
 			res = await fetchImpl(url.toString(), {
-				headers: { accept: "application/json", ...target.headers },
+				method: init.method ?? "GET",
+				body: init.body,
+				headers: {
+					accept: init.accept ?? "application/json",
+					...(init.body === undefined
+						? {}
+						: { "content-type": "application/json" }),
+					...target.headers,
+				},
 				redirect: "manual",
 			});
 		} catch (e) {
@@ -86,13 +106,24 @@ export const createClient = (
 				`認証されていない（リダイレクトされた）。Access service token を確認する: HTTP ${res.status}`,
 			);
 		}
-		const body: unknown = await res.json().catch(() => null);
 		if (!res.ok) {
+			const body: unknown = await res.json().catch(() => null);
 			const parsed = v.safeParse(ApiErrorSchema, body);
 			throw new ApiError(
 				`HTTP ${res.status}${parsed.success ? ` ${parsed.output.error}` : ""}`,
 			);
 		}
+		return res;
+	};
+
+	const call = async <T extends v.GenericSchema>(
+		path: string,
+		schema: T,
+		query: Record<string, string | number | undefined> = {},
+		init: { method?: string; body?: string } = {},
+	): Promise<v.InferOutput<T>> => {
+		const res = await send(path, init, query);
+		const body: unknown = await res.json().catch(() => null);
 		const parsed = v.safeParse(schema, body);
 		if (!parsed.success) {
 			throw new ApiError(
@@ -111,5 +142,23 @@ export const createClient = (
 		opinions: () => call("opinions", OpinionsResponseSchema),
 		kpis: (q) => call("kpis", KpisResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
+		snapshots: () => call("snapshots", SnapshotsResponseSchema),
+		createSnapshot: () =>
+			call("snapshots", SnapshotSummarySchema, {}, { method: "POST" }),
+		downloadSnapshot: async (id) =>
+			new Uint8Array(
+				await (
+					await send(`snapshots/${encodeURIComponent(id)}`, {
+						accept: "application/octet-stream",
+					})
+				).arrayBuffer(),
+			),
+		restoreSnapshot: (snapshot) =>
+			call(
+				"snapshots/restore",
+				SnapshotRestoreResponseSchema,
+				{},
+				{ method: "POST", body: JSON.stringify(snapshot) },
+			),
 	};
 };

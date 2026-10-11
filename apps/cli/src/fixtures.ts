@@ -7,6 +7,7 @@ import type {
 	OpenLoopView,
 	OpinionView,
 	RelationshipView,
+	Snapshot,
 	StatusResponse,
 } from "@yunomi/admin-contract";
 
@@ -156,3 +157,36 @@ export const kpiDay: KpiDay = {
 		cache_write_tokens: 10,
 	},
 };
+
+export const TEST_AGE_IDENTITY =
+	"AGE-SECRET-KEY-1UQGWDU8C9AW57Q5RNA68L3J9LGLYUSYXXMQWYTENYGUESTNXMJKQX4KXX2";
+export const TEST_AGE_RECIPIENT =
+	"age1s23p452q2n8p2wv5cuqd8trvld0rw80kzrremgsrxdw7lxnx997qmpusg2";
+
+/** 合成データのみ。 */
+export const syntheticSnapshot = (): Snapshot => ({
+	schema_version: 1,
+	snapshot_id: "01990000-0000-7000-8000-000000000001",
+	partner_id: "yukarin",
+	env: "production",
+	created_at: "2026-10-11T03:00:00.000Z",
+	d1: {
+		entities: [
+			{
+				id: "e1",
+				kind: "person",
+				display_name: "alice",
+				created_at: "2026-10-01T00:00:00.000Z",
+			},
+		],
+		external_identities: [
+			{ provider: "discord", external_id: "u1", entity_id: "e1" },
+		],
+		facts: [],
+		memory_candidates: [],
+		open_loops: [],
+		interest_states: [],
+		opinion_states: [],
+	},
+	do: { state: null, relationships: [] },
+});
