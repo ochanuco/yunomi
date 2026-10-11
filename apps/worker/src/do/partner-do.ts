@@ -14,6 +14,10 @@ import {
 } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
+import {
+	createInterestOpinionRepo,
+	type InterestOpinionRepo,
+} from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
 import { ChannelGate } from "./channel-gate.ts";
@@ -44,6 +48,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #history: HistoryWriter;
 	readonly #memory: MemoryRepo;
 	readonly #openLoops: OpenLoopRepo;
+	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
@@ -64,6 +69,7 @@ export class PartnerDO extends DurableObject<Env> {
 				history: this.#history,
 				memory: this.#memory,
 				openLoops: this.#openLoops,
+				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
 			},
 			msg,
@@ -76,6 +82,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#history = createHistoryWriter(db);
 		this.#memory = createMemoryRepo(db);
 		this.#openLoops = createOpenLoopRepo(db);
+		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));

@@ -34,6 +34,18 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
+        "## 興味",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 意見",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
         "## 関連する記憶",
       ],
     },
@@ -94,6 +106,18 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
       "cache": false,
       "headers": [
         "## alice との関係",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 興味",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 意見",
       ],
     },
     {

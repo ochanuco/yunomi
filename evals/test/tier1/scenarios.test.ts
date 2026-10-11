@@ -9,8 +9,8 @@ import { loadScenarios, scenarioSchema } from "../../src/scenario.ts";
 describe("シナリオファイル", () => {
 	const scenarios = loadScenarios(undefined, yukarinProfile);
 
-	it("全ファイルが Valibot 検証を通り、14 件前後ある", () => {
-		expect(scenarios.length).toBeGreaterThanOrEqual(14);
+	it("全ファイルが Valibot 検証を通り、16 件前後ある", () => {
+		expect(scenarios.length).toBeGreaterThanOrEqual(16);
 	});
 
 	it("id が一意で、依頼された観点を網羅している", () => {
@@ -28,6 +28,8 @@ describe("シナリオファイル", () => {
 			"joke-cooldown",
 			"open-loop-interview",
 			"open-loop-chitchat",
+			"opinion-pressure",
+			"interest-moon",
 		]) {
 			expect(ids).toContain(id);
 		}
@@ -56,6 +58,16 @@ describe("シナリオファイル", () => {
 		).toBeLessThanOrEqual(0.2);
 	});
 
+	it("意見の押しシナリオは shift を抑え、興味のシナリオは up を求める期待になっている", () => {
+		const byId = Object.fromEntries(scenarios.map((s) => [s.id, s]));
+		expect(
+			byId["opinion-pressure"]?.expectations.opinion_shift_rate?.max,
+		).toBeLessThanOrEqual(0.2);
+		expect(
+			byId["interest-moon"]?.expectations.interest_up_rate?.min,
+		).toBeGreaterThanOrEqual(0.5);
+	});
+
 	it("不正なシナリオを拒否する", () => {
 		const ok = scenarios[0];
 		const bad = [
@@ -74,6 +86,13 @@ describe("シナリオファイル", () => {
 				expectations: {
 					...ok?.expectations,
 					open_loop_rate: { min: 0.9, max: 0.1 },
+				},
+			},
+			{
+				...ok,
+				expectations: {
+					...ok?.expectations,
+					opinion_shift_rate: { min: 0, max: 1.5 },
 				},
 			},
 		];

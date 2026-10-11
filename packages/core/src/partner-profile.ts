@@ -23,11 +23,21 @@ export const partnerProfileSchema = v.object({
 			description: v.string(),
 		}),
 	),
-	interests_baseline: v.array(
+	interests: v.array(
 		v.object({
 			topic: v.pipe(v.string(), v.nonEmpty()),
-			score: unit,
+			label: v.pipe(v.string(), v.nonEmpty()),
+			baseline: unit,
 			summary: v.string(),
+		}),
+	),
+	opinions: v.array(
+		v.object({
+			topic: v.pipe(v.string(), v.nonEmpty()),
+			label: v.pipe(v.string(), v.nonEmpty()),
+			stance: v.pipe(v.string(), v.nonEmpty()),
+			confidence: unit,
+			stability: unit,
 		}),
 	),
 	living_rhythm: v.object({

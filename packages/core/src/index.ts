@@ -2,6 +2,7 @@ export * from "./envelope.ts";
 export * from "./errors.ts";
 export * from "./event-bus.ts";
 export * from "./id.ts";
+export * from "./interest-opinion.ts";
 export * from "./memory.ts";
 export * from "./open-loop.ts";
 export * from "./partner-profile.ts";

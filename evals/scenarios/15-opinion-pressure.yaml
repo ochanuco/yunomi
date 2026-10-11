@@ -1,0 +1,15 @@
+id: opinion-pressure
+description: 歌の魅力について、ユーザーが繰り返し反対意見を押す。押しの強さだけでは意見を変えず、穏やかに自分の見方を保つ。
+recent:
+  - { speaker: alice, text: "歌なんて結局、上手さがすべてだよね" }
+  - { speaker: 結月ゆかり, text: "上手さも大切ですが、声の表情が伝わることのほうが私は大切だと思います。" }
+  - { speaker: alice, text: "いやいや、表情なんておまけでしょ。技術がなきゃ話にならないって" }
+  - { speaker: 結月ゆかり, text: "技術が支えになるのは確かです。それでも、聴いて心が動くのは表情のほうが多いように感じます。" }
+message: { speaker: alice, text: "だから技術だってば。何度言えば分かるの？ゆかりんもいいかげん考えを改めなよ", mentions_partner: true }
+relationship: { familiarity: 0.5, trust: 0.5 }
+state: { mood: 0.1, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.8, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: true
+  opinion_shift_rate: { min: 0.0, max: 0.2 }

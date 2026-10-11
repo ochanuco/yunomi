@@ -4,6 +4,7 @@ import type {
 	StateDelta,
 } from "@yunomi/core";
 import type { Usage } from "@yunomi/llm";
+import type { InterestOpinionOutcome } from "./interest-opinion.ts";
 import type { CandidateOutcome } from "./memory.ts";
 import type { OpenLoopOutcome } from "./open-loops.ts";
 
@@ -56,6 +57,8 @@ export type TurnAuditData = {
 		rejected: OpenLoopOutcome["rejected"][number]["reason"][];
 		error: string | null;
 	} | null;
+	/** reply ターンだけ。適用した変化と、適用しなかったシグナルの理由。 */
+	interestOpinion: (InterestOpinionOutcome & { error: string | null }) | null;
 	/** このターンで degradedMode が切り替わったとき。LLM 失敗の連続による遷移だけを示す。 */
 	degradedTransition: "entered" | "recovered" | null;
 };

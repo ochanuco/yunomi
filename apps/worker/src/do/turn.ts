@@ -19,10 +19,13 @@ import {
 	type PartnerProfile,
 	type PartnerState,
 	type Result,
+	resolveInterests,
+	resolveOpinions,
 } from "@yunomi/core";
 import type { ModelRouter, RoutedResult } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
+import type { InterestOpinionRepo } from "../interest-opinion.ts";
 import type { MemoryRepo } from "../memory.ts";
 import type { OpenLoopRepo } from "../open-loops.ts";
 import type { EntityResolver } from "./entities.ts";
@@ -43,6 +46,7 @@ export type TurnDeps = {
 	history: HistoryWriter;
 	memory: MemoryRepo;
 	openLoops: OpenLoopRepo;
+	interestOpinion: InterestOpinionRepo;
 	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
 	background: (task: Promise<void>) => void;
 };
@@ -99,6 +103,12 @@ export const runTurn = async (
 		.topOpen(partnerId, entityId)
 		.catch(() => []);
 
+	// 取得に失敗してもプロファイルの初期値で応答する。
+	const current = await deps.interestOpinion.current(profile).catch(() => ({
+		interests: resolveInterests(profile, []),
+		opinions: resolveOpinions(profile, []),
+	}));
+
 	const prompt = new PromptBuilder().build({
 		profile,
 		state: state0,
@@ -111,6 +121,20 @@ export const runTurn = async (
 			subject: msg.author.displayName,
 			predicate: f.predicate,
 			object: f.object,
+		})),
+		interests: [...current.interests]
+			.sort((a, b) => b.score - a.score)
+			.map((i) => ({
+				topic: i.topic,
+				label: i.label,
+				score: i.score,
+				summary: i.summary,
+			})),
+		opinions: current.opinions.map((o) => ({
+			topic: o.topic,
+			label: o.label,
+			stance: o.stance,
+			confidence: o.confidence,
 		})),
 		openLoops,
 		now: seededAt,
@@ -281,9 +305,40 @@ export const runTurn = async (
 		}
 	}
 
+	// Open Loop と同じく、ignore のターンでは興味も意見も動かさない。
+	let interestOpinionAudit: TurnAuditData["interestOpinion"] = null;
+	if (replying) {
+		try {
+			const r = await deps.interestOpinion.process(
+				{ profile, sourceMessageId: msg.messageId, now: at },
+				{
+					interests: output.interest_signals.map((s) => ({
+						topic: s.topic,
+						direction: s.direction,
+						reason: s.reason,
+					})),
+					opinions: output.opinion_signals.map((s) => ({
+						topic: s.topic,
+						direction: s.direction,
+						newStance: s.new_stance,
+						reason: s.reason,
+					})),
+				},
+			);
+			interestOpinionAudit = { ...r, error: null };
+		} catch (e) {
+			interestOpinionAudit = {
+				interests: { applied: [], rejected: [] },
+				opinions: { applied: [], rejected: [] },
+				error: e instanceof Error ? e.message : "interest/opinion write failed",
+			};
+		}
+	}
+
 	const common = {
 		memory,
 		openLoops: openLoopAudit,
+		interestOpinion: interestOpinionAudit,
 		state: { applied: stateUpdate.applied, rejected: stateUpdate.rejected },
 		relationship: {
 			entityId,

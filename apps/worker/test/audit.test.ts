@@ -50,7 +50,8 @@ const turnJson = (utterance: string, policy = "reply") => ({
 	decision_summary: "テスト",
 	emotion_delta: { mood: 0, energy: 0 },
 	relationship_delta: { familiarity: 0.01, trust: 0 },
-	interest_delta: [],
+	interest_signals: [],
+	opinion_signals: [],
 	memory_candidates: [],
 	open_loops: [],
 	resolved_open_loop_ids: [],
@@ -192,6 +193,7 @@ describe("保持期間", () => {
 				relationship: null,
 				memory: null,
 				openLoops: null,
+				interestOpinion: null,
 				degradedTransition: null,
 			},
 		);

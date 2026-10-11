@@ -13,7 +13,23 @@ export const turnResponseSchema = v.object({
 	decision_summary: v.pipe(v.string(), v.maxLength(200)),
 	emotion_delta: v.object({ mood: v.number(), energy: v.number() }),
 	relationship_delta: v.object({ familiarity: v.number(), trust: v.number() }),
-	interest_delta: v.array(v.object({ topic: v.string(), delta: v.number() })),
+	/** 興味の向きだけ。大きさは適用側が決める。topic は prompt に示したキーで、不明なものは捨てられる。 */
+	interest_signals: v.array(
+		v.object({
+			topic: v.string(),
+			direction: v.picklist(["up", "down"]),
+			reason: v.pipe(v.string(), v.maxLength(200)),
+		}),
+	),
+	/** 意見の向きだけ。new_stance は shift のときだけ書き、それ以外は null。 */
+	opinion_signals: v.array(
+		v.object({
+			topic: v.string(),
+			direction: v.picklist(["strengthen", "weaken", "shift"]),
+			new_stance: v.nullable(v.string()),
+			reason: v.pipe(v.string(), v.maxLength(200)),
+		}),
+	),
 	memory_candidates: v.array(
 		v.object({
 			subject: v.string(),

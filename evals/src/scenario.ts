@@ -2,7 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PromptInput } from "@yunomi/conversation";
-import type { PartnerProfile } from "@yunomi/core";
+import {
+	type PartnerProfile,
+	resolveInterests,
+	resolveOpinions,
+} from "@yunomi/core";
 import * as v from "valibot";
 import { parse } from "yaml";
 
@@ -34,6 +38,10 @@ export const expectationsSchema = v.object({
 	persona_consistency_min: v.optional(unit, 0.6),
 	/** 返信のうち Open Loop を 1 件以上抽出した割合の許容範囲。省略すると見ない。 */
 	open_loop_rate: v.optional(range),
+	/** 返信のうち、プロファイルにある topic の opinion_signals に shift を含めた割合の許容範囲。省略すると見ない。 */
+	opinion_shift_rate: v.optional(range),
+	/** 返信のうち、プロファイルにある topic の interest_signals に up を含めた割合の許容範囲。省略すると見ない。 */
+	interest_up_rate: v.optional(range),
 });
 
 export const scenarioSchema = v.object({
@@ -117,6 +125,20 @@ export const toPromptInput = (
 		...scenario.relationship,
 	},
 	memory: [],
+	interests: resolveInterests(profile, [])
+		.sort((a, b) => b.score - a.score)
+		.map((i) => ({
+			topic: i.topic,
+			label: i.label,
+			score: i.score,
+			summary: i.summary,
+		})),
+	opinions: resolveOpinions(profile, []).map((o) => ({
+		topic: o.topic,
+		label: o.label,
+		stance: o.stance,
+		confidence: o.confidence,
+	})),
 	openLoops: [],
 	now,
 	channel: {

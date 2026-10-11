@@ -2,8 +2,10 @@ import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import {
 	AuditResponseSchema,
+	InterestsResponseSchema,
 	MemoryResponseSchema,
 	OpenLoopsResponseSchema,
+	OpinionsResponseSchema,
 	RelationshipsResponseSchema,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
@@ -102,6 +104,24 @@ describe("認可", () => {
 				)
 			).status,
 		).toBe(200);
+	});
+
+	it("interests / opinions も gateway は 403、JWT なしは 401、ykm は 200", async () => {
+		for (const path of ["interests", "opinions"]) {
+			expect(
+				(
+					await get(
+						`${BASE}/${path}`,
+						await jwtHeader({ common_name: GATEWAY_CN }),
+					)
+				).status,
+			).toBe(403);
+			expect((await get(`${BASE}/${path}`)).status).toBe(401);
+			expect(
+				(await get(`${BASE}/${path}`, await jwtHeader({ common_name: YKM_CN })))
+					.status,
+			).toBe(200);
+		}
 	});
 
 	it("gateway の service token は 403", async () => {
@@ -455,5 +475,116 @@ describe("open-loops", () => {
 	it("不正な status / limit は 400", async () => {
 		expect((await local(`${BASE}/open-loops?status=x`)).status).toBe(400);
 		expect((await local(`${BASE}/open-loops?limit=0`)).status).toBe(400);
+	});
+});
+
+describe("interests / opinions", () => {
+	const reset = async () => {
+		for (const t of [
+			"interest_states",
+			"opinion_states",
+			"interest_changes",
+			"opinion_changes",
+		]) {
+			await env.DB.prepare(`DELETE FROM ${t}`).run();
+		}
+	};
+
+	it("行が無いときはプロファイルの初期値を source: profile で返す", async () => {
+		await reset();
+		const interests = await parse(
+			await local(`${BASE}/interests`),
+			InterestsResponseSchema,
+		);
+		expect(interests.items.length).toBeGreaterThanOrEqual(5);
+		expect(interests.items[0]).toEqual({
+			topic: "music-voice",
+			label: "音楽と声",
+			score: 0.7,
+			baseline: 0.7,
+			learned_delta: 0,
+			summary: "歌や声の表現、音の重なりに自然と耳が向く。",
+			updated_at: null,
+			source: "profile",
+		});
+		expect(interests.items.every((i) => i.source === "profile")).toBe(true);
+		const scores = interests.items.map((i) => i.score);
+		expect(scores).toEqual([...scores].sort((a, b) => b - a));
+
+		const opinions = await parse(
+			await local(`${BASE}/opinions`),
+			OpinionsResponseSchema,
+		);
+		expect(opinions.items.length).toBeGreaterThanOrEqual(3);
+		expect(opinions.items[0]).toMatchObject({
+			topic: "honesty",
+			confidence: 0.8,
+			stability: 0.85,
+			reasons: [],
+			source_memory_ids: [],
+			updated_at: null,
+			source: "profile",
+		});
+	});
+
+	it("学習済みの行は値を上書きし、source: learned で返す", async () => {
+		await reset();
+		await env.DB.prepare(
+			`INSERT INTO interest_states (partner_id, topic, score, baseline, learned_delta, summary, updated_at, source)
+			VALUES (?1, 'words', 0.56, 0.5, 0.06, '言い回しや言葉の由来に興味がある。', '2026-10-11T03:00:00.000Z', 'learned')`,
+		)
+			.bind(PARTNER_ID)
+			.run();
+		await env.DB.prepare(
+			`INSERT INTO opinion_states (partner_id, topic, stance, confidence, stability, reasons, source_memory_ids, updated_at)
+			VALUES (?1, 'reply-length', '長くても丁寧な説明が好き。', 0.4, 0.4, '["丁寧な説明に助けられた"]', '[]', '2026-10-11T03:00:00.000Z')`,
+		)
+			.bind(PARTNER_ID)
+			.run();
+
+		const interests = await parse(
+			await local(`${BASE}/interests`),
+			InterestsResponseSchema,
+		);
+		const words = interests.items.find((i) => i.topic === "words");
+		expect(words).toMatchObject({
+			score: 0.56,
+			baseline: 0.5,
+			learned_delta: 0.06,
+			updated_at: "2026-10-11T03:00:00.000Z",
+			source: "learned",
+		});
+		expect(interests.items.map((i) => i.topic).slice(0, 3)).toEqual([
+			"music-voice",
+			"moon-night",
+			"words",
+		]);
+
+		const opinions = await parse(
+			await local(`${BASE}/opinions`),
+			OpinionsResponseSchema,
+		);
+		expect(
+			opinions.items.find((o) => o.topic === "reply-length"),
+		).toMatchObject({
+			stance: "長くても丁寧な説明が好き。",
+			confidence: 0.4,
+			reasons: ["丁寧な説明に助けられた"],
+			source: "learned",
+		});
+		expect(opinions.items.find((o) => o.topic === "honesty")?.source).toBe(
+			"profile",
+		);
+		await reset();
+	});
+
+	it("GET 以外は 405", async () => {
+		const res = await exports.default.fetch(
+			new Request(`http://localhost${BASE}/interests`, {
+				method: "POST",
+				headers: asYkm,
+			}),
+		);
+		expect(res.status).toBe(405);
 	});
 });

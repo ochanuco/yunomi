@@ -47,6 +47,17 @@ LLM の応答は `open_loops`（`summary` / `importance` / `due_at` / `due_confi
 - prompt には話し相手の open な行を importance 降順（同点は新しい順）で `OPEN_LOOP_PROMPT_LIMIT`（5）件、id 付きで入れる。LLM が返した `resolved_open_loop_ids` のうち、その entity の open な行だけを `resolved`（`resolved_at` 付き）にする。他人の行、open でない行、存在しない id は無視する。
 - 解決を先に適用するので、同じターンで片づいた分の枠は追加の上限判定に使える。同時に走る別チャンネルのターンが同じ summary を同時に追加した場合の二重登録は防がない。
 
+## Interest / Opinion
+
+Yukarin の興味（Interest）と意見（Opinion）。初期値は `partners/yukarin/profile.yaml` の `interests` / `opinions` で、D1 の `interest_states` / `opinion_states`（PK は partner_id + topic）に行が無い topic はその初期値として扱う。読み出し時に初期値で補い、初回の変化で行を作る。変化の履歴は `interest_changes` / `opinion_changes`（before / after、reason、`source_message_id`、生活日）に残す。
+
+LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `up` か `down` / `reason`）と `opinion_signals`（最大 1 件。`topic` / `direction` が `strengthen` / `weaken` / `shift` / `new_stance`（`shift` のときだけ、他は null）/ `reason`）を返す。LLM が返すのは向きだけで、大きさは `@yunomi/core` の `interest-opinion.ts` の定数で決める。`topic` はプロファイルにあるキーだけ有効で、未知の topic は捨てる。`reply` で終わったターンだけが対象で、前段ルールで決まったターン、LLM の `ignore`、LLM 障害（degraded）では何もしない。書き込みは次のターンの prompt に載るよう応答前に完了させ、失敗しても返信は止めず audit の `interestOpinion.error` に残す。
+
+- Interest: 1 シグナルで score が `INTEREST_SIGNAL_STEP`（0.03）動く。同じ topic の生活日あたりの純変化は `INTEREST_DAILY_CAP`（±0.1）、baseline からの乖離（`learned_delta`）は `INTEREST_LEARNED_DELTA_CAP`（±0.3）まで。score は 0〜1。上限の残りが 1 ステップに満たないときは残り分だけ動く。
+- Opinion: `strengthen` / `weaken` は confidence を `OPINION_CONFIDENCE_STEP`（0.05）×（1 − stability）だけ動かす。`shift` は confidence を同じだけ下げ、その結果が `OPINION_SHIFT_THRESHOLD`（0.25）を下回り、かつ `new_stance` があるときだけ stance を置き換えて confidence を `OPINION_SHIFT_RESET_CONFIDENCE`（0.4）にする。同じ topic は生活日に `OPINION_MAX_CHANGES_PER_DAY`（1）回まで。`reasons` は新しい `reason` を足して `OPINION_REASONS_MAX`（5）件に保ち、stance を置き換えたときは置き換えの reason だけにする。`source_memory_ids` は今は常に空。
+- 適用しなかったシグナルは audit の `interestOpinion.{interests,opinions}.rejected` に `unknown_topic` / `limit` / `daily_cap` / `learned_cap` / `no_change` で残す。適用したものは `applied` に before / after が入る。日次の集計は履歴テーブルから読むため、同時に走る別チャンネルのターンが同じ topic を同時に更新すると、上限をわずかに超えることがある。
+- prompt には現在の Interest（score の降順、全件）と Opinion（全件。confidence を「強く思う（0.7 以上）/ そう思う（0.4 以上）/ 迷っている」で示す）を、topic のキー付きで state・relationship の後ろに入れる。persona と静的ルールだけが cache 対象で、この 2 ブロックは cache の外に置く。
+
 ## Audit
 
 1 メッセージにつき `audit_events`（D1）へ 1 行を書く。自己発言は書かない。書き込みは `#background`（`ctx.waitUntil`）に載せ、`flushBackground()` が待つ。思考過程は持たず、判断サマリ・モデル・fallback・token・latency・受信本文と、state / relationship / memory / openLoops / tool_intents の詳細（`detail_json`）だけを残す。`created_at` が `AUDIT_RETENTION_DAYS`（30）より古い行は、毎日 04:17 JST（`17 19 * * *` UTC）の `scheduled` が削除する。
@@ -57,7 +68,7 @@ LLM の応答は `open_loops`（`summary` / `importance` / `due_at` / `due_confi
 
 ## Admin API
 
-`/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
+`/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,interests,opinions,audit,kpis}` は読み取り専用。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`interests`（score の降順）と `opinions`（プロファイルの定義順）は現在値で、行の無い topic は初期値を返し、各行に `source: "profile" | "learned"` が付く。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。
 
 ## Admin Web の配信
 

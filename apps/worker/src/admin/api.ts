@@ -1,9 +1,11 @@
 import {
 	ADMIN_API_PREFIX,
 	type AuditResponse,
+	type InterestsResponse,
 	type KpisResponse,
 	type MemoryResponse,
 	type OpenLoopsResponse,
+	type OpinionsResponse,
 	type RelationshipsResponse,
 	type StatusResponse,
 } from "@yunomi/admin-contract";
@@ -11,6 +13,7 @@ import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { drizzle } from "drizzle-orm/d1";
 import { authenticate } from "../auth/access.ts";
 import { accessEnv, partnerNamespace } from "../env.ts";
+import { createInterestOpinionRepo } from "../interest-opinion.ts";
 import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
@@ -22,7 +25,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
-	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|audit|kpis)$`,
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|interests|opinions|audit|kpis)$`,
 );
 
 type Params = { limit: number; cursor: ReturnType<typeof decodeCursor> };
@@ -149,6 +152,41 @@ export async function handleAdminApi(
 				items: r.items,
 				next_cursor: r.nextCursor,
 			} satisfies OpenLoopsResponse);
+		}
+		case "interests": {
+			const { interests } = await createInterestOpinionRepo(
+				drizzle(env.DB),
+			).current(yukarinProfile);
+			const items = interests
+				.map((i) => ({
+					topic: i.topic,
+					label: i.label,
+					score: i.score,
+					baseline: i.baseline,
+					learned_delta: i.learnedDelta,
+					summary: i.summary,
+					updated_at: i.updatedAt,
+					source: i.source,
+				}))
+				.sort((a, b) => b.score - a.score);
+			return json({ items } satisfies InterestsResponse);
+		}
+		case "opinions": {
+			const { opinions } = await createInterestOpinionRepo(
+				drizzle(env.DB),
+			).current(yukarinProfile);
+			const items = opinions.map((o) => ({
+				topic: o.topic,
+				label: o.label,
+				stance: o.stance,
+				confidence: o.confidence,
+				stability: o.stability,
+				reasons: o.reasons,
+				source_memory_ids: o.sourceMemoryIds,
+				updated_at: o.updatedAt,
+				source: o.source,
+			}));
+			return json({ items } satisfies OpinionsResponse);
 		}
 		case "kpis": {
 			const rawDays = url.searchParams.get("days");

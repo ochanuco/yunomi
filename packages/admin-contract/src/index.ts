@@ -129,6 +129,39 @@ export type OpenLoopsResponse = {
 	next_cursor: string | null;
 };
 
+/** `profile` は学習前のプロファイル初期値、`learned` は変化の履歴がある行。 */
+export type InterestOpinionSource = "profile" | "learned";
+
+export type InterestView = {
+	topic: string;
+	label: string;
+	score: number;
+	baseline: number;
+	learned_delta: number;
+	summary: string;
+	/** 学習前（source が profile）は null。 */
+	updated_at: string | null;
+	source: InterestOpinionSource;
+};
+
+/** score の降順。 */
+export type InterestsResponse = { items: InterestView[] };
+
+export type OpinionView = {
+	topic: string;
+	label: string;
+	stance: string;
+	confidence: number;
+	stability: number;
+	reasons: string[];
+	source_memory_ids: string[];
+	updated_at: string | null;
+	source: InterestOpinionSource;
+};
+
+/** プロファイルの定義順。 */
+export type OpinionsResponse = { items: OpinionView[] };
+
 export type AuditItem = {
 	id: string;
 	event_id: string;
@@ -152,7 +185,7 @@ export type AuditItem = {
 	latency_ms: number;
 	/** 受信本文。保持期間（30 日）を過ぎると行ごと消える。 */
 	inbound_content: string;
-	/** state / relationship / memory / openLoops / tool_intents など。形は Worker 側の実装に従う。 */
+	/** state / relationship / memory / openLoops / interestOpinion / tool_intents など。形は Worker 側の実装に従う。 */
 	detail: Record<string, unknown>;
 	occurred_at: string;
 	created_at: string;
@@ -302,6 +335,37 @@ export const OpenLoopsResponseSchema: v.GenericSchema<OpenLoopsResponse> =
 		items: v.array(OpenLoopViewSchema),
 		next_cursor: nullable(str),
 	});
+
+const interestOpinionSource = v.picklist(["profile", "learned"]);
+
+export const InterestViewSchema: v.GenericSchema<InterestView> = v.object({
+	topic: str,
+	label: str,
+	score: num,
+	baseline: num,
+	learned_delta: num,
+	summary: str,
+	updated_at: nullable(str),
+	source: interestOpinionSource,
+});
+
+export const InterestsResponseSchema: v.GenericSchema<InterestsResponse> =
+	v.object({ items: v.array(InterestViewSchema) });
+
+export const OpinionViewSchema: v.GenericSchema<OpinionView> = v.object({
+	topic: str,
+	label: str,
+	stance: str,
+	confidence: num,
+	stability: num,
+	reasons: v.array(str),
+	source_memory_ids: v.array(str),
+	updated_at: nullable(str),
+	source: interestOpinionSource,
+});
+
+export const OpinionsResponseSchema: v.GenericSchema<OpinionsResponse> =
+	v.object({ items: v.array(OpinionViewSchema) });
 
 export const AuditItemSchema: v.GenericSchema<AuditItem> = v.object({
 	id: str,

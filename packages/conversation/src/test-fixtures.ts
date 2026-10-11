@@ -21,7 +21,19 @@ export const profile: PartnerProfile = {
 			description: "私的な事を聞き出さない。",
 		},
 	],
-	interests_baseline: [{ topic: "音楽", score: 0.5, summary: "仮" }],
+	interests: [
+		{ topic: "music", label: "音楽", baseline: 0.5, summary: "仮" },
+		{ topic: "moon", label: "月", baseline: 0.3, summary: "仮の月" },
+	],
+	opinions: [
+		{
+			topic: "pace",
+			label: "速さ",
+			stance: "ゆっくりがよい。",
+			confidence: 0.6,
+			stability: 0.5,
+		},
+	],
 	living_rhythm: {
 		timezone: "Asia/Tokyo",
 		lifestyle_day_boundary: "05:00",
@@ -49,6 +61,18 @@ export const baseInput = (): PromptInput => ({
 	memory: [
 		{ subject: "alice", predicate: "好きな飲み物", object: "緑茶" },
 		{ subject: "alice", predicate: "職業", object: "エンジニア" },
+	],
+	interests: [
+		{ topic: "music", label: "音楽", score: 0.55, summary: "仮" },
+		{ topic: "moon", label: "月", score: 0.3, summary: "仮の月" },
+	],
+	opinions: [
+		{
+			topic: "pace",
+			label: "速さ",
+			stance: "ゆっくりがよい。",
+			confidence: 0.6,
+		},
 	],
 	openLoops: [],
 	now: new Date("2026-10-11T03:00:00Z"),

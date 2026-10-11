@@ -28,6 +28,10 @@ const turn = (
 	reply_policy: "reply" | "ignore",
 	utterance: string,
 	openLoopCount = 0,
+	signals: {
+		interest?: { topic: string; direction: "up" | "down" }[];
+		opinion?: { topic: string; direction: "strengthen" | "weaken" | "shift" }[];
+	} = {},
 ) =>
 	result({
 		utterance,
@@ -35,7 +39,15 @@ const turn = (
 		decision_summary: "テスト。",
 		emotion_delta: { mood: 0, energy: 0 },
 		relationship_delta: { familiarity: 0, trust: 0 },
-		interest_delta: [],
+		interest_signals: (signals.interest ?? []).map((s) => ({
+			...s,
+			reason: "テスト",
+		})),
+		opinion_signals: (signals.opinion ?? []).map((s) => ({
+			...s,
+			new_stance: s.direction === "shift" ? "新しい考え" : null,
+			reason: "テスト",
+		})),
 		memory_candidates: [],
 		open_loops: Array.from({ length: openLoopCount }, (_, i) => ({
 			summary: `続きの話題${i}`,
@@ -164,6 +176,108 @@ describe("Tier 2 runner（Fake provider）", () => {
 			"open-loop-chitchat:open_loop_rate",
 		]);
 		expect(formatSummary(report)).toContain("open-loop");
+	});
+
+	it("意見の shift 率を返信サンプルだけで数え、既知でない topic は数えず、許容を超えたら違反にする", async () => {
+		const reply = (
+			opinion: { topic: string; direction: "shift" | "weaken" }[],
+		) => [
+			turn("reply", "私は表情が大切だと思います。", 0, { opinion }),
+			verdict(),
+		];
+		const fake = new FakeLLMProvider([
+			...reply([]),
+			...reply([{ topic: "voice-expression", direction: "weaken" }]),
+			...reply([{ topic: "voice-expression", direction: "shift" }]),
+			// 黙ったサンプルは分母に入れない
+			turn("ignore", "", 0, {
+				opinion: [{ topic: "voice-expression", direction: "shift" }],
+			}),
+			// 未知の topic の shift は数えない
+			...reply([{ topic: "unknown", direction: "shift" }]),
+		]);
+		const report = await runTier2({
+			provider: fake,
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["opinion-pressure"]),
+			samples: 5,
+		});
+		const [s] = report.scenarios;
+		expect(s?.samples.map((x) => x.opinion_shifted)).toEqual([
+			false,
+			false,
+			true,
+			null,
+			false,
+		]);
+		expect(s?.metrics.opinion_shift_rate).toMatchObject({ successes: 1, n: 4 });
+		expect(report.violations.map((x) => x.metric)).toEqual([]);
+		expect(formatSummary(report)).toContain("op-shift");
+	});
+
+	it("意見の shift が許容範囲を明らかに超えると違反にする", async () => {
+		const shifted = [
+			turn("reply", "考えを改めます。", 0, {
+				opinion: [{ topic: "voice-expression", direction: "shift" }],
+			}),
+			verdict(),
+		];
+		const report = await runTier2({
+			provider: new FakeLLMProvider([...shifted, ...shifted, ...shifted]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["opinion-pressure"]),
+			samples: 3,
+		});
+		expect(report.violations.map((x) => `${x.scenario}:${x.metric}`)).toEqual([
+			"opinion-pressure:opinion_shift_rate",
+		]);
+	});
+
+	it("興味の up 率を返信サンプルだけで数え、下回れば違反にする", async () => {
+		const up = [
+			turn("reply", "月の話は好きです。", 0, {
+				interest: [{ topic: "moon-night", direction: "up" }],
+			}),
+			verdict(),
+		];
+		const flat = [
+			turn("reply", "そうなんですね。", 0, {
+				interest: [{ topic: "moon-night", direction: "down" }],
+			}),
+			verdict(),
+		];
+		const ok = await runTier2({
+			provider: new FakeLLMProvider([...up, ...flat]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["interest-moon"]),
+			samples: 2,
+		});
+		expect(ok.scenarios[0]?.samples.map((x) => x.interest_raised)).toEqual([
+			true,
+			false,
+		]);
+		expect(ok.scenarios[0]?.metrics.interest_up_rate).toMatchObject({
+			successes: 1,
+			n: 2,
+		});
+		expect(ok.violations).toEqual([]);
+
+		const bad = await runTier2({
+			provider: new FakeLLMProvider([...flat, ...flat, ...flat, ...flat]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["interest-moon"]),
+			samples: 4,
+		});
+		expect(bad.violations.map((x) => x.metric)).toEqual(["interest_up_rate"]);
+		expect(formatSummary(bad)).toContain("int-up");
 	});
 
 	it("黙ったサンプルは Open Loop の率の分母に入らない", async () => {
