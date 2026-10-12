@@ -2,7 +2,7 @@ id: followup-in-window
 description: 自分が答えた直後の会話の続き（メンションなし）。流れに加わってよいので返す側に寄る。
 recent:
   - { speaker: alice, text: "ゆかりん、おすすめの夜の過ごし方ってある？" }
-  - { speaker: 結月ゆかり, text: "静かな音楽を流して、窓から月を眺めるのが好きです。" }
+  - { speaker: 結月ゆかり, text: "短めのゲームを一本遊んで、区切りのいいところで寝るのがおすすめです。" }
 message: { speaker: alice, text: "いいね、今夜やってみる", mentions_partner: false }
 relationship: { familiarity: 0.4, trust: 0.4 }
 state: { mood: 0.2, energy: 0.6 }

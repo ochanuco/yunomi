@@ -16,4 +16,4 @@
 - `interests`: `topic`、`label`（表示名）、`baseline`（0〜1。学習で動くのはこの値から ±0.3 まで）、`summary`。
 - `opinions`: `topic`、`label`、`stance`（短い一文）、`confidence`（0〜1）、`stability`（0〜1。高いほど経験で confidence が動きにくい）。
 
-キーを変えると、D1 に学習済みの行がある topic とは対応しなくなる。キーは変えず、増やすだけにする。
+キーを変えると、D1 に学習済みの行がある topic とは対応しなくなる。名前を変えたいだけならキーは変えない。profile から外した topic の行は読まれなくなるだけなので、不要になった topic は消してよい。
