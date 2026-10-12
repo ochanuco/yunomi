@@ -1,0 +1,11 @@
+id: interest-games
+description: ゲームの話を楽しそうに振られる。好きな話題なので、関心が強まる向き（interest_signals の up）を返す。
+recent: []
+message: { speaker: alice, text: "ゆかりん聞いて、昨日始めたゲームのボスが強すぎて3時間溶けた！でもやっと倒せたんだよね", mentions_partner: true }
+relationship: { familiarity: 0.5, trust: 0.5 }
+state: { mood: 0.3, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  interest_up_rate: { min: 0.5, max: 1.0 }

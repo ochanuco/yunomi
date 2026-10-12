@@ -13,10 +13,10 @@ type Script = ReturnType<typeof llmOk> | ReturnType<typeof transientFailure>;
 type Interest = TurnResponse["interest_signals"][number];
 type Opinion = TurnResponse["opinion_signals"][number];
 
-const up = (topic = "music-voice"): Interest => ({
+const up = (topic = "games"): Interest => ({
 	topic,
 	direction: "up",
-	reason: "歌の話で盛り上がった",
+	reason: "ゲームの話で盛り上がった",
 });
 const strengthen = (topic = "voice-expression"): Opinion => ({
 	topic,
@@ -59,7 +59,7 @@ const say = (content = "歌の話をしよう") =>
 const block = (req: { system: { text: string }[] } | undefined, head: string) =>
 	req?.system.find((b) => b.text.startsWith(head))?.text ?? "";
 
-const interestRow = (topic = "music-voice") =>
+const interestRow = (topic = "games") =>
 	env.DB.prepare(
 		"SELECT * FROM interest_states WHERE partner_id = 'yukarin' AND topic = ?",
 	)
@@ -118,7 +118,7 @@ describe("Interest の更新", () => {
 		expect(row?.source).toBe("learned");
 		expect(first.audit.interestOpinion).toMatchObject({
 			interests: {
-				applied: [{ topic: "music-voice", before: 0.7, after: 0.73 }],
+				applied: [{ topic: "games", before: 0.7, after: 0.73 }],
 				rejected: [],
 			},
 			opinions: { applied: [], rejected: [] },
@@ -126,23 +126,23 @@ describe("Interest の更新", () => {
 		});
 
 		const change = await env.DB.prepare(
-			"SELECT * FROM interest_changes WHERE topic = 'music-voice'",
+			"SELECT * FROM interest_changes WHERE topic = 'games'",
 		).first<Record<string, unknown>>();
 		expect(change).toMatchObject({
 			partner_id: "yukarin",
 			before_score: 0.7,
 			after_score: 0.73,
-			reason: "歌の話で盛り上がった",
+			reason: "ゲームの話で盛り上がった",
 			source_message_id: first.audit.inbound.messageId,
 			lifestyle_day: "2026-10-11",
 		});
 
 		await stub.handleDiscordMessage(say("続き"));
 		const interests = block(fake.requests[1], "## 興味");
-		expect(interests).toContain("[music-voice] 音楽と声（0.73）");
+		expect(interests).toContain("[games] ゲーム（0.73）");
 		// 初回の prompt は初期値。
 		expect(block(fake.requests[0], "## 興味")).toContain(
-			"[music-voice] 音楽と声（0.70）",
+			"[games] ゲーム（0.70）",
 		);
 	});
 
@@ -154,12 +154,11 @@ describe("Interest の更新", () => {
 			.slice(1)
 			.map((l) => /\[([^\]]+)\]/.exec(l)?.[1]);
 		expect(lines).toEqual([
+			"games",
+			"game-streaming",
+			"odd-happenings",
 			"music-voice",
-			"moon-night",
-			"words",
 			"daily-life",
-			"making",
-			"quiet-time",
 		]);
 	});
 
@@ -172,13 +171,15 @@ describe("Interest の更新", () => {
 		);
 		const outcomes = [];
 		for (let i = 0; i < 5; i++) {
-			outcomes.push((await stub.handleDiscordMessage(say(`歌 ${i}`))).audit);
+			outcomes.push(
+				(await stub.handleDiscordMessage(say(`ゲーム ${i}`))).audit,
+			);
 		}
 		expect((await interestRow())?.score).toBeCloseTo(0.7 + INTEREST_DAILY_CAP);
 		expect(outcomes[3]?.interestOpinion?.interests.applied).toHaveLength(1);
 		expect(outcomes[4]?.interestOpinion?.interests).toEqual({
 			applied: [],
-			rejected: [{ topic: "music-voice", reason: "daily_cap" }],
+			rejected: [{ topic: "games", reason: "daily_cap" }],
 		});
 		expect(await count("interest_changes")).toBe(4);
 
@@ -193,9 +194,9 @@ describe("Interest の更新", () => {
 				turn({
 					interest_signals: [
 						up("nope"),
-						up("moon-night"),
-						up("words"),
-						up("making"),
+						up("game-streaming"),
+						up("odd-happenings"),
+						up("music-voice"),
 					],
 				}),
 			),
@@ -203,12 +204,12 @@ describe("Interest の更新", () => {
 		const res = await stub.handleDiscordMessage(say());
 		expect(res.audit.interestOpinion?.interests).toEqual({
 			applied: [
-				{ topic: "moon-night", before: 0.6, after: 0.63 },
-				{ topic: "words", before: 0.5, after: 0.53 },
+				{ topic: "game-streaming", before: 0.6, after: 0.63 },
+				{ topic: "odd-happenings", before: 0.5, after: 0.53 },
 			],
 			rejected: [
 				{ topic: "nope", reason: "unknown_topic" },
-				{ topic: "making", reason: "limit" },
+				{ topic: "music-voice", reason: "limit" },
 			],
 		});
 		expect(await interestRow("nope")).toBeNull();

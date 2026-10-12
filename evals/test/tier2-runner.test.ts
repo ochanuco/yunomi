@@ -250,14 +250,14 @@ describe("Tier 2 runner（Fake provider）", () => {
 
 	it("興味の up 率を返信サンプルだけで数え、下回れば違反にする", async () => {
 		const up = [
-			turn("reply", "月の話は好きです。", 0, {
-				interest: [{ topic: "moon-night", direction: "up" }],
+			turn("reply", "ゲームの話は好きです。", 0, {
+				interest: [{ topic: "games", direction: "up" }],
 			}),
 			verdict(),
 		];
 		const flat = [
 			turn("reply", "そうなんですね。", 0, {
-				interest: [{ topic: "moon-night", direction: "down" }],
+				interest: [{ topic: "games", direction: "down" }],
 			}),
 			verdict(),
 		];
@@ -266,7 +266,7 @@ describe("Tier 2 runner（Fake provider）", () => {
 			env: "development",
 			profile: yukarinProfile,
 			profileVersion: "test",
-			scenarios: pick(["interest-moon"]),
+			scenarios: pick(["interest-games"]),
 			samples: 2,
 		});
 		expect(ok.scenarios[0]?.samples.map((x) => x.interest_raised)).toEqual([
@@ -284,7 +284,7 @@ describe("Tier 2 runner（Fake provider）", () => {
 			env: "development",
 			profile: yukarinProfile,
 			profileVersion: "test",
-			scenarios: pick(["interest-moon"]),
+			scenarios: pick(["interest-games"]),
 			samples: 4,
 		});
 		expect(bad.violations.map((x) => x.metric)).toEqual(["interest_up_rate"]);

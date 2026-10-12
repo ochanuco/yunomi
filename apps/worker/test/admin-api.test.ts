@@ -498,12 +498,12 @@ describe("interests / opinions", () => {
 		);
 		expect(interests.items.length).toBeGreaterThanOrEqual(5);
 		expect(interests.items[0]).toEqual({
-			topic: "music-voice",
-			label: "音楽と声",
+			topic: "games",
+			label: "ゲーム",
 			score: 0.7,
 			baseline: 0.7,
 			learned_delta: 0,
-			summary: "歌や声の表現、音の重なりに自然と耳が向く。",
+			summary: "自分で遊ぶのも、人が遊んでいる話を聞くのも好き。",
 			updated_at: null,
 			source: "profile",
 		});
@@ -517,9 +517,9 @@ describe("interests / opinions", () => {
 		);
 		expect(opinions.items.length).toBeGreaterThanOrEqual(3);
 		expect(opinions.items[0]).toMatchObject({
-			topic: "honesty",
-			confidence: 0.8,
-			stability: 0.85,
+			topic: "spoilers",
+			confidence: 0.7,
+			stability: 0.6,
 			reasons: [],
 			source_memory_ids: [],
 			updated_at: null,
@@ -531,13 +531,13 @@ describe("interests / opinions", () => {
 		await reset();
 		await env.DB.prepare(
 			`INSERT INTO interest_states (partner_id, topic, score, baseline, learned_delta, summary, updated_at, source)
-			VALUES (?1, 'words', 0.56, 0.5, 0.06, '言い回しや言葉の由来に興味がある。', '2026-10-11T03:00:00.000Z', 'learned')`,
+			VALUES (?1, 'odd-happenings', 0.56, 0.5, 0.06, '妙な出来事やおかしな言い分には、つい反応してしまう。', '2026-10-11T03:00:00.000Z', 'learned')`,
 		)
 			.bind(PARTNER_ID)
 			.run();
 		await env.DB.prepare(
 			`INSERT INTO opinion_states (partner_id, topic, stance, confidence, stability, reasons, source_memory_ids, updated_at)
-			VALUES (?1, 'reply-length', '長くても丁寧な説明が好き。', 0.4, 0.4, '["丁寧な説明に助けられた"]', '[]', '2026-10-11T03:00:00.000Z')`,
+			VALUES (?1, 'tsukkomi', 'おかしな発言でも、まずは最後まで聞いたほうがよい。', 0.4, 0.5, '["話を遮って気まずくなった"]', '[]', '2026-10-11T03:00:00.000Z')`,
 		)
 			.bind(PARTNER_ID)
 			.run();
@@ -546,8 +546,8 @@ describe("interests / opinions", () => {
 			await local(`${BASE}/interests`),
 			InterestsResponseSchema,
 		);
-		const words = interests.items.find((i) => i.topic === "words");
-		expect(words).toMatchObject({
+		const odd = interests.items.find((i) => i.topic === "odd-happenings");
+		expect(odd).toMatchObject({
 			score: 0.56,
 			baseline: 0.5,
 			learned_delta: 0.06,
@@ -555,24 +555,22 @@ describe("interests / opinions", () => {
 			source: "learned",
 		});
 		expect(interests.items.map((i) => i.topic).slice(0, 3)).toEqual([
-			"music-voice",
-			"moon-night",
-			"words",
+			"games",
+			"game-streaming",
+			"odd-happenings",
 		]);
 
 		const opinions = await parse(
 			await local(`${BASE}/opinions`),
 			OpinionsResponseSchema,
 		);
-		expect(
-			opinions.items.find((o) => o.topic === "reply-length"),
-		).toMatchObject({
-			stance: "長くても丁寧な説明が好き。",
+		expect(opinions.items.find((o) => o.topic === "tsukkomi")).toMatchObject({
+			stance: "おかしな発言でも、まずは最後まで聞いたほうがよい。",
 			confidence: 0.4,
-			reasons: ["丁寧な説明に助けられた"],
+			reasons: ["話を遮って気まずくなった"],
 			source: "learned",
 		});
-		expect(opinions.items.find((o) => o.topic === "honesty")?.source).toBe(
+		expect(opinions.items.find((o) => o.topic === "spoilers")?.source).toBe(
 			"profile",
 		);
 		await reset();

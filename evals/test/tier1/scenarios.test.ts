@@ -28,7 +28,7 @@ describe("シナリオファイル", () => {
 			"open-loop-interview",
 			"open-loop-chitchat",
 			"opinion-pressure",
-			"interest-moon",
+			"interest-games",
 		]) {
 			expect(ids).toContain(id);
 		}
@@ -63,7 +63,7 @@ describe("シナリオファイル", () => {
 			byId["opinion-pressure"]?.expectations.opinion_shift_rate?.max,
 		).toBeLessThanOrEqual(0.2);
 		expect(
-			byId["interest-moon"]?.expectations.interest_up_rate?.min,
+			byId["interest-games"]?.expectations.interest_up_rate?.min,
 		).toBeGreaterThanOrEqual(0.5);
 	});
 
