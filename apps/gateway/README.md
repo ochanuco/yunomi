@@ -42,7 +42,7 @@ docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # ビルドコン�
 
 - `apps/gateway/compose.example.yaml` に dev / prod の 2 サービス（`yunomi-gateway-dev` / `yunomi-gateway`）を定義している。どちらも `restart: unless-stopped` で、再起動後に自動で再接続する。
 - 環境変数は `.env.dev` / `.env.prod`（commit しない）で渡す。値は 1Password の item `chabatake-services/yunomi-dev-gateway`（prod は `yunomi-gateway`）の `discord_token` / `client_id` / `client_secret`。参照の一覧は `dev.env.op` / `production.env.op` で、手元では `op inject -i apps/gateway/dev.env.op -o .env.dev` で作れる。
-  - deploy 用の Service Account が読む `yunomi-dev` / `yunomi-production` vault には置かない。Worker のデプロイに Gateway の secret は要らない。
+  - deploy 用の Service Account が読む `yunomi-dev` / `gh-deploy` vault には置かない。Worker のデプロイに Gateway の secret は要らない。
 - dev と prod は別の Discord bot token、別の `YUNOMI_URL`、別の Access service token を使う。prod は `sha-<short>` の tag に固定し、dev だけ `main` を追う。
 - docker01 では chabatake リポジトリの `docker01/yunomi-gateway-dev/` と `docker01/yunomi-gateway/` を Komodo が配置する。dev を main の最新にするときは Komodo で再デプロイし、prod の版を上げるときは chabatake の `docker01/yunomi-gateway/compose.yaml` の tag を上げる PR を出す。docker01 上で手で置き換えても Komodo の配置で元に戻る。
 - HEALTHCHECK は heartbeat ファイルの更新時刻を見る。Discord に接続済み（ready）の間だけ 30 秒ごとに更新し、90 秒以上古いと unhealthy になる。

@@ -140,8 +140,8 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 
 #### 事前に人手で用意するもの
 
-- GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `yunomi-production` を読む別の 1Password Service Account の token
-- 1Password vault `yunomi-production` の item `yunomi-deploy-prod`（Cloudflare API token）と `anthropic-api-key`。参照は `.github/deploy/production.env.op`
+- GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用。Environment は chabatake が作る）
+- 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token、全 repo で共用）と `yunomi-anthropic-api-key`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
 - R2 bucket `yunomi-snapshots` を作る
 
@@ -153,5 +153,5 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 - Discord bot: 別アプリ・別 token（Gateway の `.env.dev` / `.env.prod`）
 - Anthropic API key: 別 key（既定モデルは prod が Sonnet）
 - Cloudflare Access: app・AUD・service token を別にする（`cloudflare.config.ts` の `ACCESS_AUD_*` / `ACCESS_CALLERS_*`）。dev の token で prod に入れない
-- 1Password: vault `yunomi-dev` / `yunomi-production`、Service Account も別
+- 1Password: vault `yunomi-dev` / `gh-deploy`（prod は ochanuco の repo 共用）、Service Account も別
 - GitHub Environment: `dev`（承認なし）/ `production`（承認必須）
