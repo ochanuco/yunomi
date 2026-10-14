@@ -16,7 +16,7 @@ jobs:
     uses: ochanuco/.github/.github/workflows/deploy.yml@71e324e93ea560488bcc309e52c5ce48ef8a282c # v1.3.0
     with:
       ref: ${{ inputs.ref }}
-      working-directory: apps/worker
+      # pnpm の版（packageManager）と lockfile はワークスペースのルートにあるので、ルートで install してから worker に移る
       op-env-file: .github/deploy/production.env.op
-      run: scripts/deploy.sh production
+      run: cd apps/worker && scripts/deploy.sh production
     secrets: inherit
