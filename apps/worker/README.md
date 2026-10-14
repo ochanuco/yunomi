@@ -121,7 +121,7 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 `scripts/deploy.sh <development|production>` の流れ:
 
 1. `resources.ts` から D1 id と `snapshotAgeRecipient` を読む。D1 id がプレースホルダのままなら #7 を案内して失敗し、recipient が age の公開鍵の形式でなければ失敗する。
-2. `cf d1 migrations apply <id> --dir migrations`（remote）
+2. `cf d1 migrations apply <id> --dir migrations`（remote）。development のときだけ実行し、production のデプロイでは適用しない
 3. `cf deploy --mode <mode>`。`ANTHROPIC_API_KEY` が環境にあれば `--secrets-file`（権限 600 の一時 `.env`、終了時に削除）で渡す。`cf workers secrets update` は `--text` しか持たず値が argv に載るため使わない。
 4. `https://<host>/health` を最大 10 回（6 秒間隔）確認する。
 
@@ -136,7 +136,7 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 
 ## デプロイ（prod）
 
-`.github/workflows/deploy-prod.yml` は `workflow_dispatch` のみ（main への merge では動かない）。入力 `ref`（既定 `main`）は main か既存の tag に限り、それ以外は最初の step で失敗する。dev と同じ手順で `scripts/deploy.sh production` を実行する。
+`.github/workflows/deploy.yml` は `workflow_dispatch` のみ（main への merge では動かない）。入力 `ref`（既定 `main`）は main か main 上のコミット SHA に限り、それ以外は失敗する。共有 workflow（`ochanuco/.github` の `deploy.yml`）を `apps/worker` で呼び、`op run` 経由で `scripts/deploy.sh production` を実行する。typecheck / test は走らせない（main は `CI` を通っている前提）。production の D1 migration はデプロイでは適用しないので、migration を含む PR ごとに手で `cf d1 migrations apply` を実行する。
 
 #### 事前に人手で用意するもの
 

@@ -32,7 +32,10 @@ if ! printf '%s' "$age_recipient" | grep -Eq "$age_pattern"; then
   exit 1
 fi
 
-pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
+# production の D1 migration はデプロイでは適用せず、migration を含む PR ごとに手で適用する
+if [ "$mode" = development ]; then
+  pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
+fi
 
 deploy_args=(--mode "$mode")
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
