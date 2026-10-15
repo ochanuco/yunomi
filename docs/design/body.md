@@ -15,14 +15,14 @@ mind   (Worker / LLM)
   decides what to say and how:
   semantic performance IR per segment (emotion, energy, pace, warmth, pauses)
         │
-body   (yunomi core, packages/core, Workers-agnostic)
+body   (Worker / Partner DO, logic in packages/core)
   turns IR into engine-specific instructions using the character's voice profile
         │
 organ  (external MCP server on the GPU box)
   executes the instructions (text + engine values -> WAV)
 ```
 
-The Gateway is the nerve: it relays speech instructions from the Worker to the organ and audio back toward Discord and the Worker.
+The Gateway is the nerve: it relays the body's engine-specific instructions from the Worker to the organ and audio back toward Discord and the Worker. It does no mapping of its own.
 
 - The LLM does not call TTS as a tool. Speech instructions are returned in the Worker's response to the Gateway's event request.
 - The mind never emits engine-specific parameters.

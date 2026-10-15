@@ -132,8 +132,8 @@ The Worker cannot reach home directly.
 
 ```text
 Gateway -- event request --> Worker
-Gateway <-- speech instructions (IR segments) -- Worker
-Gateway: body maps IR to A.I.VOICE values
+Worker: body maps IR segments to A.I.VOICE values
+Gateway <-- speech instructions (text + A.I.VOICE values) -- Worker
 Gateway -- LAN, MCP --> organ (GPU box)
 Gateway <-- WAV -- organ
 ```
