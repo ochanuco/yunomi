@@ -1,7 +1,30 @@
+import {
+	type BodyIntent,
+	type BodyState,
+	type PacePhrase,
+	performanceEmotions,
+} from "@yunomi/core";
 import { defineOutput } from "@yunomi/llm";
 import * as v from "valibot";
 
 const unit = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
+
+const pacePhrases = [
+	"slow",
+	"slightly_slow",
+	"normal",
+	"slightly_fast",
+	"fast",
+] as const satisfies readonly PacePhrase[];
+
+/** 演技の指示。エンジン固有の値は含めず、身体が声の性質を使って値に直す。 */
+const performanceSchema = v.object({
+	emotion: v.picklist(performanceEmotions),
+	energy: unit,
+	pace: v.picklist(pacePhrases),
+	warmth: unit,
+	pause_before_ms: v.pipe(v.number(), v.minValue(0), v.maxValue(5000)),
+});
 
 /**
  * 1 ターンの構造化応答。structured outputs の制約で全フィールド必須とし、不在は空配列か null で表す。
@@ -54,6 +77,10 @@ export const turnResponseSchema = v.object({
 	),
 	/** prompt に示した open の Open Loop のうち、この発言で片づいたものの id。 */
 	resolved_open_loop_ids: v.array(v.string()),
+	/** utterance の演技。ignore のときも埋めるが使われない。 */
+	performance: performanceSchema,
+	/** 声で返すか。false ならテキストだけで返す。 */
+	speak_aloud: v.boolean(),
 	tool_intents: v.array(v.object({ name: v.string(), summary: v.string() })),
 	needs_review: v.boolean(),
 });
@@ -61,3 +88,21 @@ export const turnResponseSchema = v.object({
 export type TurnResponse = v.InferOutput<typeof turnResponseSchema>;
 
 export const turnOutput = defineOutput("turn_response", turnResponseSchema);
+
+/**
+ * 応答を身体への意図にする。黙る応答と空の発言は意図にしない。
+ * 身体が使えないときは、モデルが声を選んでいても声にしない。
+ */
+export const toBodyIntent = (
+	response: TurnResponse,
+	bodyState: BodyState,
+): BodyIntent | undefined => {
+	if (response.reply_policy === "ignore" || response.utterance === "") {
+		return undefined;
+	}
+	return {
+		text: response.utterance,
+		performance: response.performance,
+		speakAloud: response.speak_aloud && bodyState !== "unavailable",
+	};
+};
