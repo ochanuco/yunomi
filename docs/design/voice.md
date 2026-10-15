@@ -91,7 +91,7 @@ Current engine: A.I.VOICE (1) only. Its Editor API is the only one usable progra
 
 Do not let the LLM emit raw vendor-specific voice parameters as the primary semantic interface.
 
-The mind emits a semantic performance/prosody IR.
+The brain emits a semantic performance/prosody IR.
 
 Example:
 
@@ -128,7 +128,7 @@ Separate public repo, "Voice MCP for yunomi".
 ### Call path
 
 ```text
-core (Partner DO): the mind decides to speak; the body maps IR to A.I.VOICE values
+core (Partner DO): the brain decides to speak; the body maps IR to A.I.VOICE values
 core -- speech interface --> ochoko adapter -- relay --> ochoko (GPU box)
 core <-- WAV
 core: delivers the audio through the communication organ (Discord)

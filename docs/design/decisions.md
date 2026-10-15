@@ -91,12 +91,14 @@ This is a compact decision register.
 - decisions and state live only in the Cloudflare core (Worker + Partner DO); see `principles.md`
 - organs only execute and sense, attached through per-faculty interfaces and adapters; location and transport stay inside the adapter
 - relays (Gateway, tunnel) relay only
-- the LLM is an organ that assists the mind; replacing it must not change the Partner
+- the core has three layers: heart (who the Partner is), brain (perceive, recall, think, decide), body (faculties and organ coordination); see `principles.md`
+- the LLM is an organ attached to the brain; replacing it must not change the heart
+- the heart applies its own rules to changes the brain proposes
 
 ## Body
 
 - the Partner has a body with faculties: speech, hearing, Discord behavior; only speech is implemented now
-- layers: mind (core: persona, memory, state; LLM assists) -> body (core, `packages/core`, IR to engine instructions) -> organ (anywhere)
+- layers: brain (intent, semantic IR) -> body (core, `packages/core`, IR to engine instructions, organ coordination) -> organ (anywhere)
 - the core derives body state from organ availability
 - the Partner knows its body state and adapts (e.g. replies in text when it cannot speak)
 

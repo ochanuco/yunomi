@@ -20,9 +20,20 @@ Yunomi keeps its core on Cloudflare and treats everything else as replaceable or
 | sight (future) | image -> observations | none | — |
 | hearing (designed) | audio -> text | none | — |
 
-## The mind and the LLM
+## Heart, brain, body
 
-The mind is part of the core: persona, memory, state, and how the Partner decides what to say. The LLM is an organ that assists the mind's thinking. Replacing the LLM must not change who the Partner is.
+The core is split into three layers. All three live in the core; the split is about responsibility, not location.
+
+| Layer | Holds | Does not know |
+|---|---|---|
+| heart (心) | persona, values, emotional state, relationships, opinions and interests, the contents of memory | the LLM, organs, Discord |
+| brain (脳) | receiving perceptions, recalling, thinking (the LLM is an organ attached to the brain), deciding what to do | engine-specific values, where organs run |
+| body (身体) | faculty interfaces, IR to engine values, coordinating organs (waking, waiting, delivering), body state | what to say |
+
+- Dependencies point one way: brain -> heart and brain -> body. The heart depends on nothing.
+- The brain reads the heart and proposes changes to it (e.g. an emotion delta suggested by the LLM). The heart applies its own rules and may reject them.
+- The brain hands the body an intent: what to say, how it should feel, by voice or not. The body carries it out and reports body state and perceptions back.
+- Replacing the LLM changes only the brain's organ adapter. Replacing a voice organ changes only a body adapter and the voice profile's realization. Adding sight adds a sense to the body and a perception type to the brain. The heart is untouched in every case, so replacing an organ never changes who the Partner is.
 
 ## Adding or replacing an organ
 
