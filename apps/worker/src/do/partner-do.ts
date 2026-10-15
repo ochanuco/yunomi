@@ -1,10 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+	type BodyIntent,
+	type BodyState,
 	type CommunicationPort,
 	err,
 	externalServiceUnavailable,
 	type PartnerState,
 	type Relationship,
+	toAivoiceValues,
 } from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
@@ -23,6 +26,7 @@ import {
 } from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
+import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
@@ -30,6 +34,7 @@ import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
 import { runTurn } from "./turn.ts";
+import { VoiceBody } from "./voice.ts";
 
 const defaultRouter = (env: Env): ModelRouter => {
 	const provider: LLMProvider = env.ANTHROPIC_API_KEY
@@ -73,6 +78,8 @@ export class PartnerDO extends DurableObject<Env> {
 	/** 返事を Discord へ送る口。null のときは Gateway が送る。 */
 	createCommunication: (env: Env) => CommunicationPort | null =
 		defaultCommunication;
+	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
+	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
 	pipeline: Pipeline = (msg) =>
 		runTurn(
 			{
@@ -81,6 +88,8 @@ export class PartnerDO extends DurableObject<Env> {
 				partnerUserId: this.env.PARTNER_DISCORD_USER_ID,
 				now: () => this.now(),
 				createRouter: () => this.createRouter(this.env),
+				bodyState: async (): Promise<BodyState> =>
+					(await this.#voice()?.bodyState()) ?? "unavailable",
 				entities: this.#entities,
 				history: this.#history,
 				memory: this.#memory,
@@ -187,12 +196,48 @@ export class PartnerDO extends DurableObject<Env> {
 			stopTyping?.();
 		}
 		if (port && outcome.response.action === "reply") {
-			return toResult({
-				...outcome,
-				response: await this.#send(port, inbound, outcome.response),
-			});
+			const sent = await this.#send(port, inbound, outcome.response);
+			if (sent.messageId && outcome.intent) {
+				this.#speakAloud(outcome.intent, inbound.channelId, sent.messageId);
+			}
+			return toResult({ ...outcome, response: sent.response });
 		}
 		return toResult(outcome);
+	}
+
+	// 声が使えるのは、発声の器官と意思疎通の口が両方あるときだけ。
+	#voice(): VoiceBody | null {
+		const communication = this.createCommunication(this.env);
+		const organs = this.createVoiceOrgans(this.env);
+		if (!communication || !organs) return null;
+		return new VoiceBody({
+			storage: this.ctx.storage,
+			organs,
+			communication,
+			now: () => this.now(),
+			setAlarm: (at) => this.ctx.storage.setAlarm(at),
+		});
+	}
+
+	// 返事の送信を待たせないよう、声は応答の外で段取りする。
+	#speakAloud(intent: BodyIntent, channelId: string, messageId: string): void {
+		if (!intent.speakAloud) return;
+		const voice = yukarinProfile.voice;
+		const values = voice && toAivoiceValues(intent.performance, voice);
+		const body = this.#voice();
+		if (!values || !body) return;
+		this.#background(
+			body.speak({ messageId, channelId, text: intent.text, values }),
+		);
+	}
+
+	/** 待っている声を進める。寝ていた器官が起きるのを DO の alarm で待つ。 */
+	async alarm(): Promise<void> {
+		try {
+			await this.#voice()?.poll();
+		} catch (e) {
+			console.error("voice poll failed", e);
+		}
 	}
 
 	#startTyping(port: CommunicationPort, channelId: string): () => void {
@@ -216,7 +261,7 @@ export class PartnerDO extends DurableObject<Env> {
 		port: CommunicationPort,
 		inbound: InboundMessage,
 		reply: Extract<GatewayResponse, { action: "reply" }>,
-	): Promise<GatewayResponse> {
+	): Promise<{ response: GatewayResponse; messageId?: string }> {
 		const sent = await port.sendText({
 			channelId: inbound.channelId,
 			text: reply.content,
@@ -231,7 +276,10 @@ export class PartnerDO extends DurableObject<Env> {
 				sent.value.messageId,
 			);
 		}
-		return { action: "ack" };
+		return {
+			response: { action: "ack" },
+			...(sent.ok ? { messageId: sent.value.messageId } : {}),
+		};
 	}
 
 	async #process(inbound: InboundMessage, key: string): Promise<HandleResult> {

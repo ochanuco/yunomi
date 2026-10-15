@@ -25,7 +25,52 @@
 
 `PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline` と `now` はテストが `runInDurableObject` で差し替える seam。
 
-返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev `1` / prod・local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（返信先つきのテキスト、入力中、`message_reference` つきの multipart 添付。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。`DISCORD_BOT_TOKEN` は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` には 1Password の参照が決まるまで載せない）。
+返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev `1` / prod・local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（返信先つきのテキスト、入力中、`message_reference` つきの multipart 添付。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
+
+## 声の添付
+
+返事のテキストを送ったあと、脳が `speak_aloud` を選んでいれば、身体が WAV を同じチャンネルに、その返事への返信として添付する。声はテキストの返事を待たせず、失敗してもテキストは届いている。`VOICE_ENABLED` が `1` で、下の設定と secret が揃い、`CommunicationPort`（Discord REST）があるときだけ動く。揃わないときは声を使わず、脳には「声を出せない」と伝える。
+
+| 設定 | 種類 | 値 |
+| --- | --- | --- |
+| `VOICE_ENABLED` | text | dev `1` / prod・local `0` |
+| `OCHOKO_URL` | text | `https://ochoko.chanu.co` |
+| `WOL_URL` | text | `https://wol.chanu.co` |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | secret | ochoko と wol を通る Cloudflare Access の Service Token |
+| `AIVOICE_TOKEN` | secret | ochoko の Bearer token |
+
+#### 器官
+
+- `src/ochoko.ts`: `SpeechPort`。`POST ${OCHOKO_URL}/mcp` に MCP の `tools/call` `synthesize` を JSON-RPC で送り、audio の base64 を WAV に戻して `duration_ms` を読む。`GET /healthz` の `engine` を可用性にする（`ready` は ready、`starting` は waking、それ以外は unavailable、応答がなければ unreachable）。Tunnel の 502 は unreachable。
+- `src/wol.ts`: `GET ${WOL_URL}/status` の `state` を可用性にし、`POST /wake` で起こす。
+- `src/voice-organs.ts`: wol を先に見て、`online` のときだけ ochoko の `/healthz` を見る。
+
+| wol の state | 可用性 |
+| --- | --- |
+| `online` | ochoko の `/healthz` で決める |
+| `waking` | waking |
+| `sleeping` / `going_to_sleep` / `offline` | asleep（どれも `POST /wake` で起こせる） |
+| 応答なし・読めない応答 | unreachable |
+
+応答は Valibot で検証し、HTTP のエラーは DomainError にする（401・403・Access の redirect は `PermissionDenied`、429 は `RateLimited`、5xx・通信失敗・ツールのエラーは `ExternalServiceUnavailable`、それ以外は `ValidationFailed`）。
+
+#### 身体の状態
+
+`src/do/voice.ts` の `VoiceBody` が、DO storage に最後の可用性（`voice:organ`）を持つ。ターンごとに、60 秒より古ければ取り直し、`deriveBodyState` で決めて `PromptInput.bodyState` に入れる。声が無効なら `unavailable`。
+
+#### 段取り
+
+| 可用性 | 動き |
+| --- | --- |
+| ready | 合成して添付する |
+| asleep | `POST /wake` を呼び、待ちに入れる |
+| waking | 待ちに入れる |
+| unavailable / unreachable | 声を諦める |
+
+- 待ちは DO storage の `voice:pending:<返事の message id>` に、チャンネル id・本文・A.I.VOICE の値・期限（受け付けから 2 分）・試行回数を持つ。
+- DO の alarm が 5 秒ごとに `alarm()` を呼び、可用性を取り直して、ready なら合成して添付する。期限を過ぎたら待ちを捨て、可用性を unavailable にして次のターンの脳に返す。待ちが残るかぎり次の alarm を入れる。
+- 待ちは取り出せた側だけが処理するので、alarm が重なっても添付は 1 回になる。添付の失敗は再試行しない。合成の一時的な失敗は期限内で 3 回まで試す。
+- `pause_before_ms` は使わない（合成した WAV の前に無音を足す処理は無い）。
 
 reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の id（`partner_message_id`、`partner:<uuid>`）を含める。Gateway が送信後に `POST /v1/partners/:partnerId/discord/sent`（body: `partner_message_id` / `channel_id` / `discord_message_id`、応答 `{ bound }`）を呼ぶと、DO はその行の `discord_message_id` に Discord id を保存する。以後 `reply_to_message_id` がその Discord id と一致する発言は、メンションなしでも Yukarin への返信として LLM 判定に進む。通知前の行や既存行は `discord_message_id` が NULL のままで、従来どおり動く。
 

@@ -1,9 +1,12 @@
+import type { BodyIntent } from "@yunomi/core";
 import type { GatewayResponse, InboundMessage } from "@yunomi/protocol";
 import type { DecisionReason, TurnAuditData } from "../audit.ts";
 
 export type TurnOutcome = {
 	response: GatewayResponse;
 	audit: TurnAuditData;
+	/** 脳が身体に渡す意図。返事を送ったあと、身体が声にするかを決める。 */
+	intent?: BodyIntent;
 };
 
 export type Pipeline = (msg: InboundMessage) => Promise<TurnOutcome>;
