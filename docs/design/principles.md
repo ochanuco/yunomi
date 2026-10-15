@@ -14,15 +14,18 @@ Yunomi keeps its core on Cloudflare and treats everything else as replaceable or
 
 ## Shared organs, separate characters
 
-| Shared physically | Separated per character |
-|---|---|
-| Cloudflare Worker | routes each request to that character's own Partner DO |
-| LLM provider | prompts, context, and conversation; no context crosses characters |
-| GPU box (`ochoko`, wol) | voice preset and realization, body state, keep-awake leases |
-| Gateway host | Discord bot identity (one bot per character) and its relay |
+Example with two characters, Yukari and Akari:
 
-- A shared organ keeps per-character state apart (e.g. keep-awake leases are held per character, so one character releasing a lease does not put the box to sleep while another is speaking).
-- Each character derives its own body state. The same GPU box can leave one character able to speak and another not (e.g. when only one character's voice preset is installed).
+| Shared physically | Yukari | Akari |
+|---|---|---|
+| Cloudflare Worker | routes to Yukari's Partner DO | routes to Akari's Partner DO |
+| LLM provider | Yukari's prompts, context, conversation | Akari's prompts, context, conversation |
+| GPU box (`ochoko`, wol) | Yukari's voice preset and realization, body state, keep-awake lease | Akari's voice preset and realization, body state, keep-awake lease |
+| Gateway host | Yukari's Discord bot and its relay | Akari's Discord bot and its relay |
+
+- Nothing Yukari says or thinks through the shared LLM provider becomes part of Akari's context or memory, and the reverse.
+- Keep-awake leases are held per character. If Yukari finishes speaking and releases her lease while Akari is still speaking, Akari's lease keeps the GPU box awake.
+- Each character derives its own body state. If only Yukari's voice preset is installed on the GPU box, Yukari can speak and Akari cannot, and Akari experiences that as her body state.
 
 ## Faculties and organs
 
