@@ -9,6 +9,20 @@ Yunomi keeps its core on Cloudflare and treats everything else as replaceable or
 3. The core defines one interface per faculty, and organs attach to it through adapters. Where an organ runs and how it is reached (external API, Cloudflare binding, the home network through the Gateway, Cloudflare Tunnel + Access) stays inside the adapter. The core never assumes a location or a transport.
 4. Relays may sit between the core and an organ (the Discord Gateway, a tunnel). They relay only; they hold no state and make no decisions.
 5. When an organ is unavailable, the core keeps running and the Partner experiences it as body state (see `body.md`).
+6. There is one core per character. Each Partner has its own Partner DO with its own heart, brain, and body. Characters share no state.
+7. Organs and relays may be shared physically but are separated logically per character. One GPU box, one LLM provider, or one Gateway host can serve several characters; each character reaches them through its own adapter settings, and nothing one character does through a shared organ becomes another character's state.
+
+## Shared organs, separate characters
+
+| Shared physically | Separated per character |
+|---|---|
+| Cloudflare Worker | routes each request to that character's own Partner DO |
+| LLM provider | prompts, context, and conversation; no context crosses characters |
+| GPU box (`ochoko`, wol) | voice preset and realization, body state, keep-awake leases |
+| Gateway host | Discord bot identity (one bot per character) and its relay |
+
+- A shared organ keeps per-character state apart (e.g. keep-awake leases are held per character, so one character releasing a lease does not put the box to sleep while another is speaking).
+- Each character derives its own body state. The same GPU box can leave one character able to speak and another not (e.g. when only one character's voice preset is installed).
 
 ## Faculties and organs
 
