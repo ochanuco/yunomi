@@ -91,6 +91,8 @@ This is a compact decision register.
 - decisions and state live only in the Cloudflare core (Worker + Partner DO); see `principles.md`
 - organs only execute and sense, attached through per-faculty interfaces and adapters; location and transport stay inside the adapter
 - relays (Gateway, tunnel) relay only
+- one core (Partner DO) per character; characters share no state
+- organs and relays may be shared physically (GPU box, LLM provider, Gateway host) but are separated logically per character
 - the core has three layers: heart (who the Partner is), brain (perceive, recall, think, decide), body (faculties and organ coordination); see `principles.md`
 - the LLM is an organ attached to the brain; replacing it must not change the heart
 - the heart applies its own rules to changes the brain proposes

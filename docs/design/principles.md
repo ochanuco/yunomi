@@ -9,6 +9,23 @@ Yunomi keeps its core on Cloudflare and treats everything else as replaceable or
 3. The core defines one interface per faculty, and organs attach to it through adapters. Where an organ runs and how it is reached (external API, Cloudflare binding, the home network through the Gateway, Cloudflare Tunnel + Access) stays inside the adapter. The core never assumes a location or a transport.
 4. Relays may sit between the core and an organ (the Discord Gateway, a tunnel). They relay only; they hold no state and make no decisions.
 5. When an organ is unavailable, the core keeps running and the Partner experiences it as body state (see `body.md`).
+6. There is one core per character. Each Partner has its own Partner DO with its own heart, brain, and body. Characters share no state.
+7. Organs and relays may be shared physically but are separated logically per character. One GPU box, one LLM provider, or one Gateway host can serve several characters; each character reaches them through its own adapter settings, and nothing one character does through a shared organ becomes another character's state.
+
+## Shared organs, separate characters
+
+Example with two characters, Yukari and Akari:
+
+| Shared physically | Yukari | Akari |
+|---|---|---|
+| Cloudflare Worker | routes to Yukari's Partner DO | routes to Akari's Partner DO |
+| LLM provider | Yukari's prompts, context, conversation | Akari's prompts, context, conversation |
+| GPU box (`ochoko`, wol) | Yukari's voice preset and realization, body state, keep-awake lease | Akari's voice preset and realization, body state, keep-awake lease |
+| Gateway host | Yukari's Discord bot and its relay | Akari's Discord bot and its relay |
+
+- Nothing Yukari says or thinks through the shared LLM provider becomes part of Akari's context or memory, and the reverse.
+- Keep-awake leases are held per character. If Yukari finishes speaking and releases her lease while Akari is still speaking, Akari's lease keeps the GPU box awake.
+- Each character derives its own body state. If only Yukari's voice preset is installed on the GPU box, Yukari can speak and Akari cannot, and Akari experiences that as her body state.
 
 ## Faculties and organs
 
