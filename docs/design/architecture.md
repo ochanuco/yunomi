@@ -2,7 +2,7 @@
 
 ## 1. System shape
 
-Yunomi is a persistent AI partner runtime.
+Yunomi is a persistent AI partner runtime. Its core (decisions and state) lives on Cloudflare; everything else attaches as a replaceable organ (see `principles.md`).
 
 ```text
                            ┌───────────────────────┐
@@ -75,7 +75,7 @@ Home runs:
 - Discord Gateway Agent
 - lightweight local MCPs/services
 - LAN integrations
-- Gateway-side speech relay: calls the A.I.VOICE organ on the GPU Box over the LAN
+- relays toward GPU Box organs where an adapter chooses the LAN path (see `principles.md`)
 - lightweight STT where useful
 - WebSocket/HTTPS client toward Yunomi
 

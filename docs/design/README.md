@@ -47,6 +47,7 @@ The MVP ships only Yukarin.
 
 ## Documents
 
+- `principles.md` — core on Cloudflare, replaceable organs, relays
 - `architecture.md` — overall architecture and boundaries
 - `mvp-scope.md` — MVP scope, first vertical slice, Done criteria
 - `domain-model.md` — core domain entities and state models
