@@ -1,6 +1,7 @@
 import {
 	PromptBuilder,
 	type TurnResponse,
+	toBodyIntent,
 	toPromptMessage,
 	turnOutput,
 } from "@yunomi/conversation";
@@ -9,6 +10,7 @@ import {
 	applyLlmSuccess,
 	applyRelationshipDelta,
 	applyStateDelta,
+	type BodyState,
 	type DomainError,
 	externalServiceUnavailable,
 	initialPartnerState,
@@ -47,6 +49,8 @@ export type TurnDeps = {
 	memory: MemoryRepo;
 	openLoops: OpenLoopRepo;
 	interestOpinion: InterestOpinionRepo;
+	/** 発声の身体の状態。声が無効な環境では unavailable。 */
+	bodyState: () => Promise<BodyState>;
 	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
 	background: (task: Promise<void>) => void;
 };
@@ -109,8 +113,14 @@ export const runTurn = async (
 		opinions: resolveOpinions(profile, []),
 	}));
 
+	// 取れなくても会話は続ける（声は使えないものとして扱う）。
+	const bodyState = await deps
+		.bodyState()
+		.catch((): BodyState => "unavailable");
+
 	const prompt = new PromptBuilder().build({
 		profile,
+		bodyState,
 		state: state0,
 		relationship: {
 			speakerName: msg.author.displayName,
@@ -372,6 +382,7 @@ export const runTurn = async (
 		occurredAt: at.toISOString(),
 	});
 	return {
+		intent: toBodyIntent(output, bodyState),
 		response: {
 			action: "reply",
 			content: utterance,

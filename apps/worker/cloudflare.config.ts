@@ -51,6 +51,14 @@ export default defineConfig(({ mode }) => {
 				// それ以外は従来どおり Gateway に reply を返す。
 				DISCORD_SEND_FROM_WORKER: bindings.text(r.discordSendFromWorker),
 				DISCORD_BOT_TOKEN: bindings.secret(),
+				// 声の添付。"1" で、OCHOKO_URL・WOL_URL と下の secret が揃っているときだけ声にする。
+				VOICE_ENABLED: bindings.text(r.voiceEnabled),
+				OCHOKO_URL: bindings.text("https://ochoko.chanu.co"),
+				WOL_URL: bindings.text("https://wol.chanu.co"),
+				// ochoko と wol の Cloudflare Access の Service Token と、ochoko の Bearer token。
+				CF_ACCESS_CLIENT_ID: bindings.secret(),
+				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
+				AIVOICE_TOKEN: bindings.secret(),
 				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。
 				SNAPSHOTS: bindings.r2({ name: r.snapshotBucket }),
 				DB: bindings.d1({
