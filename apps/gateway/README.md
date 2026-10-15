@@ -25,9 +25,10 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 ## 挙動
 
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。
-- 応答が 1.5 秒以内に返らないときだけ typing を出し、以降は 8 秒ごとに続ける。前段ルールですぐ決まる ignore では typing を出さない。
-- `reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。`ignore` は何もしない。
-- reply を送れたら `POST /v1/partners/:partnerId/discord/sent` で、応答の `partner_message_id` と送信した Discord message id を Worker に知らせる（ユーザーが Yukarin の発言に返信したとき、Worker が reply-to-partner を判定するため）。best effort で、失敗しても warn ログだけ残して処理は続ける。再送の方針は他のリクエストと同じ。
+- typing は出さない。Worker が REST で出す。
+- `ack`（Worker が送信まで済ませた）と `ignore` は何もしない。
+- Worker が `DISCORD_SEND_FROM_WORKER=1` と `DISCORD_BOT_TOKEN` の両方を持つまで、Worker は `reply` を返す。互換のため、`reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。
+- `reply` を送れたら `POST /v1/partners/:partnerId/discord/sent` で、応答の `partner_message_id` と送信した Discord message id を Worker に知らせる（ユーザーが Yukarin の発言に返信したとき、Worker が reply-to-partner を判定するため）。best effort で、失敗しても warn ログだけ残して処理は続ける。再送の方針は他のリクエストと同じ。
 - 5xx・429・ネットワークエラーは 1s / 2s / 4s のバックオフで最大 3 回試す（`retry-after` を優先）。それ以外の 4xx は再送しない。タイムアウトは 1 回 60 秒。
 - info 以上のログに token や本文は出さない（id と文字数のみ）。
 - SIGTERM / SIGINT で Discord 接続を閉じて終了する。

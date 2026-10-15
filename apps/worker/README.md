@@ -25,6 +25,8 @@
 
 `PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline` と `now` はテストが `runInDurableObject` で差し替える seam。
 
+返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev `1` / prod・local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（返信先つきのテキスト、入力中、`message_reference` つきの multipart 添付。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。`DISCORD_BOT_TOKEN` は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` には 1Password の参照が決まるまで載せない）。
+
 reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の id（`partner_message_id`、`partner:<uuid>`）を含める。Gateway が送信後に `POST /v1/partners/:partnerId/discord/sent`（body: `partner_message_id` / `channel_id` / `discord_message_id`、応答 `{ bound }`）を呼ぶと、DO はその行の `discord_message_id` に Discord id を保存する。以後 `reply_to_message_id` がその Discord id と一致する発言は、メンションなしでも Yukarin への返信として LLM 判定に進む。通知前の行や既存行は `discord_message_id` が NULL のままで、従来どおり動く。
 
 ## State / Relationship

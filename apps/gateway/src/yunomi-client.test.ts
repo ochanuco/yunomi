@@ -93,6 +93,14 @@ describe("YunomiClient.send", () => {
 		});
 	});
 
+	it("ack を返す", async () => {
+		const { client } = setup([json({ action: "ack" })]);
+		expect(await client.send(envelope)).toEqual({
+			ok: true,
+			value: { action: "ack" },
+		});
+	});
+
 	it("503 のあと成功すれば再送して 1 秒待つ", async () => {
 		const { client, fetchMock, sleep } = setup([
 			new Response("x", { status: 503 }),

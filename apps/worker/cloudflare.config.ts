@@ -47,6 +47,10 @@ export default defineConfig(({ mode }) => {
 				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
+				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
+				// それ以外は従来どおり Gateway に reply を返す。
+				DISCORD_SEND_FROM_WORKER: bindings.text(r.discordSendFromWorker),
+				DISCORD_BOT_TOKEN: bindings.secret(),
 				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。
 				SNAPSHOTS: bindings.r2({ name: r.snapshotBucket }),
 				DB: bindings.d1({
