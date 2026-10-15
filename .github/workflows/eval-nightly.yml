@@ -36,7 +36,7 @@ jobs:
       - name: tier2
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SA_DEPLOY }}
-          ANTHROPIC_API_KEY: op://yunomi-dev/anthropic-api-key/credential
+          ANTHROPIC_API_KEY: op://gh-deploy/yunomi-dev-anthropic-api-key/credential
           SAMPLES: ${{ inputs.samples || '5' }}
         run: op run -- pnpm --filter @yunomi/evals eval:tier2 --env development --samples "$SAMPLES"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
