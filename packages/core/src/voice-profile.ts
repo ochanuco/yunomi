@@ -27,18 +27,40 @@ const aivoiceMasterSchema = v.object({
 export const aivoiceRealizationSchema = v.object({
 	preset: v.pipe(v.string(), v.nonEmpty()),
 	// 感情ごとに強めるスタイル名。載っていない感情はスタイルを動かさない。
-	emotion_styles: v.partial(
-		v.object({
-			neutral: styleName,
-			joy: styleName,
-			amused: styleName,
-			anger: styleName,
-			sorrow: styleName,
-			surprised: styleName,
-		}),
+	// 空なら Styles を送らない（スタイルを持たないプリセット用）。
+	emotion_styles: v.optional(
+		v.partial(
+			v.object({
+				neutral: styleName,
+				joy: styleName,
+				amused: styleName,
+				anger: styleName,
+				sorrow: styleName,
+				surprised: styleName,
+			}),
+		),
+		{},
 	),
 	master: aivoiceMasterSchema,
 });
+
+export const aivoiceEngineSchema = v.pipe(
+	v.object({
+		// 環境が選ばなかった、または未知の名前を選んだときに使う実現方法の名前。
+		default: v.pipe(v.string(), v.nonEmpty()),
+		realizations: v.pipe(
+			v.record(v.string(), aivoiceRealizationSchema),
+			v.check((r) => Object.keys(r).length > 0, "実現方法が 1 つもない"),
+		),
+	}),
+	v.forward(
+		v.check(
+			(e) => e.default in e.realizations,
+			"default が realizations にない",
+		),
+		["default"],
+	),
+);
 
 export const voiceProfileSchema = v.object({
 	traits: v.object({
@@ -49,9 +71,10 @@ export const voiceProfileSchema = v.object({
 		expressiveness: unit,
 	}),
 	engines: v.object({
-		aivoice: v.optional(aivoiceRealizationSchema),
+		aivoice: v.optional(aivoiceEngineSchema),
 	}),
 });
 
 export type AivoiceRealization = v.InferOutput<typeof aivoiceRealizationSchema>;
+export type AivoiceEngine = v.InferOutput<typeof aivoiceEngineSchema>;
 export type VoiceProfile = v.InferOutput<typeof voiceProfileSchema>;

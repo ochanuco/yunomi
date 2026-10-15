@@ -142,22 +142,40 @@ export const yukarinProfile: PartnerProfile = {
 		},
 		"engines": {
 			"aivoice": {
-				"preset": "結月 ゆかり",
-				"emotion_styles": {
-					"joy": "J",
-					"amused": "J",
-					"anger": "A",
-					"sorrow": "S",
-					"surprised": "J"
-				},
-				"master": {
-					"volume": 1,
-					"speed": 1,
-					"pitch": 1,
-					"pitch_range": 1,
-					"middle_pause_ms": 150,
-					"long_pause_ms": 370,
-					"sentence_pause_ms": 800
+				"default": "yukari",
+				"realizations": {
+					"yukari": {
+						"preset": "結月 ゆかり",
+						"emotion_styles": {
+							"joy": "J",
+							"amused": "J",
+							"anger": "A",
+							"sorrow": "S",
+							"surprised": "J"
+						},
+						"master": {
+							"volume": 1,
+							"speed": 1,
+							"pitch": 1,
+							"pitch_range": 1,
+							"middle_pause_ms": 150,
+							"long_pause_ms": 370,
+							"sentence_pause_ms": 800
+						}
+					},
+					"shizuku": {
+						"preset": "結月 ゆかり（雫）",
+						"emotion_styles": {},
+						"master": {
+							"volume": 1,
+							"speed": 1,
+							"pitch": 1,
+							"pitch_range": 1,
+							"middle_pause_ms": 150,
+							"long_pause_ms": 370,
+							"sentence_pause_ms": 800
+						}
+					}
 				}
 			}
 		}
@@ -169,4 +187,4 @@ export const yukarinProfile: PartnerProfile = {
 	}
 };
 
-export const profileVersion = "7a4e2bb130a6";
+export const profileVersion = "f217ddd4950c";

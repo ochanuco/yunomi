@@ -111,6 +111,8 @@ Lives with the character in `partners/yukarin`.
 
 - engine-independent traits: baseline pace/pitch, how readily emotions show
 - per-engine realization: for A.I.VOICE, which preset, how emotions map to the preset's style values, master values
+- an engine can hold several named realizations plus a default; a preset without styles (e.g. the 雫 preset) sends no `Styles`
+- the environment only selects a realization by name (`VOICE_REALIZATION`: production `yukari`, development `shizuku`); an unknown name falls back to the default with a warning
 - adding an engine = adding a realization
 
 ### Organ (`ochanuco/ochoko`)

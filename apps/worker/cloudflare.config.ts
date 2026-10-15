@@ -53,6 +53,8 @@ export default defineConfig(({ mode }) => {
 				DISCORD_BOT_TOKEN: bindings.secret(),
 				// 声の添付。"1" で、OCHOKO_URL・WOL_URL と下の secret が揃っているときだけ声にする。
 				VOICE_ENABLED: bindings.text(r.voiceEnabled),
+				// 声のプロファイルのうち、この環境が使う A.I.VOICE の実現方法の名前。
+				VOICE_REALIZATION: bindings.text(r.voiceRealization),
 				OCHOKO_URL: bindings.text("https://ochoko.chanu.co"),
 				WOL_URL: bindings.text("https://wol.chanu.co"),
 				// ochoko と wol の Cloudflare Access の Service Token と、ochoko の Bearer token。
