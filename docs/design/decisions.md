@@ -84,13 +84,20 @@ This is a compact decision register.
 - STT abstraction
 - A.I.VOICE via MCP
 - semantic prosody IR before vendor parameters
-- speech instructions reach the Gateway in the Worker's response to its event request; the LLM does not call TTS as a tool
+- speaking is decided in the core and carried out through the speech organ; the LLM does not call TTS as a tool
+
+## Core and organs
+
+- decisions and state live only in the Cloudflare core (Worker + Partner DO); see `principles.md`
+- organs only execute and sense, attached through per-faculty interfaces and adapters; location and transport stay inside the adapter
+- relays (Gateway, tunnel) relay only
+- the LLM is an organ that assists the mind; replacing it must not change the Partner
 
 ## Body
 
 - the Partner has a body with faculties: speech, hearing, Discord behavior; only speech is implemented now
-- layers: mind (Worker/LLM, semantic IR) -> body (`packages/core`, IR to engine instructions) -> organ (external MCP)
-- the Gateway relays instructions and audio and reports body state to the Worker
+- layers: mind (core: persona, memory, state; LLM assists) -> body (core, `packages/core`, IR to engine instructions) -> organ (anywhere)
+- the core derives body state from organ availability
 - the Partner knows its body state and adapts (e.g. replies in text when it cannot speak)
 
 ## Voice profile
@@ -103,7 +110,7 @@ This is a compact decision register.
 
 - A.I.VOICE organ is `ochanuco/ochoko`: a thin C# MCP server (text + A.I.VOICE values -> WAV), no IR, no character knowledge
 - runs on the GPU box (Windows + COM); `aivoice -> gpu-box`
-- Gateway calls it over the LAN; GPU box is woken via WOL and kept awake by a lease while speaking
+- the core reaches it through a relay (the Gateway on the LAN, or Cloudflare Tunnel + Access; an adapter choice); the GPU box is woken via WOL and kept awake by a lease while speaking
 - node offline policy for aivoice: `fail`
 - deployed via chabatake's GPU-box app deployer; the organ repo owns no runner
 

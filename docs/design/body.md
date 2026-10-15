@@ -11,20 +11,21 @@ The Partner has a body: the faculties through which the character acts in the wo
 ## Layers
 
 ```text
-mind   (Worker / LLM)
-  decides what to say and how:
+mind   (core: Partner DO)
+  persona, memory, state; decides what to say and how:
   semantic performance IR per segment (emotion, energy, pace, warmth, pauses)
+  the LLM is an organ that assists its thinking
         │
-body   (Worker / Partner DO, logic in packages/core)
+body   (core: Partner DO, logic in packages/core)
   turns IR into engine-specific instructions using the character's voice profile
         │
-organ  (external MCP server on the GPU box)
+organ  (anywhere; e.g. ochoko on the GPU box)
   executes the instructions (text + engine values -> WAV)
 ```
 
-The Gateway is the nerve: it relays the body's engine-specific instructions from the Worker to the organ and audio back toward Discord and the Worker. It does no mapping of its own.
+Relays (the Gateway, a tunnel) may carry instructions and results between the core and an organ. They relay only and do no mapping. See `principles.md`.
 
-- The LLM does not call TTS as a tool. Speech instructions are returned in the Worker's response to the Gateway's event request.
+- The LLM does not call TTS as a tool. Speaking is a decision of the core, carried out through the speech organ.
 - The mind never emits engine-specific parameters.
 - The body owns the IR -> engine mapping; the organ has no character knowledge.
 
@@ -33,7 +34,7 @@ The Gateway is the nerve: it relays the body's engine-specific instructions from
 The Partner knows the state of its body and behaves accordingly.
 
 - states: can speak / asleep / waking / unavailable
-- the Gateway reports body state to the Worker
+- the core derives body state from each organ's availability, however the organ is reached
 - example: when the character cannot speak, it replies in text and does not offer to join a VC
 
 ## Scope

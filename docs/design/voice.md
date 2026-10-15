@@ -122,33 +122,31 @@ Separate public repo, "Voice MCP for yunomi".
 - further engines get their own organ inside `ochoko`
 - the tool interface is defined in the `ochoko` repo
 - runs on the GPU box because A.I.VOICE requires Windows + COM
-- listens on LAN `:8190`; Bearer token auth, with separate tokens for dev and prod Gateways
-- Gateway env vars: `AIVOICE_URL`, `AIVOICE_TOKEN`, `WOL_URL`
+- listens on LAN `:8190`; Bearer token auth, with separate tokens for dev and prod callers
 - deployed via chabatake's GPU-box app deployer (Release -> chabatake deployer -> non-elevated apps runner on the GPU box); the organ repo owns no runner
 
 ### Call path
 
-The Worker cannot reach home directly.
-
 ```text
-Gateway -- event request --> Worker
-Worker: body maps IR segments to A.I.VOICE values
-Gateway <-- speech instructions (text + A.I.VOICE values) -- Worker
-Gateway -- LAN, MCP --> organ (GPU box)
-Gateway <-- WAV -- organ
+core (Partner DO): the mind decides to speak; the body maps IR to A.I.VOICE values
+core -- speech interface --> ochoko adapter -- relay --> ochoko (GPU box)
+core <-- WAV
+core: delivers the audio through the communication organ (Discord)
 ```
+
+The Worker cannot reach the home network directly, so the adapter goes through a relay: the Gateway on the LAN, or Cloudflare Tunnel + Access. Which one is an adapter choice (`principles.md`); the core does not depend on it.
 
 ### GPU box power
 
-- the Gateway wakes the GPU box (WOL via `WOL_URL`) when the character decides to join a VC
-- while speaking or in VC, the Gateway renews a keep-awake lease on the organ; the organ holds a Windows power request so the box does not sleep
+- the core wakes the GPU box through wol when the character decides to speak and the box is asleep; wol is reached the same way as the organ
+- while speaking or in VC, the core renews a keep-awake lease on the organ; the organ holds a Windows power request so the box does not sleep
 - if the box is unreachable, the Partner's body state is not "can speak" and it behaves accordingly (offline policy `fail`)
 
 ### Outputs
 
 - Discord VC playback
 - voice attachment in text channels; the character decides whether to attach
-- Admin replays past utterances stored in R2 (the Gateway uploads the WAV via the Worker); Admin does not synthesize arbitrary text
+- Admin replays past utterances stored in R2; Admin does not synthesize arbitrary text
 
 ### VC entry
 
