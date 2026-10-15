@@ -43,7 +43,7 @@ Example mapping:
 
 ```text
 discord.gateway -> home
-aivoice         -> home
+aivoice         -> gpu-box
 lan.control     -> home
 comfyui         -> gpu-box
 stt.gpu         -> gpu-box
@@ -58,7 +58,7 @@ Per capability:
 - `defer`
 
 Examples:
-- A.I.VOICE: likely fail
+- A.I.VOICE: `fail`; the Partner knows it cannot speak (see `body.md`)
 - ComfyUI: may defer
 - Discord Gateway: unavailable if Home is down
 
@@ -72,18 +72,22 @@ Fields:
 
 ## Home Node
 
+The Linux Docker host (`docker01`) at home.
+
 Potential capabilities:
 
 - Discord Gateway
-- A.I.VOICE
 - LAN controls
 - lightweight STT
 - local utility MCPs
 
 ## GPU Box
 
+Windows machine. It sleeps when idle and is woken via wake-on-LAN (wol service).
+
 Potential capabilities:
 
+- A.I.VOICE organ (`ochoko`; requires Windows + COM, see `voice.md`)
 - ComfyUI
 - GPU STT
 - local LLM

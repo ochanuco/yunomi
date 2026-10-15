@@ -75,7 +75,7 @@ Home runs:
 - Discord Gateway Agent
 - lightweight local MCPs/services
 - LAN integrations
-- future A.I.VOICE MCP if appropriate
+- Gateway-side speech relay: calls the A.I.VOICE organ on the GPU Box over the LAN
 - lightweight STT where useful
 - WebSocket/HTTPS client toward Yunomi
 
@@ -83,8 +83,11 @@ Home runs:
 
 Dedicated for GPU-required workloads.
 
+Windows machine that sleeps when idle and is woken via wake-on-LAN.
+
 Examples:
 
+- A.I.VOICE organ (`ochoko`)
 - ComfyUI
 - heavy/local STT
 - local LLM
@@ -248,7 +251,7 @@ External abilities are not embedded directly in Partner logic.
 
 Examples:
 
-- A.I.VOICE
+- A.I.VOICE (speech organ; see `body.md`)
 - Calendar
 - GitHub
 - Home Assistant
@@ -276,3 +279,5 @@ Discord-specific state may include:
 - bot notification events
 
 Externally, Yukarin should feel like a participant in Discord, not a command-driven assistant.
+
+Discord behavior is one faculty of the Partner's body (see `body.md`).

@@ -1,6 +1,6 @@
 # Voice Architecture (Post-MVP)
 
-Voice is not part of the first vertical slice.
+Voice is not part of the first vertical slice. Speech and hearing are faculties of the Partner's body (see `body.md`). Speech is implemented first; hearing is designed here but not implemented.
 
 Interfaces should be defined early:
 - AudioInput
@@ -16,9 +16,12 @@ Discord VC audio
 → STT
 → Yunomi conversation core
 → structured response + semantic performance
-→ A.I.VOICE MCP
+→ body: IR to A.I.VOICE values (voice profile)
+→ A.I.VOICE organ (ochoko, GPU box)
 → Discord VC output
 ```
+
+Until hearing exists, only the output half applies: users talk to the Partner through the VC's text chat, and the Partner knows it cannot hear.
 
 ## VAD
 
@@ -84,11 +87,11 @@ Possible behavior:
 
 ## A.I.VOICE
 
-A.I.VOICE is an external capability via MCP.
+Current engine: A.I.VOICE (1) only. Its Editor API is the only one usable programmatically.
 
 Do not let the LLM emit raw vendor-specific voice parameters as the primary semantic interface.
 
-Use semantic performance/prosody IR first.
+The mind emits a semantic performance/prosody IR.
 
 Example:
 
@@ -100,9 +103,56 @@ warmth: 0.8
 pause_before_ms: 120
 ```
 
-Then map into A.I.VOICE parameters.
+The body maps the IR to A.I.VOICE values using the voice profile. This makes the engine replaceable.
 
-This makes voice backend replaceable.
+### Voice profile
+
+Lives with the character in `partners/yukarin`.
+
+- engine-independent traits: baseline pace/pitch, how readily emotions show
+- per-engine realization: for A.I.VOICE, which preset, how emotions map to the preset's style values, master values
+- adding an engine = adding a realization
+
+### Organ (`ochanuco/ochoko`)
+
+Separate public repo, "Voice MCP for yunomi".
+
+- thin C# MCP server: receives text plus A.I.VOICE-specific values, returns WAV
+- no IR, no character knowledge
+- further engines get their own organ inside `ochoko`
+- the tool interface is defined in the `ochoko` repo
+- runs on the GPU box because A.I.VOICE requires Windows + COM
+- listens on LAN `:8190`; Bearer token auth, with separate tokens for dev and prod Gateways
+- Gateway env vars: `AIVOICE_URL`, `AIVOICE_TOKEN`, `WOL_URL`
+- deployed via chabatake's GPU-box app deployer (Release -> chabatake deployer -> non-elevated apps runner on the GPU box); the organ repo owns no runner
+
+### Call path
+
+The Worker cannot reach home directly.
+
+```text
+Gateway -- event request --> Worker
+Worker: body maps IR segments to A.I.VOICE values
+Gateway <-- speech instructions (text + A.I.VOICE values) -- Worker
+Gateway -- LAN, MCP --> organ (GPU box)
+Gateway <-- WAV -- organ
+```
+
+### GPU box power
+
+- the Gateway wakes the GPU box (WOL via `WOL_URL`) when the character decides to join a VC
+- while speaking or in VC, the Gateway renews a keep-awake lease on the organ; the organ holds a Windows power request so the box does not sleep
+- if the box is unreachable, the Partner's body state is not "can speak" and it behaves accordingly (offline policy `fail`)
+
+### Outputs
+
+- Discord VC playback
+- voice attachment in text channels; the character decides whether to attach
+- Admin replays past utterances stored in R2 (the Gateway uploads the WAV via the Worker); Admin does not synthesize arbitrary text
+
+### VC entry
+
+When invited, the character decides whether to join.
 
 ## Performance segmentation
 

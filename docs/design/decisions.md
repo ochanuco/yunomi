@@ -84,6 +84,28 @@ This is a compact decision register.
 - STT abstraction
 - A.I.VOICE via MCP
 - semantic prosody IR before vendor parameters
+- speech instructions reach the Gateway in the Worker's response to its event request; the LLM does not call TTS as a tool
+
+## Body
+
+- the Partner has a body with faculties: speech, hearing, Discord behavior; only speech is implemented now
+- layers: mind (Worker/LLM, semantic IR) -> body (`packages/core`, IR to engine instructions) -> organ (external MCP)
+- the Gateway relays instructions and audio and reports body state to the Worker
+- the Partner knows its body state and adapts (e.g. replies in text when it cannot speak)
+
+## Voice profile
+
+- lives with the character in `partners/yukarin`
+- engine-independent traits plus a per-engine realization; a new engine adds a realization
+- current engine: A.I.VOICE only
+
+## Organ
+
+- A.I.VOICE organ is `ochanuco/ochoko`: a thin C# MCP server (text + A.I.VOICE values -> WAV), no IR, no character knowledge
+- runs on the GPU box (Windows + COM); `aivoice -> gpu-box`
+- Gateway calls it over the LAN; GPU box is woken via WOL and kept awake by a lease while speaking
+- node offline policy for aivoice: `fail`
+- deployed via chabatake's GPU-box app deployer; the organ repo owns no runner
 
 ## Cloud
 

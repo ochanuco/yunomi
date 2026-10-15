@@ -53,7 +53,8 @@ The MVP ships only Yukarin.
 - `memory.md` — memory, retrieval, summarization, snapshots
 - `persona.md` — Yukarin persona design and evolution rules
 - `discord.md` — Discord text/voice behavior and presence
-- `voice.md` — future voice architecture
+- `body.md` — Partner body, faculties, mind/body/organ layers
+- `voice.md` — voice architecture (speech, hearing, A.I.VOICE organ)
 - `capabilities.md` — MCP, Home Node, GPU Box, capability routing
 - `infrastructure.md` — Cloudflare/GCP/home infrastructure responsibilities
 - `events.md` — event model, queues, async processing
