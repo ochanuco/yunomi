@@ -11,22 +11,26 @@ The Partner has a body: the faculties through which the character acts in the wo
 ## Layers
 
 ```text
-mind   (core: Partner DO)
-  persona, memory, state; decides what to say and how:
-  semantic performance IR per segment (emotion, energy, pace, warmth, pauses)
-  the LLM is an organ that assists its thinking
-        │
-body   (core: Partner DO, logic in packages/core)
+heart  (core)
+  persona, values, emotion, relationships, memory contents
+        ▲ reads / proposes changes (the heart decides whether to accept)
+brain  (core)
+  perceives, recalls, thinks (the LLM is its organ), decides
+  intent: what to say, semantic performance IR per segment
+  (emotion, energy, pace, warmth, pauses), by voice or not
+        │ intent                ▲ body state, perceptions
+body   (core, logic in packages/core)
   turns IR into engine-specific instructions using the character's voice profile
+  coordinates organs (wake, wait, deliver) and keeps body state
         │
 organ  (anywhere; e.g. ochoko on the GPU box)
   executes the instructions (text + engine values -> WAV)
 ```
 
-Relays (the Gateway, a tunnel) may carry instructions and results between the core and an organ. They relay only and do no mapping. See `principles.md`.
+The three core layers are defined in `principles.md`. Relays (the Gateway, a tunnel) may carry instructions and results between the core and an organ. They relay only and do no mapping.
 
 - The LLM does not call TTS as a tool. Speaking is a decision of the core, carried out through the speech organ.
-- The mind never emits engine-specific parameters.
+- The brain never emits engine-specific parameters.
 - The body owns the IR -> engine mapping; the organ has no character knowledge.
 
 ## Body state
