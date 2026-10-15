@@ -18,10 +18,13 @@ import {
 	mention,
 	newScenario,
 	send,
-	T0,
 	turn,
 } from "./e2e/harness.ts";
 import { PARTNER_ID, partnerStub } from "./helpers.ts";
+
+// DO の alarm は実時刻で発火する。過去の時刻に予約すると即座に自走し、
+// テストが runAlarm で進める前に pending と alarm を消すので、実時刻より先に置く。
+const CLOCK0 = new Date("2100-01-01T00:00:00Z");
 
 type Availability = "ready" | "asleep" | "waking" | "unreachable";
 
@@ -61,7 +64,7 @@ const fakeOrgans = (state: { availability: Availability }) => {
 const install = (
 	port: CommunicationPort | null,
 	organs: VoiceOrgans | null,
-	now: Date = T0,
+	now: Date = CLOCK0,
 ) =>
 	runInDurableObject(partnerStub(PARTNER_ID), (o) => {
 		o.createCommunication = () => port;
@@ -197,11 +200,11 @@ describe("声の添付", () => {
 		expect(alarm).not.toBeNull();
 
 		state.availability = "waking";
-		await runAlarm(new Date(T0.getTime() + VOICE_POLL_MS));
+		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS));
 		expect(port.sendAttachment).not.toHaveBeenCalled();
 
 		state.availability = "ready";
-		await runAlarm(new Date(T0.getTime() + VOICE_POLL_MS * 2));
+		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS * 2));
 		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -210,7 +213,7 @@ describe("声の添付", () => {
 			}),
 		);
 
-		await runAlarm(new Date(T0.getTime() + VOICE_POLL_MS * 3));
+		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS * 3));
 		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
 	});
 
@@ -224,7 +227,7 @@ describe("声の添付", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 
 		await send(mention(s));
-		const late = new Date(T0.getTime() + VOICE_DEADLINE_MS);
+		const late = new Date(CLOCK0.getTime() + VOICE_DEADLINE_MS);
 		await runAlarm(late);
 
 		expect(port.sendText).toHaveBeenCalledTimes(1);
