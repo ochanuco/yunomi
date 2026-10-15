@@ -93,6 +93,29 @@ initial_state:
 initial_relationship:
   familiarity: 0.1
   trust: 0.3
+voice:
+  traits:
+    base_pace: 1
+    base_pitch: 1
+    expressiveness: 0.7
+  engines:
+    aivoice:
+      preset: 結月 ゆかり
+      # J/A/S は emo 系の声が持つ喜び・怒り・哀しみのスタイル。
+      emotion_styles:
+        joy: J
+        amused: J
+        surprised: J
+        anger: A
+        sorrow: S
+      master:
+        volume: 1
+        speed: 1
+        pitch: 1
+        pitch_range: 1
+        middle_pause_ms: 150
+        long_pause_ms: 370
+        sentence_pause_ms: 800
 capability_defaults:
   web_search: confirm
   file_write: deny
