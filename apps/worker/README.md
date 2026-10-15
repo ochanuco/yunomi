@@ -136,11 +136,11 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 
 ## デプロイ（prod）
 
-`.github/workflows/deploy.yml` は `workflow_dispatch` のみ（main への merge では動かない）。入力 `ref`（既定 `main`）は main か main 上のコミット SHA に限り、それ以外は失敗する。共有 workflow（`ochanuco/.github` の `deploy.yml`）を `apps/worker` で呼び、`op run` 経由で `scripts/deploy.sh production` を実行する。typecheck / test は走らせない（main は `CI` を通っている前提）。production の D1 migration はデプロイでは適用しないので、migration を含む PR ごとに手で `cf d1 migrations apply` を実行する。
+`.github/workflows/deploy.yml` は main への push で動く。承認が要るのは、前回の記録がない・ロールバック・`apps/worker/migrations/` の変更を含むときだけで、Environment `production-approval` で止まる。何が出るかと承認の要否は、run の `plan` ジョブの Job Summary に出る。手動実行（入力 `ref`、既定 `main`）はロールバック用で、main か main 上のコミット SHA に限る。共有 workflow（`ochanuco/.github` の `deploy.yml`）を `apps/worker` で呼び、`op run` 経由で `scripts/deploy.sh production` を実行する。typecheck / test は走らせない（main は `CI` を通っている前提）。production の D1 migration はデプロイでは適用しないので、migration を含む PR ごとに手で `cf d1 migrations apply` を実行する。
 
 #### 事前に人手で用意するもの
 
-- GitHub Environment `production`: Required reviewers を設定する（承認は GitHub の設定側で強制され、workflow には書けない）。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用。Environment は chabatake が作る）
+- GitHub Environment `production`（承認なし）と `production-approval`（Required reviewers だけを持ち、secret は持たない）。どちらも chabatake が作る。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用。Environment は chabatake が作る）
 - 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token、全 repo で共用）と `yunomi-anthropic-api-key`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
 - R2 bucket `yunomi-snapshots` を作る
@@ -154,4 +154,4 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 - Anthropic API key: 別 key（既定モデルは prod が Sonnet）
 - Cloudflare Access: app・AUD・service token を別にする（`cloudflare.config.ts` の `ACCESS_AUD_*` / `ACCESS_CALLERS_*`）。dev の token で prod に入れない
 - 1Password: vault `yunomi-dev` / `gh-deploy`（prod は ochanuco の repo 共用）、Service Account も別
-- GitHub Environment: `dev`（承認なし）/ `production`（承認必須）
+- GitHub Environment: `dev`（承認なし）/ `production`（承認なし）/ `production-approval`（承認必須。plan が危ないと判定したときだけ使う）
