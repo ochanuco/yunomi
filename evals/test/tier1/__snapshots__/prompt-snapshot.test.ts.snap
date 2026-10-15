@@ -64,6 +64,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
+        "## 身体の状態",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
         "## このターンの指示",
       ],
     },
@@ -136,6 +142,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
       "cache": false,
       "headers": [
         "## チャンネル・在席",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 身体の状態",
       ],
     },
     {

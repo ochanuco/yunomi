@@ -56,6 +56,7 @@ export const profile: PartnerProfile = {
 export const baseInput = (): PromptInput => ({
 	profile,
 	jokeStatus: { "joke-b": "cooling_down" },
+	bodyState: "can_speak",
 	state: { mood: 0.25, energy: 0.5 },
 	relationship: { speakerName: "alice", familiarity: 0.4, trust: 0.35 },
 	memory: [

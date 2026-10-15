@@ -1,6 +1,11 @@
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
-import { turnOutput, turnResponseSchema } from "./turn-response.ts";
+import {
+	type TurnResponse,
+	toBodyIntent,
+	turnOutput,
+	turnResponseSchema,
+} from "./turn-response.ts";
 
 const valid = () => ({
 	utterance: "こんにちは",
@@ -38,6 +43,14 @@ const valid = () => ({
 		},
 	],
 	resolved_open_loop_ids: ["01900000-0000-7000-8000-000000000000"],
+	performance: {
+		emotion: "joy",
+		energy: 0.6,
+		pace: "slightly_fast",
+		warmth: 0.8,
+		pause_before_ms: 120,
+	},
+	speak_aloud: true,
 	tool_intents: [],
 	needs_review: false,
 });
@@ -127,6 +140,25 @@ describe("turnResponseSchema", () => {
 		).toBe(false);
 	});
 
+	it("performance は列挙値と範囲を検証し、speak_aloud は必須", () => {
+		const perf = (over: object = {}) => ({ ...valid().performance, ...over });
+		expect(ok({ ...valid(), performance: perf({ emotion: "calm" }) })).toBe(
+			false,
+		);
+		expect(ok({ ...valid(), performance: perf({ pace: "medium" }) })).toBe(
+			false,
+		);
+		expect(ok({ ...valid(), performance: perf({ energy: 1.2 }) })).toBe(false);
+		expect(ok({ ...valid(), performance: perf({ warmth: -0.1 }) })).toBe(false);
+		expect(ok({ ...valid(), performance: perf({ pause_before_ms: -1 }) })).toBe(
+			false,
+		);
+		const { speak_aloud: _, ...noSpeak } = valid();
+		expect(ok(noSpeak)).toBe(false);
+		const { performance: __, ...noPerf } = valid();
+		expect(ok(noPerf)).toBe(false);
+	});
+
 	it("JSON Schema は structured outputs の要件を満たす", () => {
 		const walk = (n: unknown): void => {
 			if (Array.isArray(n)) {
@@ -145,6 +177,40 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(12);
+		).toHaveLength(14);
+	});
+});
+
+describe("toBodyIntent", () => {
+	const res = (over: Partial<TurnResponse> = {}) =>
+		({ ...valid(), ...over }) as TurnResponse;
+
+	it("声で返す応答は speakAloud: true の意図になる", () => {
+		expect(toBodyIntent(res(), "can_speak")).toEqual({
+			text: "こんにちは",
+			performance: valid().performance,
+			speakAloud: true,
+		});
+		expect(toBodyIntent(res(), "asleep")?.speakAloud).toBe(true);
+		expect(toBodyIntent(res(), "waking")?.speakAloud).toBe(true);
+	});
+
+	it("声で返さない応答は speakAloud: false の意図になる", () => {
+		expect(toBodyIntent(res({ speak_aloud: false }), "can_speak")).toEqual({
+			text: "こんにちは",
+			performance: valid().performance,
+			speakAloud: false,
+		});
+	});
+
+	it("身体が声を出せないときは、モデルが声を選んでも声にしない", () => {
+		expect(toBodyIntent(res(), "unavailable")?.speakAloud).toBe(false);
+	});
+
+	it("ignore と空の発言は意図にしない", () => {
+		expect(
+			toBodyIntent(res({ reply_policy: "ignore", utterance: "" }), "can_speak"),
+		).toBeUndefined();
+		expect(toBodyIntent(res({ utterance: "" }), "can_speak")).toBeUndefined();
 	});
 });

@@ -1,4 +1,5 @@
 import {
+	type BodyState,
 	formatJst,
 	INTEREST_PROMPT_LIMIT,
 	OPEN_LOOP_PROMPT_LIMIT,
@@ -53,6 +54,8 @@ export type PromptInput = {
 	interests: InterestLine[];
 	/** 現在の Opinion。先頭から OPINION_PROMPT_LIMIT 件だけ使う。 */
 	opinions: OpinionLine[];
+	/** 身体の状態。未指定は unavailable（声を使えない）として扱う。 */
+	bodyState?: BodyState;
 	/** 相手の「明日」などを日時に直す基準。 */
 	now: Date;
 	channel: { name: string | null; presence: string | null };
@@ -204,6 +207,23 @@ const channelBlock = (c: PromptInput["channel"]): string =>
 		`- 在席状況: ${c.presence ?? "不明"}`,
 	].join("\n");
 
+const BODY_STATE_LINES: Record<BodyState, string> = {
+	can_speak: "声を出せる。",
+	asleep:
+		"声を出す器官が眠っている。声で返すことはできるが、起こすので届くまでに時間がかかる。",
+	waking:
+		"声を出す器官が起きかけている。声で返すことはできるが、届くまで少し待つ。",
+	unavailable:
+		"今は声を出せない。声で返すことを選ばず、テキストで返す。声での参加や通話への誘いも申し出ない。",
+};
+
+const bodyBlock = (state: BodyState): string =>
+	[
+		"## 身体の状態",
+		`- 声: ${BODY_STATE_LINES[state]}`,
+		"- 聞くことはできない。相手の声は聞こえず、テキストだけを読んでいる。",
+	].join("\n");
+
 const TASK_BLOCK = [
 	"## このターンの指示",
 	"直近のチャンネルログと新着メッセージを読み、応答するか黙るかを決めて、指定のスキーマで出力する。",
@@ -225,6 +245,8 @@ const TASK_BLOCK = [
 	"- open_loops には、相手自身の予定・結果待ち・困りごとの続きなど、あとで聞き返したくなる未解決の話題だけを入れる（最大 2 件、なければ空配列）。雑談の相槌、一般論、すでに終わった話は入れない。「未解決の話題」にある内容は重複して入れない。",
 	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601（タイムゾーン付き）で書く。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
 	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
+	"- performance は utterance をどう言うかの指示で、ignore でも埋める。emotion は neutral / joy / amused / anger / sorrow / surprised から、今のあなたの気持ちと発言の内容に合うものを選ぶ。energy（0 〜 1）は声の張り、warmth（0 〜 1）は相手への温かさ。pace は slow / slightly_slow / normal / slightly_fast / fast から選ぶ。pause_before_ms は話し出す前の間（ミリ秒、0 〜 5000）で、普段は 0 のままにし、ためらいや間を置きたいときだけ増やす。声の高さや速さの数値、特定のエンジンの設定は出さない。",
+	"- speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。迷えば false にする。",
 	"- 迷う内容は needs_review を true にする。",
 	"- utterance は 2000 文字以内。",
 ].join("\n");
@@ -256,6 +278,7 @@ export class PromptBuilder {
 		const state = stateBlock(input.state);
 		const relationship = relationshipBlock(input.relationship);
 		const channel = channelBlock(input.channel);
+		const body = bodyBlock(input.bodyState ?? "unavailable");
 		const interest = interestBlock(
 			input.interests.slice(0, INTEREST_PROMPT_LIMIT),
 		);
@@ -280,6 +303,7 @@ export class PromptBuilder {
 			estimateTokens(interest) +
 			estimateTokens(opinion) +
 			estimateTokens(channel) +
+			estimateTokens(body) +
 			estimateTokens(openLoop) +
 			estimateTokens(TASK_BLOCK);
 		const total = () =>
@@ -309,6 +333,7 @@ export class PromptBuilder {
 				{ text: memoryBlock(memory), cache: false },
 				{ text: openLoop, cache: false },
 				{ text: channel, cache: false },
+				{ text: body, cache: false },
 				{ text: TASK_BLOCK, cache: false },
 			],
 			messages: [{ role: "user", content: renderUserTurn(recent, newMessage) }],
