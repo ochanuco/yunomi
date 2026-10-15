@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { partnerProfileSchema } from "@yunomi/core";
+import { partnerProfileSchema, toAivoiceValues } from "@yunomi/core";
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 import {
@@ -20,6 +20,27 @@ describe("yukarin profile", () => {
 			true,
 		);
 		expect(yukarinProfile.partner_id).toBe("yukarin");
+	});
+
+	it("声の性質が A.I.VOICE の実現方法を持ち、値に変換できる", () => {
+		const voice = yukarinProfile.voice;
+		expect(voice?.engines.aivoice?.preset).toBe("結月 ゆかり");
+		if (!voice) throw new Error("voice がない");
+		const values = toAivoiceValues(
+			{
+				emotion: "joy",
+				energy: 0.8,
+				pace: "normal",
+				warmth: 0.5,
+				pause_before_ms: 0,
+			},
+			voice,
+		);
+		expect(values?.presetOverrides.Styles.map((s) => s.Name).sort()).toEqual([
+			"A",
+			"J",
+			"S",
+		]);
 	});
 
 	it("版数は内容が変わると変わり、同じ内容なら変わらない", () => {

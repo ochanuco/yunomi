@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { voiceProfileSchema } from "./voice-profile.ts";
 
 const unit = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 const signed = v.pipe(v.number(), v.minValue(-1), v.maxValue(1));
@@ -55,6 +56,7 @@ export const partnerProfileSchema = v.object({
 	initial_state: v.object({ mood: signed, energy: unit }),
 	initial_relationship: v.object({ familiarity: unit, trust: unit }),
 	capability_defaults: v.record(v.string(), capabilityModeSchema),
+	voice: v.optional(voiceProfileSchema),
 	identity: v.object({
 		official: v.string(),
 		fanon: v.string(),
