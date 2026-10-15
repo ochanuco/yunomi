@@ -159,7 +159,7 @@ export class VoiceBody {
 			data: synthesized.value.audio,
 		});
 		if (!sent.ok) {
-			console.warn("voice attach failed", sent.error.type);
+			console.warn("voice attach failed", sent.error.type, sent.error.message);
 			return "dropped";
 		}
 		return "sent";
