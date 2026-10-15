@@ -1,10 +1,6 @@
 import { err, ok } from "@yunomi/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-	createMessageHandler,
-	TYPING_DELAY_MS,
-	TYPING_INTERVAL_MS,
-} from "./handler.ts";
+import { describe, expect, it, vi } from "vitest";
+import { createMessageHandler } from "./handler.ts";
 import { silentLogger } from "./logger.ts";
 import type { MessageLike } from "./to-envelope.ts";
 
@@ -23,7 +19,6 @@ const message: MessageLike = {
 
 const setup = (send: (e: unknown) => Promise<unknown>) => {
 	const channel = {
-		sendTyping: vi.fn(async () => {}),
 		send: vi.fn(async (_o: unknown) => ({ id: "500" })),
 	};
 	const client = {
@@ -41,8 +36,6 @@ const setup = (send: (e: unknown) => Promise<unknown>) => {
 	});
 	return { channel, client, handle, logger };
 };
-
-afterEach(() => vi.useRealTimers());
 
 describe("createMessageHandler", () => {
 	it("reply は allowedMentions parse=[] と返信先つきで送る", async () => {
@@ -125,11 +118,13 @@ describe("createMessageHandler", () => {
 		expect(client.notifySent).not.toHaveBeenCalled();
 	});
 
-	it("すぐ返る ignore は何も送らず、typing も出さない", async () => {
-		const { channel, handle } = setup(async () => ok({ action: "ignore" }));
-		await handle(message, channel);
-		expect(channel.send).not.toHaveBeenCalled();
-		expect(channel.sendTyping).not.toHaveBeenCalled();
+	it("ignore と ack は何も送らず、通知もしない", async () => {
+		for (const action of ["ignore", "ack"]) {
+			const { channel, client, handle } = setup(async () => ok({ action }));
+			await handle(message, channel);
+			expect(channel.send).not.toHaveBeenCalled();
+			expect(client.notifySent).not.toHaveBeenCalled();
+		}
 	});
 
 	it("失敗しても何も送らない", async () => {
@@ -138,28 +133,6 @@ describe("createMessageHandler", () => {
 		);
 		await handle(message, channel);
 		expect(channel.send).not.toHaveBeenCalled();
-	});
-
-	it("応答が遅いときだけ typing を出し、以降 8 秒ごとに続け、完了後は止める", async () => {
-		vi.useFakeTimers();
-		let release: (v: unknown) => void = () => {};
-		const { channel, handle } = setup(
-			() =>
-				new Promise((resolve) => {
-					release = resolve;
-				}),
-		);
-		const done = handle(message, channel);
-		await vi.advanceTimersByTimeAsync(TYPING_DELAY_MS - 1);
-		expect(channel.sendTyping).not.toHaveBeenCalled();
-		await vi.advanceTimersByTimeAsync(1);
-		expect(channel.sendTyping).toHaveBeenCalledTimes(1);
-		await vi.advanceTimersByTimeAsync(TYPING_INTERVAL_MS * 2);
-		expect(channel.sendTyping).toHaveBeenCalledTimes(3);
-		release(ok({ action: "ignore" }));
-		await done;
-		await vi.advanceTimersByTimeAsync(TYPING_INTERVAL_MS * 3);
-		expect(channel.sendTyping).toHaveBeenCalledTimes(3);
 	});
 
 	it("自分の発言は中継しない", async () => {
@@ -171,6 +144,5 @@ describe("createMessageHandler", () => {
 			channel,
 		);
 		expect(client.send).not.toHaveBeenCalled();
-		expect(channel.sendTyping).not.toHaveBeenCalled();
 	});
 });

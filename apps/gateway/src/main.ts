@@ -88,7 +88,6 @@ discord.on(Events.MessageCreate, (message) => {
 		logger,
 	});
 	void handle(toMessageLike(message), {
-		sendTyping: () => channel.sendTyping(),
 		send: (options) => channel.send(options),
 	}).catch((e: unknown) => {
 		logger.error("handler crashed", { error: String(e) });

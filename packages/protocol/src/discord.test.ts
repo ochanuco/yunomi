@@ -101,7 +101,8 @@ describe("dedupeKey", () => {
 
 describe("gatewayResponseSchema", () => {
 	const ok = (x: unknown) => v.safeParse(gatewayResponseSchema, x).success;
-	it("reply / ignore を受理する", () => {
+	it("reply / ignore / ack を受理する", () => {
+		expect(ok({ action: "ack" })).toBe(true);
 		expect(ok({ action: "reply", content: "やあ" })).toBe(true);
 		expect(
 			ok({ action: "reply", content: "やあ", reply_to_message_id: "3" }),

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+	type CommunicationPort,
 	err,
 	externalServiceUnavailable,
 	type PartnerState,
@@ -10,10 +11,12 @@ import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	type DiscordSent,
 	dedupeKey,
+	type GatewayResponse,
 	type InboundMessage,
 } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
+import { createDiscordRest } from "../discord-rest.ts";
 import {
 	createInterestOpinionRepo,
 	type InterestOpinionRepo,
@@ -40,6 +43,16 @@ const defaultRouter = (env: Env): ModelRouter => {
 
 export type HandleResult = StoredResult;
 
+// 応答が遅いときだけ入力中を出す。前段ルールですぐ決まる ignore のたびには出さない。
+export const TYPING_DELAY_MS = 1500;
+export const TYPING_INTERVAL_MS = 8000;
+
+// 返事の送信を Worker が担うのは、フラグと token が揃っているときだけ。揃わなければ Gateway に reply を返す。
+const defaultCommunication = (env: Env): CommunicationPort | null =>
+	env.DISCORD_SEND_FROM_WORKER === "1" && env.DISCORD_BOT_TOKEN
+		? createDiscordRest({ token: env.DISCORD_BOT_TOKEN })
+		: null;
+
 export class PartnerDO extends DurableObject<Env> {
 	readonly #store: DoStore;
 	readonly #gate = new ChannelGate();
@@ -53,10 +66,13 @@ export class PartnerDO extends DurableObject<Env> {
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	// 以下 3 つはテストが runInDurableObject で差し替える seam。
+	// 以下 4 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
 	/** 既定は ANTHROPIC_API_KEY の ClaudeProvider。テストは FakeLLMProvider を包んだ router を返す。 */
 	createRouter: (env: Env) => ModelRouter = defaultRouter;
+	/** 返事を Discord へ送る口。null のときは Gateway が送る。 */
+	createCommunication: (env: Env) => CommunicationPort | null =
+		defaultCommunication;
 	pipeline: Pipeline = (msg) =>
 		runTurn(
 			{
@@ -161,12 +177,69 @@ export class PartnerDO extends DurableObject<Env> {
 		return p;
 	}
 
+	async #runTurn(inbound: InboundMessage): Promise<HandleResult> {
+		const port = this.createCommunication(this.env);
+		const stopTyping = port ? this.#startTyping(port, inbound.channelId) : null;
+		let outcome: TurnOutcome;
+		try {
+			outcome = await this.pipeline(inbound);
+		} finally {
+			stopTyping?.();
+		}
+		if (port && outcome.response.action === "reply") {
+			return toResult({
+				...outcome,
+				response: await this.#send(port, inbound, outcome.response),
+			});
+		}
+		return toResult(outcome);
+	}
+
+	#startTyping(port: CommunicationPort, channelId: string): () => void {
+		const typing = () =>
+			void port.sendTyping({ channelId }).then((r) => {
+				if (!r.ok) console.warn("discord typing failed", r.error.type);
+			});
+		let interval: ReturnType<typeof setInterval> | undefined;
+		const delay = setTimeout(() => {
+			typing();
+			interval = setInterval(typing, TYPING_INTERVAL_MS);
+		}, TYPING_DELAY_MS);
+		return () => {
+			clearTimeout(delay);
+			clearInterval(interval);
+		};
+	}
+
+	// 送信に失敗しても reply は返さない。Gateway が重ねて送ると二重になりうる。
+	async #send(
+		port: CommunicationPort,
+		inbound: InboundMessage,
+		reply: Extract<GatewayResponse, { action: "reply" }>,
+	): Promise<GatewayResponse> {
+		const sent = await port.sendText({
+			channelId: inbound.channelId,
+			text: reply.content,
+			replyToMessageId: reply.reply_to_message_id ?? inbound.messageId,
+		});
+		if (!sent.ok) {
+			console.error("discord send failed", sent.error.type);
+		} else if (reply.partner_message_id) {
+			this.#store.bindDiscordMessageId(
+				reply.partner_message_id,
+				inbound.channelId,
+				sent.value.messageId,
+			);
+		}
+		return { action: "ack" };
+	}
+
 	async #process(inbound: InboundMessage, key: string): Promise<HandleResult> {
 		// 待機中の発言も次の判定の文脈になるよう、直列化の前に積む。
 		this.#store.appendInbound(inbound);
 		const result = await this.#gate.run<HandleResult>(
 			inbound.channelId,
-			() => this.pipeline(inbound).then(toResult),
+			() => this.#runTurn(inbound),
 			() => toResult(ignoreOutcome(inbound, "coalesced")),
 		);
 		const at = this.now();

@@ -16,6 +16,7 @@ export const resources = {
 		host: "yunomi-dev.chanu.co",
 		d1Id: "df215ab3-5b7d-48c0-862b-f0057320e491",
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		discordSendFromWorker: "1",
 		snapshotBucket: "yunomi-dev-snapshots",
 		snapshotAgeRecipient:
 			"age13g33j0raad3fhl7xeutrf7pkp2f3decwax2udr950mqq3stxnd2qvj2md7",
@@ -25,6 +26,7 @@ export const resources = {
 		host: "yunomi.chanu.co",
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
 		partnerDiscordUserId: "1558613526585671773",
+		discordSendFromWorker: "0",
 		snapshotBucket: "yunomi-snapshots",
 		snapshotAgeRecipient:
 			"age1ss5ud6wync43k5mu2zghpdt4tg5lumljvggs26jlxgzu60y3qshsyf0m0e",
@@ -35,6 +37,7 @@ export const resources = {
 		host: null,
 		d1Id: D1_PLACEHOLDER_ID,
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		discordSendFromWorker: "0",
 		snapshotBucket: "yunomi-local-snapshots",
 		// テスト用の鍵ペア（対応する identity は test/snapshot-keys.ts）。
 		snapshotAgeRecipient:
