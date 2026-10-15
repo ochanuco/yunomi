@@ -37,6 +37,9 @@ if [ "$mode" = development ]; then
   pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
 fi
 
+# admin 画面は Worker のソースに埋め込むので、admin をビルドしてから埋め込みを生成する
+pnpm --dir ../.. exec turbo build --filter=@yunomi/worker...
+
 deploy_args=(--mode "$mode")
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   # secret を argv に載せないため、deploy の --secrets-file（.env 形式）で渡す
