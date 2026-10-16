@@ -9,22 +9,27 @@ const g = (over: Partial<Global> = {}): Global => ({
 	json: false,
 	...over,
 });
+const urls = {
+	YKM_DEV_URL: "https://yunomi-dev.example.test",
+	YKM_PROD_URL: "https://yunomi.example.test",
+};
 const token = {
+	...urls,
 	YKM_ACCESS_CLIENT_ID: "id",
 	YKM_ACCESS_CLIENT_SECRET: "secret",
 };
 
 describe("resolveTarget", () => {
-	it("env ごとの既定 URL と service token ヘッダ", () => {
+	it("env ごとの URL と service token ヘッダ", () => {
 		expect(resolveTarget(g(), token)).toEqual({
-			baseUrl: "https://yunomi-dev.chanu.co",
+			baseUrl: "https://yunomi-dev.example.test",
 			headers: {
 				"CF-Access-Client-Id": "id",
 				"CF-Access-Client-Secret": "secret",
 			},
 		});
 		expect(resolveTarget(g({ env: "prod" }), token).baseUrl).toBe(
-			"https://yunomi.chanu.co",
+			"https://yunomi.example.test",
 		);
 	});
 
@@ -52,12 +57,18 @@ describe("resolveTarget", () => {
 		).toBe("id");
 	});
 
-	it("環境変数の URL は既定を上書きし、--url はさらに優先する", () => {
-		const env = { ...token, YKM_DEV_URL: "https://example.test/" };
-		expect(resolveTarget(g(), env).baseUrl).toBe("https://example.test");
+	it("--url は環境変数の URL より優先する", () => {
 		expect(
-			resolveTarget(g({ url: "http://localhost:8787" }), env).baseUrl,
+			resolveTarget(g({ url: "http://localhost:8787" }), token).baseUrl,
 		).toBe("http://localhost:8787");
+	});
+
+	it("URL が指定されていなければ設定エラー", () => {
+		const { YKM_DEV_URL: _, ...noDevUrl } = token;
+		expect(() => resolveTarget(g(), noDevUrl)).toThrow("YKM_DEV_URL");
+		expect(() =>
+			resolveTarget(g({ env: "prod" }), { YKM_DEV_URL: "x" }),
+		).toThrow("YKM_PROD_URL");
 	});
 
 	it("localhost で token が無ければ dev caller ヘッダを送る", () => {
@@ -72,10 +83,10 @@ describe("resolveTarget", () => {
 	});
 
 	it("リモート宛てで token が無ければ設定エラー", () => {
-		expect(() => resolveTarget(g(), {})).toThrow(ConfigError);
-		expect(() => resolveTarget(g(), { YKM_ACCESS_CLIENT_ID: "id" })).toThrow(
-			ConfigError,
-		);
+		expect(() => resolveTarget(g(), urls)).toThrow(ConfigError);
+		expect(() =>
+			resolveTarget(g(), { ...urls, YKM_ACCESS_CLIENT_ID: "id" }),
+		).toThrow(ConfigError);
 	});
 
 	it("不正な URL は設定エラー", () => {

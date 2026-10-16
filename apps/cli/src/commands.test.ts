@@ -23,7 +23,11 @@ const harness = (routes: (url: URL) => unknown, over: Partial<Deps> = {}) => {
 			urls.push(url);
 			return Response.json(routes(url));
 		},
-		env: { YKM_ACCESS_CLIENT_ID: "id", YKM_ACCESS_CLIENT_SECRET: "s" },
+		env: {
+			YKM_DEV_URL: "https://yunomi-dev.example.test",
+			YKM_ACCESS_CLIENT_ID: "id",
+			YKM_ACCESS_CLIENT_SECRET: "s",
+		},
 		out: (t) => out.push(t),
 		err: (t) => err.push(t),
 		now: () => new Date("2026-10-11T03:00:00Z"),
@@ -228,7 +232,9 @@ describe("run", () => {
 		const bad = harness(api);
 		expect(await run(["nope"], bad.deps)).toBe(2);
 
-		const noToken = harness(api, { env: {} });
+		const noToken = harness(api, {
+			env: { YKM_DEV_URL: "https://yunomi-dev.example.test" },
+		});
 		expect(await run(["status"], noToken.deps)).toBe(1);
 		expect(noToken.err.join()).toContain("YKM_ACCESS_CLIENT_ID");
 

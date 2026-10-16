@@ -22,7 +22,7 @@ ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し
 
 | 項目 | 指定 |
 | --- | --- |
-| URL | `--url` > `YKM_DEV_URL` / `YKM_PROD_URL` > `https://yunomi-dev.chanu.co` / `https://yunomi.chanu.co` |
+| URL | `--url` > `YKM_DEV_URL` / `YKM_PROD_URL`。どちらも無ければ設定エラー |
 | 認証 | `YKM_DEV_ACCESS_CLIENT_ID` / `YKM_DEV_ACCESS_CLIENT_SECRET`（prod は `YKM_PROD_...`）を `CF-Access-Client-Id` / `CF-Access-Client-Secret` で送る。env 別の指定が無ければ `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` を使う |
 | ローカル | URL が `localhost` / `127.0.0.1` で token が無いときは `x-yunomi-dev-caller: ykm` を送る |
 

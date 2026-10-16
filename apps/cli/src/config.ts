@@ -1,10 +1,5 @@
 import type { Global } from "./args.ts";
 
-export const DEFAULT_URLS = {
-	dev: "https://yunomi-dev.chanu.co",
-	prod: "https://yunomi.chanu.co",
-} as const;
-
 export type Target = { baseUrl: string; headers: Record<string, string> };
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -15,8 +10,11 @@ export const resolveTarget = (
 	global: Global,
 	env: Record<string, string | undefined>,
 ): Target => {
-	const configured = global.env === "dev" ? env.YKM_DEV_URL : env.YKM_PROD_URL;
-	const raw = global.url ?? (configured || DEFAULT_URLS[global.env]);
+	const urlVar = global.env === "dev" ? "YKM_DEV_URL" : "YKM_PROD_URL";
+	const raw = global.url ?? env[urlVar];
+	if (!raw) {
+		throw new ConfigError(`接続先を ${urlVar} か --url で指定する`);
+	}
 	let url: URL;
 	try {
 		url = new URL(raw);

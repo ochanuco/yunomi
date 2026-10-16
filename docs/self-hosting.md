@@ -45,7 +45,7 @@ Worker は秘密鍵を持ちません。秘密鍵は自分の手元で保管し�
 age-keygen -o yunomi-snapshot.key   # 出力される age1... が公開鍵
 ```
 
-`scripts/deploy.sh` は公開鍵が `age1...` の形でないとデプロイを止めます。
+`scripts/deploy.sh` は公開鍵が `age1...` の形でないとデプロイを止めます。Snapshot を使わない場合も鍵は必要です。
 
 ## 3. Cloudflare Access を設定する
 
@@ -119,7 +119,7 @@ scripts/deploy.sh production
 
 `deploy.sh` は次の順に実行します。
 
-1. `resources.ts` の D1 id と公開鍵を確かめる
+1. `CLOUDFLARE_API_TOKEN` と、`resources.ts` のホスト名・D1 id・公開鍵を確かめる。足りないものがあれば、すべてを直し方と一緒に示して止まる。secret が未設定のときは警告だけを出す
 2. `development` のときだけ D1 migration を適用する
 3. Admin Web をビルドして Worker に埋め込み、`cf deploy` する
 4. `https://<host>/health` が応答するまで確かめる
@@ -158,7 +158,7 @@ bot をメンションして、返事が来れば動いています。
 ## 8. `ykm` と Admin Web
 
 - Admin Web は `https://<host>/admin/` で開けます。Access で自分のメールアドレスでログインします
-- `ykm` は既定の URL が作者の環境なので、`YKM_PROD_URL`（dev は `YKM_DEV_URL`）で自分のホストを指定します
+- `ykm` の接続先は `YKM_PROD_URL`（dev は `YKM_DEV_URL`）か `--url` で指定します
 - 認証は `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` に `ykm` 用 service token を渡します
 
 ```sh

@@ -3,7 +3,7 @@ import { ApiError, createClient, type Fetch } from "./client.ts";
 import { auditItem, status } from "./fixtures.ts";
 
 const target = {
-	baseUrl: "https://yunomi-dev.chanu.co",
+	baseUrl: "https://yunomi-dev.example.test",
 	headers: { "CF-Access-Client-Id": "id" },
 };
 
@@ -21,7 +21,7 @@ describe("createClient", () => {
 		const { f, calls } = recorder(() => Response.json(status));
 		expect(await createClient(target, "yukarin", f).status()).toEqual(status);
 		expect(calls[0]?.url).toBe(
-			"https://yunomi-dev.chanu.co/admin/api/partners/yukarin/status",
+			"https://yunomi-dev.example.test/admin/api/partners/yukarin/status",
 		);
 		expect(calls[0]?.headers["CF-Access-Client-Id"]).toBe("id");
 	});
