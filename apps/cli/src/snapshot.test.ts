@@ -80,6 +80,8 @@ const harness = (over: Partial<Deps> = {}, restoreStatus = 200) => {
 			});
 		},
 		env: {
+			YKM_DEV_URL: "https://yunomi-dev.example.test",
+			YKM_PROD_URL: "https://yunomi.example.test",
 			YKM_ACCESS_CLIENT_ID: "id",
 			YKM_ACCESS_CLIENT_SECRET: "s",
 			YKM_AGE_IDENTITY: TEST_AGE_IDENTITY,
@@ -102,7 +104,7 @@ describe("ykm snapshot", () => {
 		const h = harness();
 		expect(await run(["snapshot", "list", "--env", "prod"], h.deps)).toBe(0);
 		expect(h.out.join("\n")).toContain(SNAPSHOT_ID);
-		expect(h.calls[0]?.url.origin).toBe("https://yunomi.chanu.co");
+		expect(h.calls[0]?.url.origin).toBe("https://yunomi.example.test");
 	});
 
 	it("create は POST する", async () => {
@@ -149,12 +151,12 @@ describe("ykm snapshot seed", () => {
 		).toEqual([
 			[
 				"GET",
-				"https://yunomi.chanu.co",
+				"https://yunomi.example.test",
 				`/admin/api/partners/yukarin/snapshots/${SNAPSHOT_ID}`,
 			],
 			[
 				"POST",
-				"https://yunomi-dev.chanu.co",
+				"https://yunomi-dev.example.test",
 				"/admin/api/partners/yukarin/snapshots/restore",
 			],
 		]);
@@ -200,6 +202,8 @@ describe("ykm snapshot seed", () => {
 	it("別の鍵で暗号化されていたら復号に失敗し、restore しない", async () => {
 		const h = harness({
 			env: {
+				YKM_DEV_URL: "https://yunomi-dev.example.test",
+				YKM_PROD_URL: "https://yunomi.example.test",
 				YKM_ACCESS_CLIENT_ID: "id",
 				YKM_ACCESS_CLIENT_SECRET: "s",
 				YKM_AGE_IDENTITY:
