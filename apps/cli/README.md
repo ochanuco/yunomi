@@ -26,6 +26,19 @@ ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し
 | 認証 | `YKM_DEV_ACCESS_CLIENT_ID` / `YKM_DEV_ACCESS_CLIENT_SECRET`（prod は `YKM_PROD_...`）を `CF-Access-Client-Id` / `CF-Access-Client-Secret` で送る。env 別の指定が無ければ `YKM_ACCESS_CLIENT_ID` / `YKM_ACCESS_CLIENT_SECRET` を使う |
 | ローカル | URL が `localhost` / `127.0.0.1` で token が無いときは `x-yunomi-dev-caller: ykm` を送る |
 
+接続先と token は `op run` の env ファイルにまとめておくと、毎回指定せずに済む。URL は secret ではないのでそのまま書く。
+
+```
+YKM_DEV_URL=https://<dev host>
+YKM_PROD_URL=https://<prod host>
+YKM_DEV_ACCESS_CLIENT_ID=op://<vault>/<item>/client_id
+YKM_DEV_ACCESS_CLIENT_SECRET=op://<vault>/<item>/client_secret
+```
+
+```
+op run --env-file <env ファイル> -- pnpm --filter @yunomi/cli ykm status
+```
+
 応答は `@yunomi/admin-contract` のスキーマで検証する。契約に合わなければエラーにする。終了コードは 0（成功）、1（接続・認証・設定の失敗）、2（使い方の誤り）。
 
 ## ビルドと実行
