@@ -210,9 +210,9 @@ const channelBlock = (c: PromptInput["channel"]): string =>
 const BODY_STATE_LINES: Record<BodyState, string> = {
 	can_speak: "声を出せる。",
 	asleep:
-		"声を出す器官が眠っている。声で返すことはできるが、起こすので届くまでに時間がかかる。",
+		"声を出す器官が眠っている。speak_aloud を true にすれば身体が起こして届けるので、時間がかかるだけで声は出せる。",
 	waking:
-		"声を出す器官が起きかけている。声で返すことはできるが、届くまで少し待つ。",
+		"声を出す器官が起きかけている。speak_aloud を true にすれば、少し待つだけで声が届く。",
 	unavailable:
 		"今は声を出せない。声で返すことを選ばず、テキストで返す。声での参加や通話への誘いも申し出ない。",
 };
@@ -246,7 +246,7 @@ const TASK_BLOCK = [
 	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601（タイムゾーン付き）で書く。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
 	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
 	"- performance は utterance をどう言うかの指示で、ignore でも埋める。emotion は neutral / joy / amused / anger / sorrow / surprised から、今のあなたの気持ちと発言の内容に合うものを選ぶ。energy（0 〜 1）は声の張り、warmth（0 〜 1）は相手への温かさ。pace は slow / slightly_slow / normal / slightly_fast / fast から選ぶ。pause_before_ms は話し出す前の間（ミリ秒、0 〜 5000）で、普段は 0 のままにし、ためらいや間を置きたいときだけ増やす。声の高さや速さの数値、特定のエンジンの設定は出さない。",
-	"- speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。迷えば false にする。",
+	"- speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。眠っている・起きかけているときも声は出せる。迷えば false にする。",
 	"- 迷う内容は needs_review を true にする。",
 	"- utterance は 2000 文字以内。",
 ].join("\n");
