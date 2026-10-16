@@ -81,7 +81,7 @@ export class PartnerDO extends DurableObject<Env> {
 		defaultCommunication;
 	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
 	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
-	pipeline: Pipeline = (msg) =>
+	pipeline: Pipeline = (msg, onEngaged) =>
 		runTurn(
 			{
 				store: this.#store,
@@ -97,6 +97,7 @@ export class PartnerDO extends DurableObject<Env> {
 				openLoops: this.#openLoops,
 				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
+				onEngaged,
 			},
 			msg,
 		);
@@ -189,12 +190,17 @@ export class PartnerDO extends DurableObject<Env> {
 
 	async #runTurn(inbound: InboundMessage): Promise<HandleResult> {
 		const port = this.createCommunication(this.env);
-		const stopTyping = port ? this.#startTyping(port, inbound.channelId) : null;
+		let stopTyping: (() => void) | null = null;
+		const onEngaged = () => {
+			if (port && !stopTyping) {
+				stopTyping = this.#startTyping(port, inbound.channelId);
+			}
+		};
 		let outcome: TurnOutcome;
 		try {
-			outcome = await this.pipeline(inbound);
+			outcome = await this.pipeline(inbound, onEngaged);
 		} finally {
-			stopTyping?.();
+			(stopTyping as (() => void) | null)?.();
 		}
 		if (port && outcome.response.action === "reply") {
 			const sent = await this.#send(port, inbound, outcome.response);

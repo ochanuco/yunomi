@@ -43,6 +43,8 @@ export const CONTINUATION_WINDOW_MS = 3 * 60 * 1000;
 export const INTERJECTION_COOLDOWN_MS = 30 * 60 * 1000;
 const MAX_OUTPUT_TOKENS = 3000;
 const GATE_MAX_OUTPUT_TOKENS = 300;
+// チャンネルの処理は直列なので、遅い判定でほかの発言を待たせない。
+export const GATE_TIMEOUT_MS = 8000;
 
 export type TurnDeps = {
 	store: DoStore;
@@ -59,6 +61,8 @@ export type TurnDeps = {
 	bodyState: () => Promise<BodyState>;
 	/** 応答経路から外す書き込み（D1 履歴）を登録する。 */
 	background: (task: Promise<void>) => void;
+	/** 返事に進むと決まった時点（入口を通った、または割り込みで Haiku が入ると判定した直後）で一度呼ぶ。 */
+	onEngaged?: () => void;
 };
 
 const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
@@ -136,6 +140,7 @@ const judgeInterjection = async (
 			output: gateOutput,
 			model: HAIKU,
 			maxTokens: GATE_MAX_OUTPUT_TOKENS,
+			timeoutMs: GATE_TIMEOUT_MS,
 		});
 		if (!result.ok) {
 			return {
@@ -200,6 +205,7 @@ export const runTurn = async (
 		if (!verdict.join) return verdict.outcome;
 		interjection = true;
 	}
+	deps.onEngaged?.();
 
 	const partnerId = profile.partner_id;
 	let entityId: string;

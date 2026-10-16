@@ -127,13 +127,17 @@ export class ClaudeProvider implements LLMProvider {
 				},
 			},
 		};
+		const options = req.timeoutMs ? { timeout: req.timeoutMs } : undefined;
 		if (req.model === SONNET) {
-			return this.#client.beta.messages.create({
-				...base,
-				betas: [SERVER_SIDE_FALLBACK_BETA],
-				fallbacks: "default",
-			});
+			return this.#client.beta.messages.create(
+				{
+					...base,
+					betas: [SERVER_SIDE_FALLBACK_BETA],
+					fallbacks: "default",
+				},
+				options,
+			);
 		}
-		return this.#client.messages.create(base);
+		return this.#client.messages.create(base, options);
 	}
 }

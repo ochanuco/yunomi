@@ -181,6 +181,24 @@ describe("ClaudeProvider", () => {
 		});
 	});
 
+	it("timeoutMs を指定すると、既定より短い時間で打ち切って ExternalServiceUnavailable にする", async () => {
+		const provider = new ClaudeProvider({
+			apiKey: "k",
+			fetch: ((_input: unknown, init?: RequestInit) =>
+				new Promise((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () =>
+						reject(new DOMException("aborted", "AbortError")),
+					);
+				})) as typeof globalThis.fetch,
+		});
+		const started = Date.now();
+		const r = await provider.generate({ ...req(HAIKU), timeoutMs: 50 });
+		expect(Date.now() - started).toBeLessThan(5000);
+		expect(!r.ok && r.error).toMatchObject({
+			type: "ExternalServiceUnavailable",
+		});
+	});
+
 	it("400 は retryable ではない", async () => {
 		const { provider } = harness(() => apiError(400, "invalid_request_error"));
 		const r = await provider.generate(req());

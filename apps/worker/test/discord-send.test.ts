@@ -1,8 +1,10 @@
 import { runInDurableObject } from "cloudflare:test";
 import { type CommunicationPort, err, ok, rateLimited } from "@yunomi/core";
+import { FakeLLMProvider, ModelRouter } from "@yunomi/llm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TYPING_DELAY_MS } from "../src/do/partner-do.ts";
 import {
+	gate,
 	installFakeLlm,
 	llmOk,
 	mention,
@@ -27,6 +29,20 @@ const install = (port: CommunicationPort | null) =>
 	});
 
 afterEach(() => install(null));
+
+// LLM の応答を TYPING_DELAY_MS より遅らせる。
+const slowLlm = (fake: FakeLLMProvider) =>
+	runInDurableObject(partnerStub(PARTNER_ID), (o) => {
+		o.createRouter = () =>
+			new ModelRouter({
+				provider: {
+					generate: async (req) => {
+						await new Promise((r) => setTimeout(r, TYPING_DELAY_MS + 200));
+						return fake.generate(req);
+					},
+				},
+			});
+	});
 
 describe("Worker からの送信", () => {
 	it("返事を REST で送り、Gateway には ack だけを返す", async () => {
@@ -92,20 +108,29 @@ describe("Worker からの送信", () => {
 
 	it("応答が遅いときだけ入力中を出す", async () => {
 		const s = newScenario();
-		await installFakeLlm([llmOk(turn())]);
+		const fake = await installFakeLlm([llmOk(turn())]);
 		const port = fakePort();
 		await install(port);
-		await runInDurableObject(partnerStub(PARTNER_ID), (o) => {
-			const base = o.pipeline;
-			o.pipeline = async (m) => {
-				await new Promise((r) => setTimeout(r, TYPING_DELAY_MS + 200));
-				return base(m);
-			};
-		});
+		await slowLlm(fake);
 
 		await send(mention(s));
 
 		expect(port.sendTyping).toHaveBeenCalledWith({ channelId: s.channelId });
+	});
+
+	it("gate で黙る発言には、判定が遅くても入力中を出さない", async () => {
+		const s = newScenario();
+		const fake = await installFakeLlm([gate(false)]);
+		const port = fakePort();
+		await install(port);
+		await slowLlm(fake);
+
+		const res = await send(
+			inbound({ channelId: s.channelId, author: s.author, content: "寒いね" }),
+		);
+
+		expect(res).toEqual({ action: "ignore" });
+		expect(port.sendTyping).not.toHaveBeenCalled();
 	});
 
 	it("port が無ければ従来どおり reply を返す", async () => {

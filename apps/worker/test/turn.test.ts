@@ -16,6 +16,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
 	CONTINUATION_WINDOW_MS,
+	GATE_TIMEOUT_MS,
 	INTERJECTION_COOLDOWN_MS,
 } from "../src/do/turn.ts";
 import { envelopeBody, inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
@@ -349,6 +350,8 @@ describe("宛先のない発言への割り込み", () => {
 		const res = await stub.handleDiscordMessage(free());
 		expect(res).toMatchObject({ action: "reply", content: "面白そうですね" });
 		expect(fake.requests.map((r) => r.model)).toEqual([HAIKU, SONNET]);
+		expect(fake.requests[0]?.timeoutMs).toBe(GATE_TIMEOUT_MS);
+		expect(fake.requests[1]?.timeoutMs).toBeUndefined();
 		expect(await interjectionAt(stub)).toBe(T0.toISOString());
 	});
 

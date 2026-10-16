@@ -25,6 +25,8 @@ export type LLMRequest<T> = {
 	maxTokens: number;
 	/** 省略時は provider の既定（会話ターンは low）。 */
 	effort?: Effort;
+	/** 省略時は provider の既定。 */
+	timeoutMs?: number;
 };
 
 export type Usage = {
