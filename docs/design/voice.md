@@ -125,7 +125,7 @@ Separate public repo, "Voice MCP for yunomi".
 - the tool interface is defined in the `ochoko` repo
 - runs on the GPU box because A.I.VOICE requires Windows + COM
 - listens on LAN `:8190`; Bearer token auth, with separate tokens for dev and prod callers
-- deployed via chabatake's GPU-box app deployer (Release -> chabatake deployer -> non-elevated apps runner on the GPU box); the organ repo owns no runner
+- deployed by an external GPU-box app deployer (Release -> deployer -> non-elevated apps runner on the GPU box); the organ repo owns no runner
 
 ### Call path
 

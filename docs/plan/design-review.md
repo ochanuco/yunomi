@@ -61,11 +61,11 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 
 推奨: `cf` の版を固定し、Worker のビルド実装には `wrangler` を使う。これで「main Worker は Vite 不要」を守れる。D1 migration は `drizzle-kit` の生成物を `cf d1 migrations apply` で適用し、テスト用の Wrangler 設定は `cloudflare.config.ts` から生成する（詳細は `docs/plan/cf-cli.md`）。
 
-### B6. CI/CD の「chabatake と同じ運用」が実態と異なる
+### B6. CI/CD の「インフラ側のリポジトリと同じ運用」が実態と異なる
 
-`decisions.md` は「PR: test/typecheck/eval, main: dev deploy, prod: manual」を chabatake と同じ運用としているが、chabatake の実態は「PR で plan → main への push で release PR を自動作成 → `production` ブランチへの merge で apply」で、secret は 1Password Service Account（`op run`）経由で注入している。
+`decisions.md` は「PR: test/typecheck/eval, main: dev deploy, prod: manual」をインフラ側のリポジトリと同じ運用としているが、そちらの実態は「PR で plan → main への push で release PR を自動作成 → `production` ブランチへの merge で apply」で、secret は 1Password Service Account（`op run`）経由で注入している。
 
-推奨: デプロイ段階は設計どおり（PR 検証 / main→dev / prod は手動）にし、仕組みは chabatake に合わせる。
+推奨: デプロイ段階は設計どおり（PR 検証 / main→dev / prod は手動）にし、仕組みはインフラ側のリポジトリに合わせる。
 
 - prod は `production` ブランチへの release PR の merge、または `workflow_dispatch` を GitHub Environment `production` で保護する。
 - Cloudflare API token などの secret は 1Password Service Account から `op run` で注入する。
@@ -84,7 +84,7 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 | C7 | Open Loop | `mvp-scope.md` は MVP で抽出・保存とするが、`CLAUDE_TASK.md` の最初の縦切りと `implementation-plan.md` は Goal 2。structured output のスキーマには `open_loop_updates` を入れ、保存は Goal 2 で行う。 |
 | C8 | 公開リポジトリ | `ochanuco/yunomi` は public。snapshot・prod 由来の seed・会話ログ・eval の実データはリポジトリに置かない。persona の公式設定は要約・言い換えで書き、公式文章の転載はしない。 |
 | C9 | 他ユーザーからの指示注入 | サーバー内の他人の発言が prompt に入る。MVP はツール実行がないため影響は発話内容に限られるが、`tool_intents` は MVP では無視して Audit に記録だけする。 |
-| C10 | Admin / Gateway / ykm の認証 | Admin は Cloudflare Access（owner のみ）。Gateway と `ykm` は Access Service Token。Worker 側でも `Cf-Access-Jwt-Assertion` を検証し、Access を経由しない `workers.dev` 経路は無効化する。Access app と service token は chabatake 側の `app_yunomi.tf` で作る（chabatake の `app_utsuroi.tf` と同じ分担）。 |
+| C10 | Admin / Gateway / ykm の認証 | Admin は Cloudflare Access（owner のみ）。Gateway と `ykm` は Access Service Token。Worker 側でも `Cf-Access-Jwt-Assertion` を検証し、Access を経由しない `workers.dev` 経路は無効化する。Access app と service token はインフラ側のリポジトリの Terraform で作る（他のアプリと同じ分担）。 |
 
 ## 安全に先送りできる決定
 

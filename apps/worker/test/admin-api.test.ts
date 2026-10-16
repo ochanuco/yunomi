@@ -73,7 +73,7 @@ describe("認可", () => {
 	it("owner の JWT で 200", async () => {
 		const res = await get(
 			`${BASE}/status`,
-			await jwtHeader({ email: "teacatus@gmail.com" }),
+			await jwtHeader({ email: "owner@example.com" }),
 		);
 		expect(res.status).toBe(200);
 	});

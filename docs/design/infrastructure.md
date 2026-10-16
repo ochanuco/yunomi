@@ -43,7 +43,7 @@ Admin:
 
 ## Low-level infra boundary
 
-`ochanuco/chabatake` owns:
+A separate infrastructure repository owns:
 
 - account-level resources
 - shared network/account infrastructure

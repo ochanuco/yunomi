@@ -91,13 +91,13 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | Y21 | E5 | prod 環境と prod デプロイ | Y04, I-infra1 | - |
 | Y22 | E5 | Home Gateway の Docker 運用 | Y11 | - |
 
-インフラ側（`cf-yunomi` / chabatake 担当）:
+インフラ側（インフラ側のリポジトリが担当）:
 
 | ID | 内容 | 必要になる Issue |
 | --- | --- | --- |
 | I-infra1 | Cloudflare の API token（dev/prod deploy 用）と CI への注入経路（1Password Service Account） | Y04, Y21 |
 | I-infra2 | Worker のカスタムドメイン（例: `yunomi.chanu.co` / `yunomi-dev.chanu.co`）と `workers.dev` 無効化 | Y16, Y11 の本番接続 |
-| I-infra3 | chabatake `app_yunomi.tf`: Access application（Admin、owner のみ）と service token（Gateway / ykm、dev/prod 別） | Y16, Y17, Y18, Y11 の本番接続 |
+| I-infra3 | インフラ側の Terraform: Access application（Admin、owner のみ）と service token（Gateway / ykm、dev/prod 別） | Y16, Y17, Y18, Y11 の本番接続 |
 | I-infra4 | Discord bot application（dev / prod）の作成と Message Content Intent の有効化 | Y11 の実機確認 |
 | I-infra5 | Anthropic API key の Worker secret 登録（dev / prod） | Y10 の実機確認 |
 
@@ -160,7 +160,7 @@ Y02 → Y05・Y07 と Y06 → Y08 は Y03〜Y09 と並行で進められ、Y10 �
 
 要判断: Relationship を owner 以外のサーバー参加者にも持たせるか。この計画では全員に持たせ、更新上限を共通にする（design-review B3）。
 
-要判断: Worker のホスト名。この計画では `yunomi.chanu.co`（prod）と `yunomi-dev.chanu.co`（dev）を仮置きし、確定は `cf-yunomi` 側で行う。
+要判断: Worker のホスト名。この計画では `yunomi.chanu.co`（prod）と `yunomi-dev.chanu.co`（dev）を仮置きし、確定はインフラ側で行う。
 
 prod デプロイ: main への push で `.github/workflows/deploy.yml` が動く。`deploy-plan` が危ないと判定したときだけ Environment `production-approval` の承認で止め、それ以外は承認なしで出す。`workflow_dispatch` はロールバック用。
 

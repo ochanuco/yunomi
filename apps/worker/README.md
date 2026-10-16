@@ -190,7 +190,7 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 
 #### 事前に人手で用意するもの
 
-- GitHub Environment `production`（承認なし）と `production-approval`（Required reviewers だけを持ち、secret は持たない）。どちらも chabatake が作る。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用。Environment は chabatake が作る）
+- GitHub Environment `production`（承認なし）と `production-approval`（Required reviewers だけを持ち、secret は持たない）。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用）
 - 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token、全 repo で共用）と `yunomi-anthropic-api-key`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
 - R2 bucket `yunomi-snapshots` を作る

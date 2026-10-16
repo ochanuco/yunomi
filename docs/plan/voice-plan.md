@@ -45,7 +45,7 @@ Yukarin が「声で返そう」と判断したとき、テキストの返事に
 
 ### VE4. インフラと通しの確認
 
-- 技術範囲: chabatake 側（box-cha-d1）での ochoko の Tunnel + Access 公開、ファイアウォールの許可元の見直し、Worker 用 Service Token（wol と ochoko）、`docs/gpu-box.md` の更新。yunomi 側での Worker secret（dev と prod の bot token、ochoko のトークン）の登録と、dev での通しの確認。
+- 技術範囲: インフラ側のリポジトリでの ochoko の Tunnel + Access 公開、ファイアウォールの許可元の見直し、Worker 用 Service Token（wol と ochoko）、GPU 機の文書の更新。yunomi 側での Worker secret（dev と prod の bot token、ochoko のトークン）の登録と、dev での通しの確認。
 - 非ゴール: keep-awake、prod での通しの確認。
 - Done: dev の Worker から Tunnel + Access 越しに wol と ochoko が呼べる。dev サーバーで、テキストに続いて声が添付されるところまでの通しが確認できる。
 
@@ -64,7 +64,7 @@ Yukarin が「声で返そう」と判断したとき、テキストの返事に
 | V07 | VE3 | Gateway を受信の中継だけにする | V05 | V06 と並行 |
 | V08 | VE4 | ochoko の Tunnel + Access 公開と secret、dev での通しの確認 | なし（通しの確認は V06） | V01〜V05 と並行 |
 
-V08 は chabatake 側の作業を chabatake の担当者が進める。yunomi の Issue はその進捗を追い、Worker secret の登録と dev での通しの確認を yunomi 側の Done とする。
+V08 はインフラ側の作業をインフラ側の担当者が進める。yunomi の Issue はその進捗を追い、Worker secret の登録と dev での通しの確認を yunomi 側の Done とする。
 
 ## 依存グラフ
 
@@ -92,7 +92,7 @@ V03 と V04 は V01（V03 は V02 も）の後に V05 と並行で進められ�
 - V01 / V02 / V08 は最初から並行
 - V01 の後: V03（V02 も必要）/ V04 / V05
 - V05 の後: V07（V06 と並行）
-- V08 は chabatake 側が終わるまで、V06 は fake の器官で進める
+- V08 はインフラ側が終わるまで、V06 は fake の器官で進める
 
 ### 非ゴール
 

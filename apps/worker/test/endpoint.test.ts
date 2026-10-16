@@ -75,7 +75,7 @@ describe("POST /v1/interfaces/discord/events", () => {
 
 	it("owner の JWT は 403（gateway 専用）", async () => {
 		mockCerts();
-		const jwt = await token({ email: "teacatus@gmail.com" });
+		const jwt = await token({ email: "owner@example.com" });
 		const res = await post(
 			{ "Cf-Access-Jwt-Assertion": jwt },
 			envelopeBody(inbound()),
@@ -148,7 +148,7 @@ describe("POST /v1/partners/:partnerId/discord/sent", () => {
 
 	it("owner の JWT は 403（gateway 専用）", async () => {
 		mockCerts();
-		const jwt = await token({ email: "teacatus@gmail.com" });
+		const jwt = await token({ email: "owner@example.com" });
 		const res = await post(
 			{ "Cf-Access-Jwt-Assertion": jwt },
 			body,
