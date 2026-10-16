@@ -21,6 +21,7 @@ const sample = (over: Record<string, unknown> = {}) => ({
 		pause_before_ms: 0,
 	},
 	speak_aloud: false,
+	voice_channel: "stay",
 	tool_intents: [],
 	needs_review: false,
 	...over,

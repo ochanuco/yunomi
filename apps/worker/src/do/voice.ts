@@ -193,3 +193,18 @@ export class VoiceBody {
 		});
 	}
 }
+
+/** VC に入るときなど、声を使う前に GPU 機を起こしておく。失敗しても呼び出し側の処理は止めない。 */
+export const wakeIfAsleep = async (
+	organs: VoiceOrgans,
+	now: Date,
+): Promise<void> => {
+	try {
+		const report = await organs.checkAvailability(now);
+		if (report.availability !== "asleep") return;
+		const woke = await organs.wake();
+		if (!woke.ok) console.warn("voice wake failed", woke.error.type);
+	} catch (e) {
+		console.warn("voice wake failed", e);
+	}
+};

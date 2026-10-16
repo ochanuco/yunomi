@@ -66,6 +66,15 @@ const MIGRATIONS: string[][] = [
 		// 枠の外から割り込んで返事した最後の時刻。既存行は NULL（まだ割り込んでいない）
 		"ALTER TABLE channel_state ADD COLUMN last_interjection_at TEXT",
 	],
+	[
+		// Gateway が実際に接続・切断したと報告した VC。同時に入れるのは 1 つだけ
+		`CREATE TABLE IF NOT EXISTS voice_connection (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			voice_guild_id TEXT NOT NULL,
+			voice_channel_id TEXT,
+			voice_updated_at TEXT NOT NULL
+		)`,
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {

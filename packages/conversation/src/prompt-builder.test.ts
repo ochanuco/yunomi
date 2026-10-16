@@ -25,6 +25,32 @@ describe("PromptBuilder", () => {
 		expect(body("can_speak")).toContain("聞くことはできない");
 	});
 
+	it("VC の状態を身体の状態に入れる", () => {
+		const body = (voice?: { connectedChannelId: string | null }) => {
+			const input = baseInput();
+			if (voice) input.voice = { ...voice, messageChannelId: "vc1" };
+			return builder.build(input).system[9]?.text ?? "";
+		};
+		expect(body()).toContain("どの VC にも入っていない");
+		expect(body({ connectedChannelId: null })).toContain(
+			"どの VC にも入っていない",
+		);
+		const inChat = body({ connectedChannelId: "vc1" });
+		expect(inChat).toContain("VC のテキストチャットから来た");
+		expect(inChat).toContain("自動で VC に声として流れる");
+		expect(inChat).toContain("声は聞こえず");
+		const elsewhere = body({ connectedChannelId: "vc2" });
+		expect(elsewhere).toContain("別のチャンネルから来た");
+		expect(elsewhere).not.toContain("自動で VC に声として流れる");
+	});
+
+	it("voice_channel の指示を含む", () => {
+		const task = builder.build(baseInput()).system[10]?.text ?? "";
+		expect(task).toContain("voice_channel");
+		expect(task).toContain("join");
+		expect(task).toContain("leave");
+	});
+
 	it("IR と声で返すかの指示を含み、エンジン固有の値は求めない", () => {
 		const task = builder.build(baseInput()).system[10]?.text ?? "";
 		expect(task).toContain("performance");
@@ -189,7 +215,7 @@ describe("PromptBuilder", () => {
 		}));
 		const out = builder.build({
 			...input,
-			budget: { totalTokens: 1900, memoryRatio: 0.2, contextRatio: 1 },
+			budget: { totalTokens: 2100, memoryRatio: 0.2, contextRatio: 1 },
 		});
 		expect(out.meta.memoryKept).toBe(0);
 		expect(out.meta.contextLinesKept).toBeGreaterThan(0);

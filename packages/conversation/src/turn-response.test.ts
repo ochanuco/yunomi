@@ -51,6 +51,7 @@ const valid = () => ({
 		pause_before_ms: 120,
 	},
 	speak_aloud: true,
+	voice_channel: "stay",
 	tool_intents: [],
 	needs_review: false,
 });
@@ -159,6 +160,14 @@ describe("turnResponseSchema", () => {
 		expect(ok(noPerf)).toBe(false);
 	});
 
+	it("voice_channel は join / leave / stay のどれかで必須", () => {
+		expect(ok({ ...valid(), voice_channel: "join" })).toBe(true);
+		expect(ok({ ...valid(), voice_channel: "leave" })).toBe(true);
+		expect(ok({ ...valid(), voice_channel: "mute" })).toBe(false);
+		const { voice_channel: _, ...none } = valid();
+		expect(ok(none)).toBe(false);
+	});
+
 	it("JSON Schema は structured outputs の要件を満たす", () => {
 		const walk = (n: unknown): void => {
 			if (Array.isArray(n)) {
@@ -177,7 +186,7 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(14);
+		).toHaveLength(15);
 	});
 });
 

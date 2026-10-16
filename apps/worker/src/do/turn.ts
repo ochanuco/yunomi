@@ -299,6 +299,10 @@ export const runTurn = async (
 		openLoops,
 		now: seededAt,
 		channel: { name: null, presence: null },
+		voice: {
+			connectedChannelId: store.getVoiceConnection()?.channelId ?? null,
+			messageChannelId: msg.channelId,
+		},
 		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
 			speaker: m.authorName,
 			text: m.content,
@@ -534,6 +538,8 @@ export const runTurn = async (
 	});
 	return {
 		intent: toBodyIntent(output, bodyState),
+		voiceChannel: output.voice_channel,
+		bodyState,
 		response: {
 			action: "reply",
 			content: utterance,

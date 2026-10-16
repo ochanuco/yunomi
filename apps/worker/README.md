@@ -5,7 +5,7 @@
 - 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）、`--mode local` でローカル専用（`yunomi-local`、ドメインなし）に切り替わる。local は deploy しない。workers.dev と preview URL は無効。
 - `cf dev` / `cf build` の委譲先は `wrangler`（この package の devDependency）。Vite は使わない。
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
-- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` に引く。`POST /v1/interfaces/discord/events` と `POST /v1/partners/:partnerId/discord/sent` は `gateway` のみ。
+- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` に引く。`POST /v1/interfaces/discord/events`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/sent`、`POST /v1/partners/:partnerId/discord/voice-connection` は `gateway` のみ。
 - ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
 - Worker 名・ホスト・D1 database id は `resources.ts` に集約し、`cloudflare.config.ts` と `scripts/deploy.sh` が読む。`cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
@@ -76,6 +76,44 @@
 - `pause_before_ms` は使わない（合成した WAV の前に無音を足す処理は無い）。
 
 reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の id（`partner_message_id`、`partner:<uuid>`）を含める。Gateway が送信後に `POST /v1/partners/:partnerId/discord/sent`（body: `partner_message_id` / `channel_id` / `discord_message_id`、応答 `{ bound }`）を呼ぶと、DO はその行の `discord_message_id` に Discord id を保存する。以後 `reply_to_message_id` がその Discord id と一致する発言は、メンションなしでも Yukarin への返信として LLM 判定に進む。通知前の行や既存行は `discord_message_id` が NULL のままで、従来どおり動く。
+
+## VC
+
+Worker から Gateway への押し出しは無く、Gateway が送って応答を受け取る。合成と再生は Gateway が担い、Worker は判断と指示だけを返す。
+
+#### 状態
+
+DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_id` / `voice_updated_at`）が、いま入っている VC を持つ。同時に入れるのは 1 つ。`POST /v1/partners/:partnerId/discord/voice-connection`（body: `{ guild_id, channel_id | null }`、応答 `{ recorded: true }`）で Gateway が実際に接続・切断したあと（と起動時に null で）報告したときだけ書き換わる。join の指示を返しただけでは変わらない。プロンプトの「身体の状態」に、VC にいるか・この発言が VC のテキストチャットから来たかを載せる。Admin API の status には出していない。
+
+#### VC の出入りの判断（`POST /v1/interfaces/discord/voice-events`）
+
+`discord.voice_state.updated` を DO に渡し、LLM を呼ばずに決める。応答は `voice_join` / `voice_leave` / `ignore`。判断は `console.info("voice decision")` に残し、audit には書かない（audit は発言ターンに紐づく）。
+
+- ついて行く（`voice_join`）: ユーザーが人で `to_channel_id` があり、いまどの VC にもいない（または入っている VC に人がいない）。かつ関係の段階が「親しい」以上（`EntityResolver.find` で引き、未解決の人は entity を作らず対象外）、在席が `sleeping` / `busy` / `do_not_disturb` でなく、身体の状態が `unavailable` でない。`asleep` なら GPU 機を起こす。
+- 出る（`voice_leave`）: 入っている VC（payload の `partner_channel_id`、無ければ DO の状態）に人が 0 人になったとき。ついて行く条件を満たせば、無人になった VC から移る `voice_join` を優先する。
+- それ以外は `ignore`。
+
+#### 発言への返事
+
+脳の出力に `voice_channel`（`join` / `leave` / `stay`）がある。返事を送ったあと、DO は応答（Worker が送信済みなら `ack`、Gateway が送るなら `reply`）に `voice` を載せる。
+
+- `join`: 発言者が VC にいて（`author_voice_channel_id`）、まだどの VC にもいない（または同じ VC にいる）ときだけ `voice.join`。GPU 機が寝ていれば起こす。満たさなければ黙って無視する。
+- `leave`: VC に入っているとき `voice.leave`。
+- VC のテキストチャットへの返事: 返事の送信に成功し、身体の状態が `unavailable` でなければ、`speak_aloud` に関わらず `voice.speak`（`channel_id` は VC、`text` は返事、`values` は WAV 添付と同じ `VOICE_REALIZATION` から作る値）を載せ、WAV は添付しない。`unavailable` ならテキストだけ。
+- ほかのチャンネルは従来どおり（`speak_aloud` なら WAV を添付）。
+
+```json
+{
+  "action": "ack",
+  "voice": {
+    "join": { "guild_id": "1", "channel_id": "7" },
+    "leave": { "guild_id": "1" },
+    "speak": { "channel_id": "7", "text": "おはよう", "values": { "engine": "aivoice", "preset": "...", "presetOverrides": {}, "masterOverrides": {} } }
+  }
+}
+```
+
+古い Gateway は `voice` を無視する。
 
 ## State / Relationship
 
