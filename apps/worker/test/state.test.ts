@@ -104,8 +104,8 @@ describe("State / Relationship の更新", () => {
 		expect(s.energy).toBeCloseTo(0.55);
 		expect(s.version).toBe(2);
 		const [rel] = await doRelationships(stub);
-		expect(rel?.familiarity).toBeCloseTo(0.12);
-		expect(rel?.trust).toBeCloseTo(0.25);
+		expect(rel?.familiarity).toBeCloseTo(0.42);
+		expect(rel?.trust).toBeCloseTo(0.45);
 
 		const transitions = await env.DB.prepare(
 			"SELECT * FROM state_transitions WHERE source_event_id = ?",
@@ -198,8 +198,8 @@ describe("State / Relationship の更新", () => {
 		const system = fake.requests[0]?.system.map((b) => b.text).join("\n") ?? "";
 		expect(system).toContain("気分: 0.30");
 		expect(system).toContain("eve との関係");
-		expect(system).toContain("親しさ: 0.12");
-		expect(system).toContain("信頼: 0.32");
+		expect(system).toContain("親しさ: 0.42");
+		expect(system).toContain("信頼: 0.52");
 	});
 
 	it("同じ作者は同じ entity に解決され、別の作者は別になる", async () => {

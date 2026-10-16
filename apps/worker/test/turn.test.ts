@@ -377,7 +377,7 @@ describe("宛先のない発言への割り込み", () => {
 		);
 	});
 
-	it("関係のある発言者なら、ゲートに familiarity と trust を渡す", async () => {
+	it("関係のある発言者なら、ゲートに関係の段階と数値を渡す", async () => {
 		const { stub, fake } = await setup("gate-rel", {
 			script: [llmOk(turnResponse()), gateOk(false)],
 		});
@@ -388,7 +388,7 @@ describe("宛先のない発言への割り込み", () => {
 		);
 		const gate = fake.requests[1]?.messages[0]?.content ?? "";
 		expect(gate).toMatch(
-			/alice との関係: familiarity \d\.\d{2}、trust \d\.\d{2}/,
+			/alice との関係: .+（familiarity \d\.\d{2}、trust \d\.\d{2}）/,
 		);
 	});
 
