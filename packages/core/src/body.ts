@@ -31,7 +31,7 @@ export type AivoiceStyle = { Name: string; Value: number };
 export type AivoiceValues = {
 	engine: "aivoice";
 	preset: string;
-	presetOverrides: { Styles: AivoiceStyle[] };
+	presetOverrides: { Styles?: AivoiceStyle[] };
 	masterOverrides: {
 		Volume: number;
 		Speed: number;

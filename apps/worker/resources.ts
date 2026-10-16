@@ -18,6 +18,7 @@ export const resources = {
 		partnerDiscordUserId: DEV_BOT_USER_ID,
 		discordSendFromWorker: "1",
 		voiceEnabled: "1",
+		voiceRealization: "shizuku",
 		snapshotBucket: "yunomi-dev-snapshots",
 		snapshotAgeRecipient:
 			"age13g33j0raad3fhl7xeutrf7pkp2f3decwax2udr950mqq3stxnd2qvj2md7",
@@ -29,6 +30,7 @@ export const resources = {
 		partnerDiscordUserId: "1558613526585671773",
 		discordSendFromWorker: "0",
 		voiceEnabled: "0",
+		voiceRealization: "yukari",
 		snapshotBucket: "yunomi-snapshots",
 		snapshotAgeRecipient:
 			"age1ss5ud6wync43k5mu2zghpdt4tg5lumljvggs26jlxgzu60y3qshsyf0m0e",
@@ -41,6 +43,7 @@ export const resources = {
 		partnerDiscordUserId: DEV_BOT_USER_ID,
 		discordSendFromWorker: "0",
 		voiceEnabled: "0",
+		voiceRealization: "yukari",
 		snapshotBucket: "yunomi-local-snapshots",
 		// テスト用の鍵ペア（対応する identity は test/snapshot-keys.ts）。
 		snapshotAgeRecipient:

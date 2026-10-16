@@ -100,22 +100,30 @@ voice:
     expressiveness: 0.7
   engines:
     aivoice:
-      preset: 結月 ゆかり
-      # J/A/S は emo 系の声が持つ喜び・怒り・哀しみのスタイル。
-      emotion_styles:
-        joy: J
-        amused: J
-        surprised: J
-        anger: A
-        sorrow: S
-      master:
-        volume: 1
-        speed: 1
-        pitch: 1
-        pitch_range: 1
-        middle_pause_ms: 150
-        long_pause_ms: 370
-        sentence_pause_ms: 800
+      # 環境が VOICE_REALIZATION で選ぶ。選ばれない、または未知の名前のときは default を使う。
+      default: yukari
+      realizations:
+        yukari:
+          preset: 結月 ゆかり
+          # J/A/S は emo 系の声が持つ喜び・怒り・哀しみのスタイル。
+          emotion_styles:
+            joy: J
+            amused: J
+            surprised: J
+            anger: A
+            sorrow: S
+          master: &master
+            volume: 1
+            speed: 1
+            pitch: 1
+            pitch_range: 1
+            middle_pause_ms: 150
+            long_pause_ms: 370
+            sentence_pause_ms: 800
+        # dev で聞き分けるための声。このプリセットはスタイルを持たないので Styles を送らない。
+        shizuku:
+          preset: 結月 ゆかり（雫）
+          master: *master
 capability_defaults:
   web_search: confirm
   file_write: deny

@@ -24,23 +24,30 @@ describe("yukarin profile", () => {
 
 	it("声の性質が A.I.VOICE の実現方法を持ち、値に変換できる", () => {
 		const voice = yukarinProfile.voice;
-		expect(voice?.engines.aivoice?.preset).toBe("結月 ゆかり");
 		if (!voice) throw new Error("voice がない");
-		const values = toAivoiceValues(
-			{
-				emotion: "joy",
-				energy: 0.8,
-				pace: "normal",
-				warmth: 0.5,
-				pause_before_ms: 0,
-			},
-			voice,
-		);
-		expect(values?.presetOverrides.Styles.map((s) => s.Name).sort()).toEqual([
+		const aivoice = voice.engines.aivoice;
+		expect(aivoice?.default).toBe("yukari");
+		expect(Object.keys(aivoice?.realizations ?? {}).sort()).toEqual([
+			"shizuku",
+			"yukari",
+		]);
+		const ir = {
+			emotion: "joy" as const,
+			energy: 0.8,
+			pace: "normal" as const,
+			warmth: 0.5,
+			pause_before_ms: 0,
+		};
+		const yukari = toAivoiceValues(ir, voice, "yukari");
+		expect(yukari?.preset).toBe("結月 ゆかり");
+		expect(yukari?.presetOverrides.Styles?.map((s) => s.Name).sort()).toEqual([
 			"A",
 			"J",
 			"S",
 		]);
+		const shizuku = toAivoiceValues(ir, voice, "shizuku");
+		expect(shizuku?.preset).toBe("結月 ゆかり（雫）");
+		expect(shizuku?.presetOverrides).toEqual({});
 	});
 
 	it("版数は内容が変わると変わり、同じ内容なら変わらない", () => {

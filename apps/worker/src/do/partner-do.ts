@@ -7,6 +7,7 @@ import {
 	externalServiceUnavailable,
 	type PartnerState,
 	type Relationship,
+	resolveAivoiceRealization,
 	toAivoiceValues,
 } from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
@@ -223,7 +224,15 @@ export class PartnerDO extends DurableObject<Env> {
 	#speakAloud(intent: BodyIntent, channelId: string, messageId: string): void {
 		if (!intent.speakAloud) return;
 		const voice = yukarinProfile.voice;
-		const values = voice && toAivoiceValues(intent.performance, voice);
+		const selected = this.env.VOICE_REALIZATION;
+		const resolved = voice && resolveAivoiceRealization(voice, selected);
+		if (resolved?.fellBack) {
+			console.warn(
+				`unknown VOICE_REALIZATION "${selected}", using "${resolved.name}"`,
+			);
+		}
+		const values =
+			voice && toAivoiceValues(intent.performance, voice, selected);
 		const body = this.#voice();
 		if (!values || !body) return;
 		this.#background(

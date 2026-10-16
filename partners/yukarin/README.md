@@ -17,3 +17,7 @@
 - `opinions`: `topic`、`label`、`stance`（短い一文）、`confidence`（0〜1）、`stability`（0〜1。高いほど経験で confidence が動きにくい）。
 
 キーを変えると、D1 に学習済みの行がある topic とは対応しなくなる。名前を変えたいだけならキーは変えない。profile から外した topic の行は読まれなくなるだけなので、不要になった topic は消してよい。
+
+## 声の実現方法
+
+`profile.yaml` の `voice.engines.aivoice.realizations` に、A.I.VOICE の名前つきの実現方法（`yukari`＝「結月 ゆかり」、`shizuku`＝「結月 ゆかり（雫）」）を持つ。`default` は環境が選ばないとき、または未知の名前を選んだときに使う。`shizuku` はスタイルを持たないので `emotion_styles` を書かず、`Styles` を送らない。環境は Worker の `VOICE_REALIZATION` で名前だけを選ぶ。

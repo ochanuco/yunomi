@@ -29,11 +29,12 @@
 
 ## 声の添付
 
-返事のテキストを送ったあと、脳が `speak_aloud` を選んでいれば、身体が WAV を同じチャンネルに、その返事への返信として添付する。声はテキストの返事を待たせず、失敗してもテキストは届いている。`VOICE_ENABLED` が `1` で、下の設定と secret が揃い、`CommunicationPort`（Discord REST）があるときだけ動く。揃わないときは声を使わず、脳には「声を出せない」と伝える。
+返事のテキストを送ったあと、脳が `speak_aloud` を選んでいれば、身体が WAV を同じチャンネルに、その返事への返信として添付する。声はテキストの返事を待たせず、失敗してもテキストは届いている。`VOICE_ENABLED` が `1` で、下の設定と secret が揃い、`CommunicationPort`（Discord REST）があるときだけ動く。揃わないときは声を使わず、脳には「声を出せない」と伝える。使うプリセットは環境が `VOICE_REALIZATION` で選ぶ。プロファイルにない名前は警告を出して default（`yukari`）にする。
 
 | 設定 | 種類 | 値 |
 | --- | --- | --- |
 | `VOICE_ENABLED` | text | dev `1` / prod・local `0` |
+| `VOICE_REALIZATION` | text | 声のプロファイルのうち使う A.I.VOICE の実現方法の名前。dev `shizuku` / prod・local `yukari` |
 | `OCHOKO_URL` | text | `https://ochoko.chanu.co` |
 | `WOL_URL` | text | `https://wol.chanu.co` |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | secret | ochoko と wol を通る Cloudflare Access の Service Token |

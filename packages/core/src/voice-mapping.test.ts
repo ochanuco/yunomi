@@ -1,22 +1,34 @@
 import { describe, expect, it } from "vitest";
 import type { PerformanceIR } from "./body.ts";
-import { toAivoiceValues } from "./voice-mapping.ts";
+import { resolveAivoiceRealization, toAivoiceValues } from "./voice-mapping.ts";
 import type { VoiceProfile } from "./voice-profile.ts";
+
+const master = {
+	volume: 1,
+	speed: 1,
+	pitch: 1,
+	pitch_range: 1,
+	middle_pause_ms: 150,
+	long_pause_ms: 370,
+	sentence_pause_ms: 800,
+};
 
 const profile: VoiceProfile = {
 	traits: { base_pace: 1, base_pitch: 1, expressiveness: 0.7 },
 	engines: {
 		aivoice: {
-			preset: "結月 ゆかり",
-			emotion_styles: { joy: "J", amused: "J", anger: "A", sorrow: "S" },
-			master: {
-				volume: 1,
-				speed: 1,
-				pitch: 1,
-				pitch_range: 1,
-				middle_pause_ms: 150,
-				long_pause_ms: 370,
-				sentence_pause_ms: 800,
+			default: "yukari",
+			realizations: {
+				yukari: {
+					preset: "結月 ゆかり",
+					emotion_styles: { joy: "J", amused: "J", anger: "A", sorrow: "S" },
+					master,
+				},
+				shizuku: {
+					preset: "結月 ゆかり（雫）",
+					emotion_styles: {},
+					master,
+				},
 			},
 		},
 	},
@@ -47,6 +59,37 @@ describe("toAivoiceValues", () => {
 
 	it("A.I.VOICE の実現方法がなければ undefined", () => {
 		expect(toAivoiceValues(ir(), { ...profile, engines: {} })).toBeUndefined();
+	});
+
+	it("名前で選んだ実現方法のプリセットになり、未指定は default", () => {
+		const preset = (name?: string) =>
+			toAivoiceValues(ir(), profile, name)?.preset;
+		expect(preset()).toBe("結月 ゆかり");
+		expect(preset("yukari")).toBe("結月 ゆかり");
+		expect(preset("shizuku")).toBe("結月 ゆかり（雫）");
+	});
+
+	it("未知の名前は default に戻り、戻ったことが分かる", () => {
+		expect(toAivoiceValues(ir(), profile, "nope")?.preset).toBe("結月 ゆかり");
+		expect(resolveAivoiceRealization(profile, "nope")).toMatchObject({
+			name: "yukari",
+			fellBack: true,
+		});
+		expect(resolveAivoiceRealization(profile, "shizuku")).toMatchObject({
+			name: "shizuku",
+			fellBack: false,
+		});
+		expect(resolveAivoiceRealization(profile)?.fellBack).toBe(false);
+	});
+
+	it("スタイルを持たない実現方法では Styles を送らない", () => {
+		const v = toAivoiceValues(
+			ir({ emotion: "joy", energy: 1 }),
+			profile,
+			"shizuku",
+		);
+		expect(v?.presetOverrides).toEqual({});
+		expect(v?.presetOverrides).not.toHaveProperty("Styles");
 	});
 
 	it("感情の違いがスタイル値の違いになる", () => {
@@ -93,7 +136,7 @@ describe("toAivoiceValues", () => {
 			traits: { ...profile.traits, expressiveness: 1 },
 		});
 		expect(
-			full?.presetOverrides.Styles.find((s) => s.Name === "J")?.Value,
+			full?.presetOverrides.Styles?.find((s) => s.Name === "J")?.Value,
 		).toBe(1);
 	});
 
@@ -124,16 +167,21 @@ describe("toAivoiceValues", () => {
 			traits: { base_pace: 2, base_pitch: 2, expressiveness: 1 },
 			engines: {
 				aivoice: {
-					preset: "p",
-					emotion_styles: {},
-					master: {
-						volume: 5,
-						speed: 4,
-						pitch: 2,
-						pitch_range: 2,
-						middle_pause_ms: 500,
-						long_pause_ms: 2000,
-						sentence_pause_ms: 10000,
+					default: "p",
+					realizations: {
+						p: {
+							preset: "p",
+							emotion_styles: {},
+							master: {
+								volume: 5,
+								speed: 4,
+								pitch: 2,
+								pitch_range: 2,
+								middle_pause_ms: 500,
+								long_pause_ms: 2000,
+								sentence_pause_ms: 10000,
+							},
+						},
 					},
 				},
 			},
