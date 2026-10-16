@@ -18,7 +18,7 @@ const MAX_SYNTHESIS_ATTEMPTS = 3;
 const ORGAN_KEY = "voice:organ";
 const PENDING_PREFIX = "voice:pending:";
 
-/** 返事のテキストはすでに届いている。声はその返信として添付する。 */
+/** 返事のテキストはすでに届いている。声は添付する。間に他の発言があれば返信形式にする。 */
 export type SpeechJob = {
 	messageId: string;
 	channelId: string;
@@ -37,6 +37,8 @@ export type VoiceBodyDeps = {
 	storage: VoiceStorage;
 	organs: VoiceOrgans;
 	communication: CommunicationPort;
+	/** 返事のあとに他の発言があるか。あるときだけ添付を返信形式にする。 */
+	hasMessagesAfter: (channelId: string, messageId: string) => boolean;
 	now: () => Date;
 	setAlarm: (at: Date) => Promise<void>;
 };
@@ -153,7 +155,9 @@ export class VoiceBody {
 		}
 		const sent = await this.#d.communication.sendAttachment({
 			channelId: job.channelId,
-			replyToMessageId: job.messageId,
+			...(this.#d.hasMessagesAfter(job.channelId, job.messageId)
+				? { replyToMessageId: job.messageId }
+				: {}),
 			filename: FILENAME,
 			contentType: synthesized.value.contentType,
 			data: synthesized.value.audio,

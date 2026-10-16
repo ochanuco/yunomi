@@ -151,6 +151,32 @@ export class DoStore {
 		return row ? toRecent(row) : null;
 	}
 
+	/**
+	 * 対象の発言のあとに、partner 以外の発言（人でも bot でも）が積まれているか。
+	 * 返信の宛先が曖昧になるかの判定に使う。対象が見つからなければ true（返信形式に倒す）。
+	 */
+	hasMessagesAfter(channelId: string, messageId: string): boolean {
+		const target = this.#sql
+			.exec<{ rowid: number }>(
+				`SELECT rowid FROM recent_messages
+				WHERE channel_id = ? AND (message_id = ? OR discord_message_id = ?) LIMIT 1`,
+				channelId,
+				messageId,
+				messageId,
+			)
+			.toArray()[0];
+		if (!target) return true;
+		const later = this.#sql
+			.exec(
+				`SELECT 1 FROM recent_messages
+				WHERE channel_id = ? AND is_partner = 0 AND rowid > ? LIMIT 1`,
+				channelId,
+				target.rowid,
+			)
+			.toArray();
+		return later.length > 0;
+	}
+
 	/** partner 発言に Discord message id を紐付ける。対象が無ければ false。 */
 	bindDiscordMessageId(
 		partnerMessageId: string,

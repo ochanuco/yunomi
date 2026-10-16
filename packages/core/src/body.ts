@@ -70,7 +70,7 @@ export interface CommunicationPort {
 	sendTyping(input: { channelId: string }): Promise<Result<void, DomainError>>;
 	sendAttachment(input: {
 		channelId: string;
-		replyToMessageId: string;
+		replyToMessageId?: string;
 		filename: string;
 		contentType: string;
 		data: Uint8Array;

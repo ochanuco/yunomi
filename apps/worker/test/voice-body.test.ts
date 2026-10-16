@@ -89,6 +89,9 @@ const setup = () => {
 			ok({ messageId: "d-600" }),
 	);
 	const setAlarm = vi.fn(async (_at: Date) => {});
+	const hasMessagesAfter = vi.fn(
+		(_channelId: string, _messageId: string) => false,
+	);
 	const body = new VoiceBody({
 		storage,
 		organs,
@@ -97,6 +100,8 @@ const setup = () => {
 			sendTyping: vi.fn(),
 			sendAttachment,
 		},
+		hasMessagesAfter: (channelId, messageId) =>
+			hasMessagesAfter(channelId, messageId),
 		now: () => now,
 		setAlarm,
 	});
@@ -108,6 +113,7 @@ const setup = () => {
 		wake,
 		checkAvailability,
 		sendAttachment,
+		hasMessagesAfter,
 		setAlarm,
 		advance: (ms: number) => {
 			now = new Date(now.getTime() + ms);
@@ -116,6 +122,16 @@ const setup = () => {
 };
 
 describe("VoiceBody.speak", () => {
+	it("返事のあとに他の発言があれば返信形式で添付する", async () => {
+		const t = setup();
+		t.hasMessagesAfter.mockReturnValue(true);
+		await t.body.speak(job);
+
+		expect(t.sendAttachment).toHaveBeenCalledWith(
+			expect.objectContaining({ replyToMessageId: "d-500" }),
+		);
+	});
+
 	it("ready なら合成して、返事への返信として添付する", async () => {
 		const t = setup();
 		await t.body.speak(job);
@@ -126,11 +142,11 @@ describe("VoiceBody.speak", () => {
 		});
 		expect(t.sendAttachment).toHaveBeenCalledWith({
 			channelId: "c1",
-			replyToMessageId: "d-500",
 			filename: "voice.wav",
 			contentType: "audio/wav",
 			data: new Uint8Array([1, 2, 3]),
 		});
+		expect(t.hasMessagesAfter).toHaveBeenCalledWith("c1", "d-500");
 		expect(t.wake).not.toHaveBeenCalled();
 		expect(t.setAlarm).not.toHaveBeenCalled();
 	});

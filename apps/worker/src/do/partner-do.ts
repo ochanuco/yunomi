@@ -221,6 +221,8 @@ export class PartnerDO extends DurableObject<Env> {
 			storage: this.ctx.storage,
 			organs,
 			communication,
+			hasMessagesAfter: (channelId, messageId) =>
+				this.#store.hasMessagesAfter(channelId, messageId),
 			now: () => this.now(),
 			setAlarm: (at) => this.ctx.storage.setAlarm(at),
 		});
@@ -278,10 +280,14 @@ export class PartnerDO extends DurableObject<Env> {
 		inbound: InboundMessage,
 		reply: Extract<GatewayResponse, { action: "reply" }>,
 	): Promise<{ response: GatewayResponse; messageId?: string }> {
+		const target = reply.reply_to_message_id ?? inbound.messageId;
+		// 1 対 1 の流れでは普通のメッセージで送り、間に他の発言があるときだけ返信形式にする。
 		const sent = await port.sendText({
 			channelId: inbound.channelId,
 			text: reply.content,
-			replyToMessageId: reply.reply_to_message_id ?? inbound.messageId,
+			...(this.#store.hasMessagesAfter(inbound.channelId, target)
+				? { replyToMessageId: target }
+				: {}),
 		});
 		if (!sent.ok) {
 			console.error("discord send failed", sent.error.type, sent.error.message);

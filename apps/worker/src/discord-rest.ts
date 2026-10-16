@@ -171,7 +171,9 @@ export const createDiscordRest = (deps: DiscordRestDeps): CommunicationPort => {
 					"payload_json",
 					JSON.stringify({
 						allowed_mentions: allowedMentions,
-						...reference(input.replyToMessageId),
+						...(input.replyToMessageId
+							? reference(input.replyToMessageId)
+							: {}),
 						attachments: [{ id: 0, filename: input.filename }],
 					}),
 				);

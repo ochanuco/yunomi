@@ -162,6 +162,20 @@ describe("sendAttachment", () => {
 		expect(h["content-type"]).toBeUndefined();
 	});
 
+	it("返信先が無ければ message_reference を付けない", async () => {
+		const { port, fetchMock } = setup([json({ id: "501" })]);
+		await port.sendAttachment({
+			channelId: "2",
+			filename: "voice.wav",
+			contentType: "audio/wav",
+			data: new Uint8Array([1]),
+		});
+		const form = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+		expect(
+			JSON.parse(String(form.get("payload_json"))).message_reference,
+		).toBeUndefined();
+	});
+
 	it("429 の再送でも添付を送り直せる", async () => {
 		const { port, fetchMock } = setup([
 			json({ retry_after: 0.5 }, 429),

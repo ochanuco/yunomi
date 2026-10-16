@@ -4,9 +4,10 @@ import type { YunomiClient } from "./yunomi-client.ts";
 
 /** discord.js のテキストチャンネルのうち handler が使う部分。 */
 export type ChannelLike = {
+	lastMessageId?: string | null;
 	send: (options: {
 		content: string;
-		reply: { messageReference: string; failIfNotExists: boolean };
+		reply?: { messageReference: string; failIfNotExists: boolean };
 		allowedMentions: { repliedUser: boolean; parse: never[] };
 	}) => Promise<{ id: string }>;
 };
@@ -53,14 +54,16 @@ export const createMessageHandler =
 			log.info("acked", { message_id: message.id });
 			return;
 		}
+		const target = response.reply_to_message_id ?? message.id;
+		// 直近の発言が宛先そのままなら普通のメッセージで送り、間に他の発言があるときだけ返信形式にする
+		const quiet = channel.lastMessageId === target;
 		let sent: { id: string };
 		try {
 			sent = await channel.send({
 				content: response.content,
-				reply: {
-					messageReference: response.reply_to_message_id ?? message.id,
-					failIfNotExists: false,
-				},
+				...(quiet
+					? {}
+					: { reply: { messageReference: target, failIfNotExists: false } }),
 				// @everyone やロール宛 ping を許さない。返信先ユーザーにも通知しない
 				allowedMentions: { repliedUser: false, parse: [] },
 			});

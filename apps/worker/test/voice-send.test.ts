@@ -10,6 +10,7 @@ import {
 	type SpeechResult,
 } from "@yunomi/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DoStore } from "../src/do/store.ts";
 import { VOICE_DEADLINE_MS, VOICE_POLL_MS } from "../src/do/voice.ts";
 import type { VoiceOrgans } from "../src/voice-organs.ts";
 import {
@@ -105,7 +106,6 @@ describe("声の添付", () => {
 		expect(o.synthesize).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).toHaveBeenCalledWith({
 			channelId: s.channelId,
-			replyToMessageId: "d-500",
 			filename: "voice.wav",
 			contentType: "audio/wav",
 			data: new Uint8Array([1, 2, 3]),
@@ -207,14 +207,46 @@ describe("声の添付", () => {
 		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS * 2));
 		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).toHaveBeenCalledWith(
+			expect.objectContaining({ channelId: s.channelId }),
+		);
+		expect(port.sendAttachment.mock.calls[0]?.[0]).not.toHaveProperty(
+			"replyToMessageId",
+		);
+
+		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS * 3));
+		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
+	});
+
+	it("待つあいだに他の発言が入れば、返信形式で添付する", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(speakAloud())]);
+		const port = fakePort();
+		const state = { availability: "asleep" as Availability };
+		const o = fakeOrgans(state);
+		await install(port, o.organs);
+
+		await send(mention(s));
+		await runInDurableObject(partnerStub(PARTNER_ID), (_o, st) => {
+			new DoStore(st.storage.sql).appendRecent({
+				channelId: s.channelId,
+				messageId: "later-1",
+				authorId: "u-other",
+				authorName: "bob",
+				isBot: false,
+				isPartner: false,
+				content: "割り込み",
+				occurredAt: "2026-10-11T03:00:00.000Z",
+			});
+		});
+
+		state.availability = "ready";
+		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS));
+		expect(port.sendAttachment).toHaveBeenCalledWith(
 			expect.objectContaining({
 				channelId: s.channelId,
 				replyToMessageId: "d-500",
 			}),
 		);
-
-		await runAlarm(new Date(CLOCK0.getTime() + VOICE_POLL_MS * 3));
-		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
 	});
 
 	it("2 分で ready にならなければ声を諦め、テキストは届いている", async () => {
