@@ -28,12 +28,14 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
 			text: "昨日のイベントどうだった？",
 			minutesAgo: 5,
 			isPartner: false,
+			isBot: false,
 		},
 		{
 			speaker: "テスト",
 			text: "楽しかったです",
 			minutesAgo: 4,
 			isPartner: true,
+			isBot: false,
 		},
 	],
 	minutesSincePartnerSpoke: 4,
@@ -83,6 +85,7 @@ describe("buildGatePrompt", () => {
 			text: `発言${i}`,
 			minutesAgo: 15 - i,
 			isPartner: false,
+			isBot: false,
 		}));
 		const p = buildGatePrompt(
 			input({ recent, minutesSincePartnerSpoke: null }),
