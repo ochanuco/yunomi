@@ -40,6 +40,13 @@ export type OpinionLine = {
 
 export type ChannelLine = { speaker: string; text: string };
 
+export type VoiceContext = {
+	/** いま接続している VC。いなければ null。 */
+	connectedChannelId: string | null;
+	/** この発言が来たチャンネル。 */
+	messageChannelId: string;
+};
+
 export type PromptInput = {
 	profile: PartnerProfile;
 	/** recurring_jokes の id → 現在の cooldown 状態。未指定は available。 */
@@ -56,6 +63,8 @@ export type PromptInput = {
 	opinions: OpinionLine[];
 	/** 身体の状態。未指定は unavailable（声を使えない）として扱う。 */
 	bodyState?: BodyState;
+	/** VC の状況。未指定は VC にいない扱い。 */
+	voice?: VoiceContext;
 	/** 相手の「明日」などを日時に直す基準。 */
 	now: Date;
 	channel: { name: string | null; presence: string | null };
@@ -217,11 +226,27 @@ const BODY_STATE_LINES: Record<BodyState, string> = {
 		"今は声を出せない。声で返すことを選ばず、テキストで返す。声での参加や通話への誘いも申し出ない。",
 };
 
-const bodyBlock = (state: BodyState): string =>
+const voiceChannelLines = (voice: VoiceContext | undefined): string[] => {
+	if (!voice?.connectedChannelId) {
+		return ["- VC: 今はどの VC にも入っていない。"];
+	}
+	if (voice.connectedChannelId === voice.messageChannelId) {
+		return [
+			"- VC: 今 VC に入っていて、この発言はその VC のテキストチャットから来た。ここでの返事は自動で VC に声として流れる（speak_aloud は関係ない）。",
+			"- VC では相手の声は聞こえず、VC のテキストチャットだけを読んでいる。",
+		];
+	}
+	return [
+		"- VC: 今 VC に入っている。この発言は VC とは別のチャンネルから来たので、返事は声では流れない。",
+	];
+};
+
+const bodyBlock = (state: BodyState, voice: VoiceContext | undefined): string =>
 	[
 		"## 身体の状態",
 		`- 声: ${BODY_STATE_LINES[state]}`,
 		"- 聞くことはできない。相手の声は聞こえず、テキストだけを読んでいる。",
+		...voiceChannelLines(voice),
 	].join("\n");
 
 const TASK_BLOCK = [
@@ -247,6 +272,7 @@ const TASK_BLOCK = [
 	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
 	"- performance は utterance をどう言うかの指示で、ignore でも埋める。emotion は neutral / joy / amused / anger / sorrow / surprised から、今のあなたの気持ちと発言の内容に合うものを選ぶ。energy（0 〜 1）は声の張り、warmth（0 〜 1）は相手への温かさ。pace は slow / slightly_slow / normal / slightly_fast / fast から選ぶ。pause_before_ms は話し出す前の間（ミリ秒、0 〜 5000）で、普段は 0 のままにし、ためらいや間を置きたいときだけ増やす。声の高さや速さの数値、特定のエンジンの設定は出さない。",
 	"- speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。眠っている・起きかけているときも声は出せる。迷えば false にする。",
+	"- voice_channel は VC への出入り。通常は stay。相手に VC へ誘われ、あなたも入りたいときだけ join にする（今の気分や在席状況で断ってもよい。断るなら stay にして、その旨を返事で伝える）。VC に入っている間に出てほしいと頼まれたとき、または別れの挨拶をするときは leave にする。",
 	"- 迷う内容は needs_review を true にする。",
 	"- utterance は 2000 文字以内。",
 ].join("\n");
@@ -278,7 +304,7 @@ export class PromptBuilder {
 		const state = stateBlock(input.state);
 		const relationship = relationshipBlock(input.relationship);
 		const channel = channelBlock(input.channel);
-		const body = bodyBlock(input.bodyState ?? "unavailable");
+		const body = bodyBlock(input.bodyState ?? "unavailable", input.voice);
 		const interest = interestBlock(
 			input.interests.slice(0, INTEREST_PROMPT_LIMIT),
 		);

@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
 	dedupeKey,
 	discordSentSchema,
+	discordVoiceConnectionSchema,
 	gatewayResponseSchema,
 	toInboundMessage,
+	toVoiceStateUpdate,
+	voiceResponseSchema,
 } from "./discord.ts";
 
 const valid = () => ({
@@ -160,5 +163,146 @@ describe("gatewayResponseSchema partner_message_id", () => {
 			partner_message_id: "",
 		});
 		expect(r.success).toBe(false);
+	});
+});
+
+const values = {
+	engine: "aivoice",
+	preset: "紲星あかり",
+	presetOverrides: { Styles: [{ Name: "J", Value: 0.5 }] },
+	masterOverrides: {
+		Volume: 1,
+		Speed: 1,
+		Pitch: 1,
+		PitchRange: 1,
+		MiddlePause: 150,
+		LongPause: 370,
+		SentencePause: 800,
+	},
+};
+
+describe("author_voice_channel_id", () => {
+	it("省略されたら null にする", () => {
+		const r = toInboundMessage(valid());
+		expect(r.ok && r.value.authorVoiceChannelId).toBeNull();
+	});
+
+	it("VC にいる作者の channel id を受ける", () => {
+		const e = valid();
+		const r = toInboundMessage({
+			...e,
+			payload: { ...e.payload, author_voice_channel_id: "77" },
+		});
+		expect(r.ok && r.value.authorVoiceChannelId).toBe("77");
+	});
+
+	it("null を受理する", () => {
+		const e = valid();
+		const r = toInboundMessage({
+			...e,
+			payload: { ...e.payload, author_voice_channel_id: null },
+		});
+		expect(r.ok && r.value.authorVoiceChannelId).toBeNull();
+	});
+});
+
+describe("gatewayResponseSchema voice", () => {
+	const ok = (x: unknown) => v.safeParse(gatewayResponseSchema, x).success;
+	it("voice 無しの ack は有効のまま", () => {
+		expect(ok({ action: "ack" })).toBe(true);
+	});
+	it("ack と reply は voice を持てる", () => {
+		const voice = {
+			join: { guild_id: "1", channel_id: "7" },
+			leave: { guild_id: "1" },
+			speak: { channel_id: "7", text: "やあ", values },
+		};
+		expect(ok({ action: "ack", voice })).toBe(true);
+		expect(ok({ action: "reply", content: "やあ", voice })).toBe(true);
+		expect(ok({ action: "ack", voice: {} })).toBe(true);
+	});
+	it("speak の text が空、values が欠けると拒否する", () => {
+		expect(
+			ok({
+				action: "ack",
+				voice: { speak: { channel_id: "7", text: "", values } },
+			}),
+		).toBe(false);
+		expect(
+			ok({
+				action: "ack",
+				voice: { speak: { channel_id: "7", text: "やあ" } },
+			}),
+		).toBe(false);
+	});
+});
+
+describe("toVoiceStateUpdate", () => {
+	const event = () => ({
+		event_id: newId(),
+		type: "discord.voice_state.updated",
+		source: "discord",
+		partner_id: "yukarin",
+		occurred_at: "2026-01-01T00:00:00.000Z",
+		received_at: "2026-01-01T00:00:01.000Z",
+		schema_version: 1,
+		payload: {
+			guild_id: "1",
+			user: { id: "4", display_name: "alice", is_bot: false },
+			from_channel_id: null,
+			to_channel_id: "7",
+			humans_in_from: 0,
+			humans_in_to: 1,
+			partner_channel_id: null,
+			humans_in_partner_channel: 0,
+		},
+	});
+
+	it("正常な payload を内部型へ変換する", () => {
+		const r = toVoiceStateUpdate(event());
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.value).toMatchObject({
+			guildId: "1",
+			user: { id: "4", displayName: "alice", isBot: false },
+			fromChannelId: null,
+			toChannelId: "7",
+			humansInTo: 1,
+			partnerChannelId: null,
+		});
+	});
+
+	it("type と人数の不正を拒否する", () => {
+		expect(toVoiceStateUpdate({ ...event(), type: "x" }).ok).toBe(false);
+		const e = event();
+		expect(
+			toVoiceStateUpdate({
+				...e,
+				payload: { ...e.payload, humans_in_to: -1 },
+			}).ok,
+		).toBe(false);
+	});
+});
+
+describe("voiceResponseSchema", () => {
+	const ok = (x: unknown) => v.safeParse(voiceResponseSchema, x).success;
+	it("join / leave / ignore を受理する", () => {
+		expect(ok({ action: "voice_join", guild_id: "1", channel_id: "7" })).toBe(
+			true,
+		);
+		expect(ok({ action: "voice_leave", guild_id: "1" })).toBe(true);
+		expect(ok({ action: "ignore" })).toBe(true);
+		expect(ok({ action: "voice_join", guild_id: "1" })).toBe(false);
+	});
+});
+
+describe("discordVoiceConnectionSchema", () => {
+	const ok = (x: unknown) =>
+		v.safeParse(discordVoiceConnectionSchema, x).success;
+	it("接続先は channel id か null", () => {
+		expect(ok({ guild_id: "1", channel_id: "7" })).toBe(true);
+		expect(ok({ guild_id: "1", channel_id: null })).toBe(true);
+		expect(ok({ guild_id: "1" })).toBe(false);
+		expect(ok({ guild_id: "1", channel_id: "" })).toBe(false);
 	});
 });

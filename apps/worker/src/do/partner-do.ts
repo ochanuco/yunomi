@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { relationshipTier } from "@yunomi/conversation";
 import {
 	type BodyIntent,
 	type BodyState,
@@ -14,9 +15,13 @@ import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	type DiscordSent,
+	type DiscordVoiceConnection,
 	dedupeKey,
 	type GatewayResponse,
 	type InboundMessage,
+	type VoiceDirective,
+	type VoiceResponse,
+	type VoiceStateUpdate,
 } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
@@ -35,7 +40,7 @@ import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
 import { runTurn } from "./turn.ts";
-import { VoiceBody } from "./voice.ts";
+import { VoiceBody, wakeIfAsleep } from "./voice.ts";
 
 const defaultRouter = (env: Env): ModelRouter => {
 	const provider: LLMProvider = env.ANTHROPIC_API_KEY
@@ -202,14 +207,28 @@ export class PartnerDO extends DurableObject<Env> {
 		} finally {
 			(stopTyping as (() => void) | null)?.();
 		}
-		if (port && outcome.response.action === "reply") {
+		if (outcome.response.action !== "reply") return toResult(outcome);
+		if (port) {
 			const sent = await this.#send(port, inbound, outcome.response);
-			if (sent.messageId && outcome.intent) {
+			const voice = this.#voiceDirective(
+				inbound,
+				outcome,
+				sent.messageId !== undefined,
+			);
+			// VC の発言への返事は VC で再生する。WAV 添付とは重ねない。
+			if (sent.messageId && outcome.intent && !voice?.speak) {
 				this.#speakAloud(outcome.intent, inbound.channelId, sent.messageId);
 			}
-			return toResult({ ...outcome, response: sent.response });
+			return toResult({
+				...outcome,
+				response: withVoice(sent.response, voice),
+			});
 		}
-		return toResult(outcome);
+		const voice = this.#voiceDirective(inbound, outcome, true);
+		return toResult({
+			...outcome,
+			response: withVoice(outcome.response, voice),
+		});
 	}
 
 	// 声が使えるのは、発声の器官と意思疎通の口が両方あるときだけ。
@@ -228,9 +247,7 @@ export class PartnerDO extends DurableObject<Env> {
 		});
 	}
 
-	// 返事の送信を待たせないよう、声は応答の外で段取りする。
-	#speakAloud(intent: BodyIntent, channelId: string, messageId: string): void {
-		if (!intent.speakAloud) return;
+	#aivoiceValues(intent: BodyIntent) {
 		const voice = yukarinProfile.voice;
 		const selected = this.env.VOICE_REALIZATION;
 		const resolved = voice && resolveAivoiceRealization(voice, selected);
@@ -239,13 +256,153 @@ export class PartnerDO extends DurableObject<Env> {
 				`unknown VOICE_REALIZATION "${selected}", using "${resolved.name}"`,
 			);
 		}
-		const values =
-			voice && toAivoiceValues(intent.performance, voice, selected);
+		return voice ? toAivoiceValues(intent.performance, voice, selected) : null;
+	}
+
+	// 返事の送信を待たせないよう、声は応答の外で段取りする。
+	#speakAloud(intent: BodyIntent, channelId: string, messageId: string): void {
+		if (!intent.speakAloud) return;
+		const values = this.#aivoiceValues(intent);
 		const body = this.#voice();
 		if (!values || !body) return;
 		this.#background(
 			body.speak({ messageId, channelId, text: intent.text, values }),
 		);
+	}
+
+	/** GPU 機が寝ていれば起こす。応答は待たせない。 */
+	#wakeVoiceOrgan(): void {
+		const organs = this.createVoiceOrgans(this.env);
+		if (organs) this.#background(wakeIfAsleep(organs, this.now()));
+	}
+
+	// 返事のあとに Gateway へ頼む VC の操作。join は著者が VC にいて、まだ別の VC にいないときだけ。
+	#voiceDirective(
+		inbound: InboundMessage,
+		outcome: TurnOutcome,
+		delivered: boolean,
+	): VoiceDirective | undefined {
+		const connected = this.#store.getVoiceConnection()?.channelId ?? null;
+		const directive: VoiceDirective = {};
+		const wants = outcome.voiceChannel ?? "stay";
+		if (wants === "join") {
+			const target = inbound.authorVoiceChannelId;
+			if (target && (connected === null || connected === target)) {
+				directive.join = { guild_id: inbound.guildId, channel_id: target };
+				this.#wakeVoiceOrgan();
+			}
+		} else if (wants === "leave" && connected !== null) {
+			directive.leave = { guild_id: inbound.guildId };
+		}
+		if (
+			delivered &&
+			connected !== null &&
+			connected === inbound.channelId &&
+			wants !== "leave" &&
+			outcome.intent &&
+			outcome.bodyState &&
+			outcome.bodyState !== "unavailable"
+		) {
+			const values = this.#aivoiceValues(outcome.intent);
+			if (values) {
+				directive.speak = {
+					channel_id: connected,
+					text: outcome.intent.text,
+					values,
+				};
+				if (outcome.bodyState === "asleep") this.#wakeVoiceOrgan();
+			}
+		}
+		return Object.keys(directive).length > 0 ? directive : undefined;
+	}
+
+	/** Gateway が VC に実際に接続・切断したあとの報告。VC の状態はこれで初めて確定する。 */
+	reportVoiceConnection(report: DiscordVoiceConnection): { recorded: true } {
+		this.#store.setVoiceConnection(
+			report.guild_id,
+			report.channel_id,
+			this.now(),
+		);
+		return { recorded: true };
+	}
+
+	voiceConnection() {
+		return this.#store.getVoiceConnection();
+	}
+
+	/** VC の出入りに、ついて行く・出る・何もしないを返す。LLM は呼ばない。 */
+	async handleVoiceState(u: VoiceStateUpdate): Promise<VoiceResponse> {
+		const decision = await this.#decideVoiceState(u);
+		console.info("voice decision", {
+			eventId: u.eventId,
+			userId: u.user.id,
+			from: u.fromChannelId,
+			to: u.toChannelId,
+			action: decision.response.action,
+			reason: decision.reason,
+		});
+		return decision.response;
+	}
+
+	async #decideVoiceState(
+		u: VoiceStateUpdate,
+	): Promise<{ response: VoiceResponse; reason: string }> {
+		const partnerVc =
+			u.partnerChannelId ?? this.#store.getVoiceConnection()?.channelId ?? null;
+		const partnerEmpty = partnerVc !== null && u.humansInPartnerChannel === 0;
+		const follow = await this.#followVerdict(u, partnerVc, partnerEmpty);
+		if (follow.join && u.toChannelId) {
+			this.#wakeVoiceOrgan();
+			return {
+				response: {
+					action: "voice_join",
+					guild_id: u.guildId,
+					channel_id: u.toChannelId,
+				},
+				reason: "follow",
+			};
+		}
+		if (partnerEmpty) {
+			return {
+				response: { action: "voice_leave", guild_id: u.guildId },
+				reason: "empty",
+			};
+		}
+		return { response: { action: "ignore" }, reason: follow.reason };
+	}
+
+	async #followVerdict(
+		u: VoiceStateUpdate,
+		partnerVc: string | null,
+		partnerEmpty: boolean,
+	): Promise<{ join: boolean; reason: string }> {
+		if (u.user.isBot) return { join: false, reason: "bot" };
+		if (!u.toChannelId) return { join: false, reason: "not_in_voice" };
+		if (partnerVc !== null && !partnerEmpty) {
+			return { join: false, reason: "partner_busy" };
+		}
+		const entityId = await this.#entities
+			.find("discord", u.user.id)
+			.catch(() => null);
+		const rel = entityId
+			? this.#store.getRelationship(yukarinProfile.partner_id, entityId)
+			: null;
+		if (!rel) return { join: false, reason: "unknown_user" };
+		const tier = relationshipTier(rel.relationship);
+		if (tier !== "親しい" && tier !== "とても親しい") {
+			return { join: false, reason: "not_close" };
+		}
+		const presence = this.#store.getState()?.presence ?? "available";
+		if (
+			presence === "sleeping" ||
+			presence === "busy" ||
+			presence === "do_not_disturb"
+		) {
+			return { join: false, reason: `presence_${presence}` };
+		}
+		const body = (await this.#voice()?.bodyState()) ?? "unavailable";
+		if (body === "unavailable") return { join: false, reason: "body" };
+		return { join: true, reason: "follow" };
 	}
 
 	/** 待っている声を進める。寝ていた器官が起きるのを DO の alarm で待つ。 */
@@ -331,6 +488,14 @@ export class PartnerDO extends DurableObject<Env> {
 		return result;
 	}
 }
+
+const withVoice = (
+	response: GatewayResponse,
+	voice: VoiceDirective | undefined,
+): GatewayResponse =>
+	voice && (response.action === "ack" || response.action === "reply")
+		? { ...response, voice }
+		: response;
 
 const toResult = (o: TurnOutcome): HandleResult => ({
 	...o.response,

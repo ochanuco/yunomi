@@ -21,6 +21,13 @@ export type RecentMessage = {
 	occurredAt: string;
 };
 
+export type VoiceConnection = {
+	guildId: string;
+	/** VC に入っていなければ null。 */
+	channelId: string | null;
+	updatedAt: string;
+};
+
 export type StoredResult = GatewayResponse & { audit: TurnAuditData };
 
 export type RelationshipRow = {
@@ -272,6 +279,38 @@ export class DoStore {
 			s.degradedMode ? 1 : 0,
 			s.version,
 			s.updatedAt,
+		);
+	}
+
+	getVoiceConnection(): VoiceConnection | null {
+		const r = this.#sql
+			.exec<{
+				voice_guild_id: string;
+				voice_channel_id: string | null;
+				voice_updated_at: string;
+			}>("SELECT * FROM voice_connection WHERE id = 1")
+			.toArray()[0];
+		return r
+			? {
+					guildId: r.voice_guild_id,
+					channelId: r.voice_channel_id,
+					updatedAt: r.voice_updated_at,
+				}
+			: null;
+	}
+
+	setVoiceConnection(
+		guildId: string,
+		channelId: string | null,
+		at: Date,
+	): void {
+		this.#sql.exec(
+			`INSERT OR REPLACE INTO voice_connection
+				(id, voice_guild_id, voice_channel_id, voice_updated_at)
+			VALUES (1, ?, ?, ?)`,
+			guildId,
+			channelId,
+			at.toISOString(),
 		);
 	}
 

@@ -1,9 +1,13 @@
 import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
+	DISCORD_VOICE_EVENTS_PATH,
 	discordSentSchema,
+	discordVoiceConnectionSchema,
 	type GatewayResponse,
 	toInboundMessage,
+	toVoiceStateUpdate,
+	type VoiceResponse,
 } from "@yunomi/protocol";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
@@ -22,6 +26,8 @@ export { PartnerDO };
 
 const DISCORD_EVENTS_PATH = "/v1/interfaces/discord/events";
 const DISCORD_SENT_PATH = /^\/v1\/partners\/([^/]+)\/discord\/sent$/;
+const DISCORD_VOICE_CONNECTION_PATH =
+	/^\/v1\/partners\/([^/]+)\/discord\/voice-connection$/;
 
 export default {
 	async fetch(request, env): Promise<Response> {
@@ -37,6 +43,18 @@ export default {
 		}
 		if (pathname === DISCORD_EVENTS_PATH) {
 			return discordEvents(request, env);
+		}
+		if (pathname === DISCORD_VOICE_EVENTS_PATH) {
+			return discordVoiceEvents(request, env);
+		}
+		const connectionPartnerId =
+			DISCORD_VOICE_CONNECTION_PATH.exec(pathname)?.[1];
+		if (connectionPartnerId !== undefined) {
+			return discordVoiceConnection(
+				request,
+				env,
+				decodeURIComponent(connectionPartnerId),
+			);
 		}
 		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];
 		if (sentPartnerId !== undefined) {
@@ -125,6 +143,88 @@ async function discordEvents(request: Request, env: Env): Promise<Response> {
 		inbound.value,
 	);
 	return Response.json(response satisfies GatewayResponse);
+}
+
+// Gateway からの POST を受ける経路の共通部分: メソッド・認証・caller・JSON 本文。
+async function readGatewayJson(
+	request: Request,
+	env: Env,
+): Promise<{ body: unknown } | { response: Response }> {
+	if (request.method !== "POST") {
+		return {
+			response: Response.json({ error: "method_not_allowed" }, { status: 405 }),
+		};
+	}
+	const auth = await authenticate(request, accessEnv(env));
+	if (!auth.ok) {
+		return {
+			response: Response.json(
+				{ error: auth.failure.error },
+				{ status: auth.failure.status },
+			),
+		};
+	}
+	if (!isGateway(auth.principal)) {
+		return {
+			response: Response.json({ error: "forbidden" }, { status: 403 }),
+		};
+	}
+	try {
+		return { body: await request.json() };
+	} catch {
+		return {
+			response: Response.json({ error: "invalid_json" }, { status: 400 }),
+		};
+	}
+}
+
+async function discordVoiceEvents(
+	request: Request,
+	env: Env,
+): Promise<Response> {
+	const read = await readGatewayJson(request, env);
+	if ("response" in read) return read.response;
+	const update = toVoiceStateUpdate(read.body);
+	if (!update.ok) {
+		return Response.json(
+			{ error: "validation_failed", message: update.error.message },
+			{ status: 400 },
+		);
+	}
+	if (update.value.partnerId !== yukarinProfile.partner_id) {
+		return Response.json({ error: "unknown_partner" }, { status: 404 });
+	}
+	const partner = partnerNamespace(env);
+	const stub = partner.get(partner.idFromName(update.value.partnerId));
+	const response = await stub.handleVoiceState(update.value);
+	return Response.json(response satisfies VoiceResponse);
+}
+
+async function discordVoiceConnection(
+	request: Request,
+	env: Env,
+	partnerId: string,
+): Promise<Response> {
+	const read = await readGatewayJson(request, env);
+	if ("response" in read) return read.response;
+	if (partnerId !== yukarinProfile.partner_id) {
+		return Response.json({ error: "unknown_partner" }, { status: 404 });
+	}
+	const parsed = v.safeParse(discordVoiceConnectionSchema, read.body);
+	if (!parsed.success) {
+		return Response.json(
+			{
+				error: "validation_failed",
+				message: parsed.issues
+					.map((i) => v.getDotPath(i) ?? i.message)
+					.join(", "),
+			},
+			{ status: 400 },
+		);
+	}
+	const partner = partnerNamespace(env);
+	const stub = partner.get(partner.idFromName(partnerId));
+	return Response.json(await stub.reportVoiceConnection(parsed.output));
 }
 
 async function discordSent(

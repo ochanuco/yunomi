@@ -134,7 +134,9 @@ Long-term Memory may keep a semantic summary if important.
 
 Discord VC will later be the primary voice interface.
 
-General future rule:
+The Worker decides and the Gateway executes: the Gateway reports voice-state changes, and the Worker answers join / leave / ignore. Following requires relationship tier "親しい" or higher (`apps/worker/README.md`).
+
+General rule:
 - user enters VC → Yukarin normally follows
 - presence states may prevent joining
 - user leaves → Yukarin leaves

@@ -152,7 +152,7 @@ The Worker cannot reach the home network directly, so the adapter goes through a
 
 ### VC entry
 
-When invited, the character decides whether to join.
+When invited, the character decides whether to join (`voice_channel` in the turn output). The Gateway synthesizes through the organ and plays in the VC; the Worker only returns the instruction (`apps/worker/README.md`).
 
 ## Performance segmentation
 
