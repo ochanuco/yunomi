@@ -93,6 +93,27 @@ describe("sendText", () => {
 		expect(!r.ok && r.error.type).toBe(type);
 	});
 
+	it("403 は Discord の code と message を PermissionDenied に残す", async () => {
+		const { port } = setup([
+			json({ code: 50013, message: "Missing Permissions" }, 403),
+		]);
+		const r = await port.sendText({ channelId: "2", text: "x" });
+		expect(!r.ok && r.error.type).toBe("PermissionDenied");
+		expect(!r.ok && r.error.message).toContain(
+			"403 code=50013 Missing Permissions",
+		);
+	});
+
+	it("JSON でないエラー本文でも status だけで失敗を返す", async () => {
+		const { port } = setup([
+			new Response("<html>bad gateway</html>", { status: 502 }),
+		]);
+		const r = await port.sendText({ channelId: "2", text: "x" });
+		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
+		expect(!r.ok && r.error.message).toContain("discord (502)");
+		expect(!r.ok && r.error.message).not.toContain("html");
+	});
+
 	it("ネットワークエラーは ExternalServiceUnavailable", async () => {
 		const { port } = setup([new Error("down")]);
 		const r = await port.sendText({ channelId: "2", text: "x" });

@@ -10,6 +10,7 @@ import {
 	type SentMessage,
 	validationFailed,
 } from "@yunomi/core";
+import * as v from "valibot";
 
 const API_BASE = "https://discord.com/api/v10";
 const USER_AGENT = "DiscordBot (https://github.com/ochanuco/yunomi, 0)";
@@ -21,6 +22,28 @@ export type DiscordRestDeps = {
 	token: string;
 	fetch?: typeof fetch;
 	sleep?: (ms: number) => Promise<void>;
+};
+
+const MAX_DETAIL_LENGTH = 200;
+
+const DiscordErrorBody = v.object({
+	code: v.optional(v.number()),
+	message: v.optional(v.string()),
+});
+
+// Discord のエラー本文から code と message を取り出して「403 code=50013 Missing Permissions」の形にする。
+// 本文が JSON でなくても status だけで返す。
+const errorDetail = async (res: Response): Promise<string> => {
+	const raw = await res.json().catch(() => null);
+	const parsed = v.safeParse(DiscordErrorBody, raw);
+	const parts = [String(res.status)];
+	if (parsed.success) {
+		if (parsed.output.code !== undefined)
+			parts.push(`code=${parsed.output.code}`);
+		if (parsed.output.message)
+			parts.push(parsed.output.message.slice(0, MAX_DETAIL_LENGTH));
+	}
+	return parts.join(" ");
 };
 
 const retryAfterMs = async (res: Response): Promise<number | null> => {
@@ -78,13 +101,21 @@ export const createDiscordRest = (deps: DiscordRestDeps): CommunicationPort => {
 				await sleep(wait);
 				continue;
 			}
+			const detail = await errorDetail(res);
 			if (res.status === 401 || res.status === 403) {
-				return err(permissionDenied({ actor: "worker", action: "discord" }));
+				return err(
+					permissionDenied({
+						actor: "worker",
+						action: `discord (${detail})`,
+					}),
+				);
 			}
 			if (res.status >= 500) {
-				return err(externalServiceUnavailable({ service: "discord" }));
+				return err(
+					externalServiceUnavailable({ service: `discord (${detail})` }),
+				);
 			}
-			return err(validationFailed({ issues: [`discord ${res.status}`] }));
+			return err(validationFailed({ issues: [`discord ${detail}`] }));
 		}
 	};
 

@@ -243,7 +243,8 @@ export class PartnerDO extends DurableObject<Env> {
 	#startTyping(port: CommunicationPort, channelId: string): () => void {
 		const typing = () =>
 			void port.sendTyping({ channelId }).then((r) => {
-				if (!r.ok) console.warn("discord typing failed", r.error.type);
+				if (!r.ok)
+					console.warn("discord typing failed", r.error.type, r.error.message);
 			});
 		let interval: ReturnType<typeof setInterval> | undefined;
 		const delay = setTimeout(() => {
@@ -268,7 +269,7 @@ export class PartnerDO extends DurableObject<Env> {
 			replyToMessageId: reply.reply_to_message_id ?? inbound.messageId,
 		});
 		if (!sent.ok) {
-			console.error("discord send failed", sent.error.type);
+			console.error("discord send failed", sent.error.type, sent.error.message);
 		} else if (reply.partner_message_id) {
 			this.#store.bindDiscordMessageId(
 				reply.partner_message_id,
