@@ -355,6 +355,43 @@ describe("宛先のない発言への割り込み", () => {
 		expect(await interjectionAt(stub)).toBe(T0.toISOString());
 	});
 
+	it("ゲートには人数・状態・発言者との関係を渡し、判定のために entity は作らない", async () => {
+		const { stub, fake } = await setup("gate-context", {
+			script: [gateOk(false), gateOk(false), gateOk(false)],
+		});
+		const alice = { id: "u-gate-a", displayName: "alice", isBot: false };
+		const bob = { id: "u-gate-b", displayName: "bob", isBot: false };
+		await stub.handleDiscordMessage(free({ author: alice }));
+		const first = fake.requests[0]?.messages[0]?.content ?? "";
+		expect(first).toContain("alice だけで、あなたと 2 人きり");
+		expect(first).toContain("alice とはまだ関係がない（初めての相手）。");
+		expect(first).toContain("presence: available");
+		const row = await env.DB.prepare(
+			"SELECT count(*) AS n FROM external_identities WHERE external_id = 'u-gate-a'",
+		).first<{ n: number }>();
+		expect(row?.n).toBe(0);
+
+		await stub.handleDiscordMessage(free({ author: bob }));
+		expect(fake.requests[1]?.messages[0]?.content).toContain(
+			"この場で話している人は 2 人。",
+		);
+	});
+
+	it("関係のある発言者なら、ゲートに familiarity と trust を渡す", async () => {
+		const { stub, fake } = await setup("gate-rel", {
+			script: [llmOk(turnResponse()), gateOk(false)],
+		});
+		const alice = { id: "u-gate-r", displayName: "alice", isBot: false };
+		await stub.handleDiscordMessage(mention({ author: alice }));
+		await stub.handleDiscordMessage(
+			free({ author: alice, channelId: "c-rel" }),
+		);
+		const gate = fake.requests[1]?.messages[0]?.content ?? "";
+		expect(gate).toMatch(
+			/alice との関係: familiarity \d\.\d{2}、trust \d\.\d{2}/,
+		);
+	});
+
 	it("入ると判定されても Sonnet が ignore を選べば、割り込み時刻は記録しない", async () => {
 		const { stub } = await setup("join-ignore", {
 			script: [

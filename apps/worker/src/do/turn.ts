@@ -1,5 +1,6 @@
 import {
 	buildGatePrompt,
+	GATE_RECENT_LIMIT,
 	type GateDecision,
 	gateOutput,
 	PromptBuilder,
@@ -108,6 +109,22 @@ const judgeInterjection = async (
 	const minutesSince = (d: Date) =>
 		Math.max(0, Math.floor((now.getTime() - d.getTime()) / 60_000));
 	const last = deps.store.lastPartnerReplyAt(msg.channelId);
+	const recent = deps.store
+		.recentMessages(msg.channelId, msg.messageId)
+		.slice(-GATE_RECENT_LIMIT);
+	const humans = new Set(
+		recent.filter((m) => !m.isPartner).map((m) => m.authorId),
+	);
+	humans.add(msg.author.id);
+	// 状態の seed は書き込みを伴うので、ゲートでは読むだけにして初期値で代える。
+	const state = deps.store.getState() ?? initialPartnerState(deps.profile, now);
+	// 関係の取得に失敗してもゲートは続ける（初めての相手として扱う）。
+	const entityId = await deps.entities
+		.find("discord", msg.author.id)
+		.catch(() => null);
+	const rel = entityId
+		? deps.store.getRelationship(deps.profile.partner_id, entityId)
+		: null;
 	const prompt = buildGatePrompt({
 		profile: deps.profile,
 		interests: [...interests]
@@ -118,16 +135,22 @@ const judgeInterjection = async (
 				score: i.score,
 				summary: i.summary,
 			})),
-		recent: deps.store
-			.recentMessages(msg.channelId, msg.messageId)
-			.map((m) => ({
-				speaker: m.authorName,
-				text: m.content,
-				minutesAgo: minutesSince(new Date(m.occurredAt)),
-				isPartner: m.isPartner,
-			})),
+		recent: recent.map((m) => ({
+			speaker: m.authorName,
+			text: m.content,
+			minutesAgo: minutesSince(new Date(m.occurredAt)),
+			isPartner: m.isPartner,
+		})),
 		minutesSincePartnerSpoke: last ? minutesSince(last) : null,
 		message: { speaker: msg.author.displayName, text: msg.content },
+		headcount: humans.size,
+		state,
+		relationship: rel
+			? {
+					familiarity: rel.relationship.familiarity,
+					trust: rel.relationship.trust,
+				}
+			: null,
 	});
 
 	const started = Date.now();

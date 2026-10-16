@@ -37,6 +37,9 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
 	],
 	minutesSincePartnerSpoke: 4,
 	message: { speaker: "alice", text: "新しいゲーム始めた" },
+	headcount: 2,
+	state: { mood: 0.3, energy: 0.65, presence: "available" },
+	relationship: { familiarity: 0.5, trust: 0.25 },
 	...over,
 });
 
@@ -65,7 +68,6 @@ describe("buildGatePrompt", () => {
 			"秘密の本文",
 			"後ろの段落",
 			"関連する記憶",
-			"関係",
 			"気分",
 			"未解決の話題",
 			"意見",
@@ -102,6 +104,48 @@ describe("buildGatePrompt", () => {
 		);
 		expect(a.system[0]).toEqual(b.system[0]);
 		expect(a.system[0]?.cache).toBe(true);
+	});
+});
+
+describe("buildGatePrompt の場の情報", () => {
+	const user = (over: Partial<GateInput>) =>
+		buildGatePrompt(input(over)).messages[0]?.content ?? "";
+
+	it("1 人だけなら 2 人きりと書き、複数なら人数を書く", () => {
+		expect(user({ headcount: 1 })).toContain(
+			"この場で話している人は alice だけで、あなたと 2 人きり。",
+		);
+		expect(user({ headcount: 3 })).toContain("この場で話している人は 3 人。");
+	});
+
+	it("ゆかりの状態を範囲つきで渡す", () => {
+		const c = user({
+			state: { mood: -0.2, energy: 0.1, presence: "busy" },
+		});
+		expect(c).toContain("mood: -0.20（-1 から 1）");
+		expect(c).toContain("energy: 0.10（0 から 1）");
+		expect(c).toContain("presence: busy");
+	});
+
+	it("関係があれば数値を、なければ初めての相手と書く", () => {
+		expect(user({})).toContain(
+			"alice との関係: familiarity 0.50、trust 0.25（どちらも 0 から 1）",
+		);
+		const c = user({ relationship: null });
+		expect(c).toContain("alice とはまだ関係がない（初めての相手）。");
+		expect(c).not.toContain("familiarity");
+	});
+
+	it("system の cache 対象ブロックは新しい入力に依存しない", () => {
+		const a = buildGatePrompt(input());
+		const b = buildGatePrompt(
+			input({
+				headcount: 1,
+				state: { mood: -1, energy: 0, presence: "sleeping" },
+				relationship: null,
+			}),
+		);
+		expect(a.system).toEqual(b.system);
 	});
 });
 

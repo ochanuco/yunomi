@@ -1,4 +1,8 @@
-import { INTEREST_PROMPT_LIMIT, type PartnerProfile } from "@yunomi/core";
+import {
+	INTEREST_PROMPT_LIMIT,
+	type PartnerProfile,
+	type PartnerState,
+} from "@yunomi/core";
 import { defineOutput } from "@yunomi/llm";
 import * as v from "valibot";
 import type { InterestLine } from "./prompt-builder.ts";
@@ -32,6 +36,12 @@ export type GateInput = {
 	/** ゆかりがこのチャンネルで最後に話してからの分数。話していなければ null。 */
 	minutesSincePartnerSpoke: number | null;
 	message: { speaker: string; text: string };
+	/** 直近ログと新着メッセージにいる人間の作者の数（ゆかりを除く）。 */
+	headcount: number;
+	/** ゆかりの今の状態。 */
+	state: Pick<PartnerState, "mood" | "energy" | "presence">;
+	/** 発言者との関係。まだ関係がなければ null。 */
+	relationship: { familiarity: number; trust: number } | null;
 };
 
 export type BuiltGatePrompt = {
@@ -46,11 +56,16 @@ const CRITERIA = [
 	"入る:",
 	"- 「興味」にある話題で、ゆかりに言えることがある。",
 	"- 場の全員への問いかけや、反応がほしそうなひとり言で、ゆかりが返すと自然。",
+	"- ゆかりと 2 人きりの場で、関係のある相手が気持ちや体調をこぼした。",
 	"",
 	"入らない:",
 	"- 人どうしの会話の途中。",
 	"- 短い相づち、スタンプ、URL だけの発言。",
-	"- 私的な話。",
+	"- ほかの人もいる場での私的な話。",
+	"",
+	"入りやすさの調整:",
+	"- 親しい相手（familiarity・trust が高い）ほど入りやすい。初めての相手には、興味の話題か明らかな問いかけでなければ入らない。",
+	"- energy が低いときや、presence が available 以外のときは控えめにする。",
 	"",
 	"迷ったら入らない。",
 	"",
@@ -94,6 +109,24 @@ const interestBlock = (interests: InterestLine[]): string =>
 const renderLine = (l: GateLine): string =>
 	`${l.speaker}${l.isPartner ? "（あなた）" : ""}（${l.minutesAgo} 分前）: ${l.text}`;
 
+const headcountLine = (input: GateInput): string =>
+	input.headcount === 1
+		? `この場で話している人は ${input.message.speaker} だけで、あなたと 2 人きり。`
+		: `この場で話している人は ${input.headcount} 人。`;
+
+const stateBlock = (s: GateInput["state"]): string =>
+	[
+		"あなたの今の状態:",
+		`- mood: ${s.mood.toFixed(2)}（-1 から 1）`,
+		`- energy: ${s.energy.toFixed(2)}（0 から 1）`,
+		`- presence: ${s.presence}`,
+	].join("\n");
+
+const relationshipLine = (input: GateInput): string =>
+	input.relationship
+		? `${input.message.speaker} との関係: familiarity ${input.relationship.familiarity.toFixed(2)}、trust ${input.relationship.trust.toFixed(2)}（どちらも 0 から 1）`
+		: `${input.message.speaker} とはまだ関係がない（初めての相手）。`;
+
 export const buildGatePrompt = (input: GateInput): BuiltGatePrompt => {
 	const recent = input.recent.slice(-GATE_RECENT_LIMIT);
 	const interval =
@@ -115,6 +148,11 @@ export const buildGatePrompt = (input: GateInput): BuiltGatePrompt => {
 					"</channel_log>",
 					"",
 					interval,
+					headcountLine(input),
+					"",
+					stateBlock(input.state),
+					"",
+					relationshipLine(input),
 					"",
 					"<new_message>",
 					`${input.message.speaker}: ${input.message.text}`,
