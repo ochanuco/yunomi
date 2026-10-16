@@ -23,6 +23,17 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
+## サーバーへの招待
+
+bot の権限は、招待 URL の `permissions` でサーバーごとに決まる。VC に入るには「接続」と「発言」が要り、無いと Discord は何も返さずに接続を無視する（Gateway のログには、30 秒後の `voice connection not ready` だけが出る）。招待済みのサーバーでも、同じ URL を開いて承認し直せば、bot のロールの権限が置き換わる。
+
+| 環境 | 招待 URL |
+| --- | --- |
+| production | `https://discord.com/oauth2/authorize?client_id=1558613526585671773&scope=bot&permissions=36801536` |
+| development | `https://discord.com/oauth2/authorize?client_id=1558605895758389250&scope=bot&permissions=36801536` |
+
+`36801536` は、チャンネルを見る・メッセージを送信・ファイルを添付・メッセージ履歴を読む・接続・発言・音声検出を使用、の 7 つ。
+
 ## 挙動
 
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。VC のテキストチャット（GuildVoice）は通常のチャンネルと同じに中継し、作者が入っている VC を `author_voice_channel_id` に載せる（guild の voice state キャッシュから読む）。
