@@ -5,6 +5,7 @@ import {
 	GATE_RECENT_LIMIT,
 	type GateInput,
 	gateDecisionSchema,
+	relationshipTier,
 } from "./gate-prompt.ts";
 import { profile } from "./test-fixtures.ts";
 
@@ -129,11 +130,21 @@ describe("buildGatePrompt の場の情報", () => {
 
 	it("関係があれば数値を、なければ初めての相手と書く", () => {
 		expect(user({})).toContain(
-			"alice との関係: familiarity 0.50、trust 0.25（どちらも 0 から 1）",
+			"alice との関係: 親しい（familiarity 0.50、trust 0.25）",
 		);
 		const c = user({ relationship: null });
 		expect(c).toContain("alice とはまだ関係がない（初めての相手）。");
 		expect(c).not.toContain("familiarity");
+	});
+
+	it("関係の段階は familiarity と trust の平均で決まる", () => {
+		const t = (f: number, tr = f) =>
+			relationshipTier({ familiarity: f, trust: tr });
+		expect(t(0.19)).toBe("初対面");
+		expect(t(0.2)).toBe("顔見知り");
+		expect(t(0.35)).toBe("親しい");
+		expect(t(0.6)).toBe("とても親しい");
+		expect(t(0.31, 0.45)).toBe("親しい");
 	});
 
 	it("system の cache 対象ブロックは新しい入力に依存しない", () => {

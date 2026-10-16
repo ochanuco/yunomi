@@ -49,6 +49,29 @@ export type BuiltGatePrompt = {
 	messages: { role: "user"; content: string }[];
 };
 
+/** 関係の段階の下限（familiarity と trust の平均）。 */
+export const ACQUAINTANCE_MIN_SCORE = 0.2;
+export const FRIENDLY_MIN_SCORE = 0.35;
+export const CLOSE_MIN_SCORE = 0.6;
+
+export type RelationshipTier =
+	| "初対面"
+	| "顔見知り"
+	| "親しい"
+	| "とても親しい";
+
+/** 0..1 の数値だけでは尺度が伝わらないので、判定には段階の名前を添える。 */
+export const relationshipTier = (r: {
+	familiarity: number;
+	trust: number;
+}): RelationshipTier => {
+	const score = (r.familiarity + r.trust) / 2;
+	if (score >= CLOSE_MIN_SCORE) return "とても親しい";
+	if (score >= FRIENDLY_MIN_SCORE) return "親しい";
+	if (score >= ACQUAINTANCE_MIN_SCORE) return "顔見知り";
+	return "初対面";
+};
+
 const CRITERIA = [
 	"## このターンの指示",
 	"メンションも返信もされていない新着メッセージに、ゆかりが自分から会話に入るかどうかを決めて、指定のスキーマで出力する。",
@@ -56,7 +79,7 @@ const CRITERIA = [
 	"入る:",
 	"- 「興味」にある話題で、ゆかりに言えることがある。",
 	"- 場の全員への問いかけや、反応がほしそうなひとり言で、ゆかりが返すと自然。",
-	"- ゆかりと 2 人きりの場で、関係のある相手が気持ちや体調をこぼした。",
+	"- ゆかりと 2 人きりの場で、「親しい」以上の相手が気持ちや体調をこぼした。",
 	"",
 	"入らない:",
 	"- 人どうしの会話の途中。",
@@ -64,7 +87,7 @@ const CRITERIA = [
 	"- ほかの人もいる場での私的な話。",
 	"",
 	"入りやすさの調整:",
-	"- 親しい相手（familiarity・trust が高い）ほど入りやすい。初めての相手には、興味の話題か明らかな問いかけでなければ入らない。",
+	"- 関係の段階は 初対面 < 顔見知り < 親しい < とても親しい。親しいほど入りやすい。初対面と初めての相手には、興味の話題か明らかな問いかけでなければ入らない。",
 	"- energy が低いときや、presence が available 以外のときは控えめにする。",
 	"",
 	"迷ったら入らない。",
@@ -124,7 +147,7 @@ const stateBlock = (s: GateInput["state"]): string =>
 
 const relationshipLine = (input: GateInput): string =>
 	input.relationship
-		? `${input.message.speaker} との関係: familiarity ${input.relationship.familiarity.toFixed(2)}、trust ${input.relationship.trust.toFixed(2)}（どちらも 0 から 1）`
+		? `${input.message.speaker} との関係: ${relationshipTier(input.relationship)}（familiarity ${input.relationship.familiarity.toFixed(2)}、trust ${input.relationship.trust.toFixed(2)}）`
 		: `${input.message.speaker} とはまだ関係がない（初めての相手）。`;
 
 export const buildGatePrompt = (input: GateInput): BuiltGatePrompt => {

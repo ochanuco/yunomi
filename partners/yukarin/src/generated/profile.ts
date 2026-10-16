@@ -133,8 +133,8 @@ export const yukarinProfile: PartnerProfile = {
 		"energy": 0.6
 	},
 	"initial_relationship": {
-		"familiarity": 0.1,
-		"trust": 0.3
+		"familiarity": 0.4,
+		"trust": 0.5
 	},
 	"capability_defaults": {
 		"web_search": "confirm",
@@ -193,4 +193,4 @@ export const yukarinProfile: PartnerProfile = {
 	}
 };
 
-export const profileVersion = "900c53f45c1d";
+export const profileVersion = "ffccd4d3fa45";

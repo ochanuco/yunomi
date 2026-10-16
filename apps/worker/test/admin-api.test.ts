@@ -246,7 +246,7 @@ describe("status / relationships", () => {
 		);
 		expect(rels.items).toHaveLength(1);
 		expect(rels.items[0]).toMatchObject({ display_name: "alice" });
-		expect(rels.items[0]?.familiarity).toBeCloseTo(0.12);
+		expect(rels.items[0]?.familiarity).toBeCloseTo(0.42);
 	});
 });
 
