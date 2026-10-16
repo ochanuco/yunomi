@@ -1,8 +1,9 @@
 import { runInDurableObject } from "cloudflare:test";
 import { type CommunicationPort, err, ok, rateLimited } from "@yunomi/core";
-import { FakeLLMProvider, ModelRouter } from "@yunomi/llm";
+import { type FakeLLMProvider, ModelRouter } from "@yunomi/llm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TYPING_DELAY_MS } from "../src/do/partner-do.ts";
+import { DoStore } from "../src/do/store.ts";
 import {
 	gate,
 	installFakeLlm,
@@ -53,6 +54,44 @@ describe("Worker からの送信", () => {
 		const msg = mention(s);
 
 		expect(await send(msg)).toEqual({ action: "ack" });
+
+		expect(port.sendText).toHaveBeenCalledWith({
+			channelId: s.channelId,
+			text: "おはよう",
+		});
+		expect(vi.mocked(port.sendText).mock.calls[0]?.[0]).not.toHaveProperty(
+			"replyToMessageId",
+		);
+	});
+
+	it("考えているあいだに他の発言が入れば、返信形式で送る", async () => {
+		const s = newScenario();
+		const fake = await installFakeLlm([llmOk(turn({ utterance: "おはよう" }))]);
+		const port = fakePort();
+		await install(port);
+		const msg = mention(s);
+		await runInDurableObject(partnerStub(PARTNER_ID), (o, st) => {
+			o.createRouter = () =>
+				new ModelRouter({
+					provider: {
+						generate: async (req) => {
+							new DoStore(st.storage.sql).appendRecent({
+								channelId: s.channelId,
+								messageId: `late-${msg.messageId}`,
+								authorId: "u-other",
+								authorName: "bob",
+								isBot: true,
+								isPartner: false,
+								content: "割り込み",
+								occurredAt: "2026-10-11T03:00:00.000Z",
+							});
+							return fake.generate(req);
+						},
+					},
+				});
+		});
+
+		await send(msg);
 
 		expect(port.sendText).toHaveBeenCalledWith({
 			channelId: s.channelId,

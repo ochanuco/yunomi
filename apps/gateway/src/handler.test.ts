@@ -19,6 +19,7 @@ const message: MessageLike = {
 
 const setup = (send: (e: unknown) => Promise<unknown>) => {
 	const channel = {
+		lastMessageId: "3" as string | null | undefined,
 		send: vi.fn(async (_o: unknown) => ({ id: "500" })),
 	};
 	const client = {
@@ -46,6 +47,7 @@ describe("createMessageHandler", () => {
 				reply_to_message_id: "3",
 			}),
 		);
+		channel.lastMessageId = "9";
 		await handle(message, channel);
 		expect(channel.send).toHaveBeenCalledWith({
 			content: "やあ @everyone",
@@ -54,10 +56,22 @@ describe("createMessageHandler", () => {
 		});
 	});
 
+	it("直近の発言が宛先なら返信形式にせず普通に送る", async () => {
+		const { channel, handle } = setup(async () =>
+			ok({ action: "reply", content: "やあ" }),
+		);
+		await handle(message, channel);
+		expect(channel.send).toHaveBeenCalledWith({
+			content: "やあ",
+			allowedMentions: { repliedUser: false, parse: [] },
+		});
+	});
+
 	it("reply_to が無ければ元メッセージに返信する", async () => {
 		const { channel, handle } = setup(async () =>
 			ok({ action: "reply", content: "やあ" }),
 		);
+		channel.lastMessageId = "9";
 		await handle(message, channel);
 		expect(channel.send.mock.calls[0]?.[0]).toMatchObject({
 			reply: { messageReference: "3" },

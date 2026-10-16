@@ -88,6 +88,10 @@ discord.on(Events.MessageCreate, (message) => {
 		logger,
 	});
 	void handle(toMessageLike(message), {
+		// 送る時点の値を読むので getter にする
+		get lastMessageId() {
+			return channel.lastMessageId;
+		},
 		send: (options) => channel.send(options),
 	}).catch((e: unknown) => {
 		logger.error("handler crashed", { error: String(e) });

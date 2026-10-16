@@ -33,7 +33,7 @@ describe("口の型の使い方", () => {
 							durationMs: 1200,
 						}),
 		};
-		const sent: string[] = [];
+		const sent: (string | undefined)[] = [];
 		const comm: CommunicationPort = {
 			sendText: async () => ok({ messageId: "m1" }),
 			sendTyping: async () => ok(undefined),
