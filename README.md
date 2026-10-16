@@ -83,6 +83,7 @@ pnpm --filter @yunomi/gateway start # Gateway を起動
 pnpm --filter @yunomi/cli ykm status
 ```
 
+自分の環境にデプロイする手順は [docs/self-hosting.md](docs/self-hosting.md) にあります。
 設定と運用の詳細は各ディレクトリの README にあります。
 
 - [apps/worker/README.md](apps/worker/README.md): Worker の設定、secret、デプロイ
