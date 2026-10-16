@@ -4,7 +4,7 @@
 
 ## MVP Goal
 
-dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチャンネルの直近の流れと最小限の記憶・状態を踏まえ、丁寧語で返事をするか、意図的に黙る。その判断理由・状態の変化・記憶候補は Admin UI と `ykm` で確認でき、再起動後も残る。prod には手動操作でだけデプロイされる。
+dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチャンネルの直近の流れと最小限の記憶・状態を踏まえ、丁寧語で返事をするか、意図的に黙る。その判断理由・状態の変化・記憶候補は Admin UI と `ykm` で確認でき、再起動後も残る。prod には main へのマージでデプロイされ、危ない変更のときだけ承認で止まる。
 
 デモ手順:
 
@@ -24,7 +24,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | E2 | Yukarin が会話をまたいで、相手のことと自分の調子を覚えている | E1 |
 | E3 | owner が Admin UI と `ykm` で、Yukarin がなぜそうしたかを確認できる | E1（E2 と並行可） |
 | E4 | Yukarin らしさが CI と nightly eval で守られる | E1 |
-| E5 | dev と prod が分離され、prod は手動でだけ更新される | E0 |
+| E5 | dev と prod が分離され、prod は main へのマージで更新される | E0 |
 
 ### E0. dev に空の Yunomi が立ち、PR で CI が回る
 
@@ -56,11 +56,11 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 - 非ゴール: Tier 3（人手レビュー）、JEV などの ML 分類器。
 - Done: PR CI で Tier 1 が走る。nightly で Tier 2 が走り、`politeness_score` / `persona_consistency` / `over_agreement_rate` / `reply_rate` を JSON で残す。
 
-### E5. dev と prod が分離され、prod は手動でだけ更新される
+### E5. dev と prod が分離され、prod は main へのマージで更新される
 
 - 技術範囲: prod 用の Worker / D1 / DO namespace / Discord bot application / secret、prod deploy workflow（GitHub Environment で保護）、Cloudflare Access（Admin 用 app と Gateway/`ykm` 用 service token）、Home Gateway の Docker 運用。
 - 非ゴール: staging、snapshot による prod→dev seed（Goal 2）、バックアップ。
-- Done: dev と prod が別の D1・別の Discord bot を使う。main への merge で prod が変わらない。prod deploy は承認付きの手動操作でだけ実行される。
+- Done: dev と prod が別の D1・別の Discord bot を使う。main へのマージで prod にデプロイされる。前回の記録がない、ロールバック、migration を含むときだけ、Environment `production-approval` の承認で止まる。
 
 ## Issue 一覧
 
@@ -88,7 +88,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | Y18 | E3 | `ykm` CLI（status / memory list / audit tail） | Y16 | Y17 と並行 |
 | Y19 | E4 | Yukarin persona 本文 | Y06 | Y07 以降と並行 |
 | Y20 | E4 | persona eval Tier 1（PR）と Tier 2（nightly） | Y08, Y19 | - |
-| Y21 | E5 | prod 環境と手動 prod デプロイ | Y04, I-infra1 | - |
+| Y21 | E5 | prod 環境と prod デプロイ | Y04, I-infra1 | - |
 | Y22 | E5 | Home Gateway の Docker 運用 | Y11 | - |
 
 インフラ側（`cf-yunomi` / chabatake 担当）:
@@ -162,7 +162,7 @@ Y02 → Y05・Y07 と Y06 → Y08 は Y03〜Y09 と並行で進められ、Y10 �
 
 要判断: Worker のホスト名。この計画では `yunomi.chanu.co`（prod）と `yunomi-dev.chanu.co`（dev）を仮置きし、確定は `cf-yunomi` 側で行う。
 
-要判断: prod デプロイの手動ゲートを chabatake と同じ release PR 方式にするか、`workflow_dispatch` + Environment 承認にするか。この計画では後者（単一ブランチ運用のまま手動実行できる）を採る。
+prod デプロイ: main への push で `.github/workflows/deploy.yml` が動く。`deploy-plan` が危ないと判定したときだけ Environment `production-approval` の承認で止め、それ以外は承認なしで出す。`workflow_dispatch` はロールバック用。
 
 ### 最初の 5 Issue
 
