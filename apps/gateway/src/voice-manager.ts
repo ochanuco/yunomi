@@ -213,9 +213,10 @@ export class VoiceManager {
 				error: e.name,
 			});
 		});
-		connection.on("stateChange", (_old, state) => {
+		connection.on("stateChange", (old, state) => {
 			if (state.status === VoiceConnectionStatus.Ready) {
-				this.#onReady(session);
+				// Ready のまま networking だけが替わっても stateChange は来る。入ったときだけ扱う
+				if (old.status !== VoiceConnectionStatus.Ready) this.#onReady(session);
 			} else if (state.status === VoiceConnectionStatus.Disconnected) {
 				void this.#onDisconnected(session, state);
 			} else if (state.status === VoiceConnectionStatus.Destroyed) {
