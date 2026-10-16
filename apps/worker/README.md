@@ -25,7 +25,7 @@
 
 `PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline` と `now` はテストが `runInDurableObject` で差し替える seam。
 
-返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev `1` / prod・local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（返信先つきのテキスト、入力中、`message_reference` つきの multipart 添付。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
+返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev・prod `1` / local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（返信先つきのテキスト、入力中、`message_reference` つきの multipart 添付。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
 
 ## 声の添付
 
@@ -33,7 +33,7 @@
 
 | 設定 | 種類 | 値 |
 | --- | --- | --- |
-| `VOICE_ENABLED` | text | dev `1` / prod・local `0` |
+| `VOICE_ENABLED` | text | dev・prod `1` / local `0` |
 | `VOICE_REALIZATION` | text | 声のプロファイルのうち使う A.I.VOICE の実現方法の名前。dev `shizuku` / prod・local `yukari` |
 | `OCHOKO_URL` | text | `https://ochoko.chanu.co` |
 | `WOL_URL` | text | `https://wol.chanu.co` |
