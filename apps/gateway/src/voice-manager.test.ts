@@ -20,8 +20,9 @@ class FakeConnection extends EventEmitter {
 		super();
 	}
 	set(status: string, extra: Record<string, unknown> = {}) {
+		const old = this.state;
 		this.state = { status, ...extra };
-		this.emit("stateChange", {}, this.state);
+		this.emit("stateChange", old, this.state);
 	}
 	destroy = vi.fn(() => this.set(VoiceConnectionStatus.Destroyed));
 }
@@ -124,6 +125,24 @@ describe("join / leave", () => {
 			channel_id: "vc1",
 		});
 		expect(m.manager.channelOf("1")).toBe("vc1");
+	});
+
+	it("Ready のままの stateChange では、報告も keep_awake も重ねない", async () => {
+		const m = setup();
+		await m.manager.join("1", "vc1");
+		conn(m).set(VoiceConnectionStatus.Ready);
+		conn(m).set(VoiceConnectionStatus.Ready);
+		expect(m.yunomi.reportVoiceConnection).toHaveBeenCalledTimes(1);
+		expect(m.ochoko.keepAwake).toHaveBeenCalledTimes(1);
+	});
+
+	it("切断から Ready に戻ったときは、もう一度報告する", async () => {
+		const m = setup();
+		await m.manager.join("1", "vc1");
+		conn(m).set(VoiceConnectionStatus.Ready);
+		conn(m).set(VoiceConnectionStatus.Connecting);
+		conn(m).set(VoiceConnectionStatus.Ready);
+		expect(m.yunomi.reportVoiceConnection).toHaveBeenCalledTimes(2);
 	});
 
 	it("同じ VC への join は何もしない", async () => {
