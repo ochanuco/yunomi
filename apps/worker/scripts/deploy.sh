@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 使い方: scripts/deploy.sh <development|production>
-# CLOUDFLARE_API_TOKEN は呼び出し側（op run）が環境変数で渡す。
+# CLOUDFLARE_API_TOKEN は呼び出し側が環境変数で渡す。
 # ANTHROPIC_API_KEY・DISCORD_BOT_TOKEN・AIVOICE_TOKEN・CF_ACCESS_CLIENT_ID・CF_ACCESS_CLIENT_SECRET は、設定されていれば Worker secret として一緒に反映する。
 set -euo pipefail
 
@@ -13,22 +13,46 @@ esac
 cd "$(dirname "$0")/.."
 
 # resources.ts を唯一の定義元として読む
-read -r worker host d1_id placeholder age_recipient age_pattern < <(
+read -r worker host d1_id placeholder age_recipient age_pattern send_from_worker < <(
   MODE=$mode node --input-type=module -e '
     const { resources, D1_PLACEHOLDER_ID, AGE_RECIPIENT_PATTERN } = await import("./resources.ts");
     const r = resources[process.env.MODE];
-    console.log(r.worker, r.host, r.d1Id, D1_PLACEHOLDER_ID, r.snapshotAgeRecipient, AGE_RECIPIENT_PATTERN);
+    console.log(r.worker, r.host || "-", r.d1Id, D1_PLACEHOLDER_ID, r.snapshotAgeRecipient || "-", AGE_RECIPIENT_PATTERN, r.discordSendFromWorker);
   '
 )
 
-if [ "$d1_id" = "$placeholder" ]; then
-  echo "error: $mode の D1 database id がプレースホルダのまま。infra Issue (#7) で D1 を作成し、apps/worker/resources.ts を実 UUID に差し替えてから実行する。" >&2
-  exit 1
+# 足りないものを一度にすべて示し、直してから再実行できるようにする
+errors=()
+warnings=()
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  errors+=("CLOUDFLARE_API_TOKEN が未設定。Workers・D1・R2 を編集できる Cloudflare API token を環境変数で渡す。")
 fi
-
+if [ "$host" = - ]; then
+  errors+=("apps/worker/resources.ts の $mode.host が空。Worker を置くホスト名（自分のゾーンのもの）を書く。")
+fi
+if [ "$d1_id" = "$placeholder" ]; then
+  errors+=("apps/worker/resources.ts の $mode.d1Id がプレースホルダのまま。D1 を作り（pnpm exec wrangler d1 create <name>）、その UUID を書く。")
+fi
 # 暗号化先が age の公開鍵でないと、Snapshot を誰も復号できなくなる
 if ! printf '%s' "$age_recipient" | grep -Eq "$age_pattern"; then
-  echo "error: $mode の SNAPSHOT_AGE_RECIPIENT が age の公開鍵（age1...）の形式ではない: $age_recipient。apps/worker/resources.ts を実際の公開鍵に差し替えてから実行する。" >&2
+  errors+=("apps/worker/resources.ts の $mode.snapshotAgeRecipient が age の公開鍵（age1...）ではない: ${age_recipient}。age-keygen で鍵を作り、公開鍵を書く。")
+fi
+# secret は前回のデプロイで反映済みのことがあるので、未設定でも止めない
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  warnings+=("ANTHROPIC_API_KEY が未設定。Worker secret に無ければ、デプロイ後に応答を生成できない。")
+fi
+if [ "$send_from_worker" = 1 ] && [ -z "${DISCORD_BOT_TOKEN:-}" ]; then
+  warnings+=("DISCORD_BOT_TOKEN が未設定。$mode.discordSendFromWorker が 1 なので、Worker secret に無ければ返事を送れない。")
+fi
+
+for w in "${warnings[@]+"${warnings[@]}"}"; do
+  echo "warning: $w" >&2
+done
+if [ ${#errors[@]} -gt 0 ]; then
+  for e in "${errors[@]}"; do
+    echo "error: $e" >&2
+  done
+  echo "手順は docs/self-hosting.md を参照。" >&2
   exit 1
 fi
 
