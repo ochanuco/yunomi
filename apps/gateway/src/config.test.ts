@@ -12,6 +12,7 @@ describe("loadConfig", () => {
 				discordToken: "t",
 				yunomiUrl: "http://localhost:8787",
 				access: null,
+				ochoko: null,
 				devCaller: false,
 				logLevel: "info",
 			},
@@ -47,5 +48,19 @@ describe("loadConfig", () => {
 		expect(loadConfig({ ...base, YUNOMI_URL: "nope" }).ok).toBe(false);
 		expect(loadConfig({ ...base, LOG_LEVEL: "loud" }).ok).toBe(false);
 		expect(loadConfig({ ...base, CF_ACCESS_CLIENT_ID: "i" }).ok).toBe(false);
+	});
+
+	it("OCHOKO_URL と AIVOICE_TOKEN は任意で、指定するなら両方そろえる", () => {
+		const both = loadConfig({
+			...base,
+			OCHOKO_URL: "http://192.168.10.254:8190/",
+			AIVOICE_TOKEN: "tok",
+		});
+		expect(both.ok && both.value.ochoko).toEqual({
+			url: "http://192.168.10.254:8190",
+			token: "tok",
+		});
+		expect(loadConfig({ ...base, OCHOKO_URL: "http://x:1" }).ok).toBe(false);
+		expect(loadConfig({ ...base, AIVOICE_TOKEN: "tok" }).ok).toBe(false);
 	});
 });

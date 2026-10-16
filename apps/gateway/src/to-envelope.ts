@@ -20,6 +20,8 @@ export type MessageLike = {
 	/** Discord の補完は bot 本人ではなく bot の管理ロールを選ぶことがあり、それも partner 宛てとみなす。 */
 	mentionsBotRole: boolean;
 	replyToMessageId: string | null;
+	/** 作者がいま入っている VC。入っていなければ null。 */
+	authorVoiceChannelId: string | null;
 	attachments: readonly {
 		name: string;
 		contentType: string | null;
@@ -64,6 +66,7 @@ export const toEnvelope = (
 					...(message.mentionsBotRole ? [botUserId] : []),
 				]),
 			],
+			author_voice_channel_id: message.authorVoiceChannelId,
 			reply_to_message_id: message.replyToMessageId,
 			attachments: message.attachments.map((a) => ({
 				name: a.name,

@@ -18,6 +18,7 @@ const msg = (over: Partial<MessageLike> = {}): MessageLike => ({
 	mentionedUserIds: [],
 	mentionsBotRole: false,
 	replyToMessageId: null,
+	authorVoiceChannelId: null,
 	attachments: [],
 	...over,
 });
@@ -94,5 +95,12 @@ describe("toEnvelope", () => {
 			).ok,
 		).toBe(false);
 		expect(toEnvelope(msg({ guildId: null }), opts).ok).toBe(false);
+	});
+
+	it("作者の VC を author_voice_channel_id に載せる", () => {
+		const r = toEnvelope(msg({ authorVoiceChannelId: "vc1" }), opts);
+		expect(r.ok && r.value.payload.author_voice_channel_id).toBe("vc1");
+		const none = toEnvelope(msg(), opts);
+		expect(none.ok && none.value.payload.author_voice_channel_id).toBeNull();
 	});
 });

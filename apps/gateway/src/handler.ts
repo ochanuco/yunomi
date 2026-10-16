@@ -1,5 +1,7 @@
+import type { VoiceDirective } from "@yunomi/protocol";
 import type { Logger } from "./logger.ts";
 import { type MessageLike, toEnvelope } from "./to-envelope.ts";
+import type { VoiceManager } from "./voice-manager.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
 /** discord.js のテキストチャンネルのうち handler が使う部分。 */
@@ -16,6 +18,7 @@ export type HandlerDeps = {
 	client: Pick<YunomiClient, "send" | "notifySent">;
 	partnerId: string;
 	botUserId: string;
+	voice?: Pick<VoiceManager, "apply">;
 	now?: () => Date;
 	logger: Logger;
 };
@@ -24,6 +27,15 @@ export const createMessageHandler =
 	(deps: HandlerDeps) =>
 	async (message: MessageLike, channel: ChannelLike): Promise<void> => {
 		const log = deps.logger;
+		// VC の操作が失敗しても、テキストの返信は止めない
+		const applyVoice = (directive: VoiceDirective | undefined) => {
+			void deps.voice?.apply(directive).catch((e: unknown) => {
+				log.error("voice directive failed", {
+					message_id: message.id,
+					error: e instanceof Error ? e.name : "unknown",
+				});
+			});
+		};
 		const envelope = toEnvelope(message, {
 			partnerId: deps.partnerId,
 			botUserId: deps.botUserId,
@@ -45,6 +57,7 @@ export const createMessageHandler =
 			return;
 		}
 		const response = result.value;
+		if (response.action !== "ignore") applyVoice(response.voice);
 		if (response.action === "ignore") {
 			log.info("ignored", { message_id: message.id });
 			return;
