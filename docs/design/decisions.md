@@ -116,7 +116,7 @@ This is a compact decision register.
 - runs on the GPU box (Windows + COM); `aivoice -> gpu-box`
 - the core reaches it through a relay (the Gateway on the LAN, or Cloudflare Tunnel + Access; an adapter choice); the GPU box is woken via WOL and kept awake by a lease while speaking
 - node offline policy for aivoice: `fail`
-- deployed via chabatake's GPU-box app deployer; the organ repo owns no runner
+- deployed by an external GPU-box app deployer; the organ repo owns no runner
 
 ## Cloud
 
@@ -178,7 +178,7 @@ This is a compact decision register.
 
 ## CI/CD
 
-Same operational style as `ochanuco/chabatake`:
+Deployment stages:
 
 - PR: test/typecheck/eval
 - main: dev deploy

@@ -114,7 +114,7 @@ Do not add voice, Vectorize, Calendar, or spontaneous speech before this works.
 ### Cloudflare
 - use `cf + cloudflare.config.ts`
 - Cloudflare app resources belong in this repo
-- account/shared low-level infrastructure belongs to `ochanuco/chabatake`
+- account/shared low-level infrastructure belongs to a separate infrastructure repository
 
 ### Runtime
 - TypeScript first

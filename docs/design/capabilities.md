@@ -72,7 +72,7 @@ Fields:
 
 ## Home Node
 
-The Linux Docker host (`docker01`) at home.
+The Linux Docker host at home.
 
 Potential capabilities:
 
