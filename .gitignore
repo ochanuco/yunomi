@@ -11,4 +11,3 @@ apps/worker/src/generated/
 evals/out/
 *.age
 /snapshots/
-mise.local.toml
