@@ -28,8 +28,8 @@ export const resources = {
 		host: "yunomi.chanu.co",
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
 		partnerDiscordUserId: "1558613526585671773",
-		discordSendFromWorker: "0",
-		voiceEnabled: "0",
+		discordSendFromWorker: "1",
+		voiceEnabled: "1",
 		voiceRealization: "yukari",
 		snapshotBucket: "yunomi-snapshots",
 		snapshotAgeRecipient:
