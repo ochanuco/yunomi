@@ -5,6 +5,8 @@ import { entities, externalIdentities } from "../db/schema.ts";
 import type { DoStore } from "./store.ts";
 
 export type EntityResolver = {
+	/** 既に解決済みの entity だけを返す。作らない。 */
+	find(provider: string, externalId: string): Promise<string | null>;
 	resolve(
 		provider: string,
 		externalId: string,
@@ -60,6 +62,13 @@ export const createEntityResolver = (
 	};
 
 	return {
+		async find(provider, externalId) {
+			const cached = store.cachedEntity(provider, externalId);
+			if (cached) return cached;
+			const id = await lookup(provider, externalId);
+			if (id) store.cacheEntity(provider, externalId, id);
+			return id;
+		},
 		async resolve(provider, externalId, displayName) {
 			const cached = store.cachedEntity(provider, externalId);
 			if (cached) return cached;
