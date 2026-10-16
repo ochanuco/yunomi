@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 560" role="img" aria-label="Partner DO の中に心、脳、身体がある。脳は心を読み、変化を提案する。脳は身体に意図を渡し、身体は状態と知覚を返す。脳には思考補助の口があり LLM がつながる。身体には意思疎通、発声、視覚（将来）の口があり、Discord、ochoko、未定の器官につながる。Discord からの受信は Gateway が中継し、gpu-box へは Tunnel と Access を通る">
+<style>
+svg {
+  --bg: #f4f6f2; --fg: #1d231e; --muted: #5d665e; --line: #c6cdc3; --surface: #ffffff;
+  --reg-c: #f0eae3; --reg-in: #e6ddd2; --reg-h: #e6eee3; --reg-g: #e3ece8; --reg-d: #e9ebf0;
+  --accent: #2b6a8c; --key-bg: #dcebf3; --note: #f7f3e8; --gate: #fbe9d6; --gate-line: #b07a3c;
+  --heart: #f6e4e6; --heart-line: #b05a68; --brain: #ece6f4; --brain-line: #6e5a9c;
+  --yukari: #7a5ba6; --yukari-bg: #efe9f7; --akari: #b8701a; --akari-bg: #fbf0e1;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+ color: var(--fg); }
+@media (prefers-color-scheme: dark) { svg {
+  --bg: #141815; --fg: #e3e8e1; --muted: #9aa49b; --line: #3a433b; --surface: #1c221d;
+  --reg-c: #2a241e; --reg-in: #352d24; --reg-h: #19231a; --reg-g: #1a2622; --reg-d: #1e2129;
+  --accent: #73b6da; --key-bg: #17303d; --note: #2a2a20; --gate: #3a2c1c; --gate-line: #d9a566;
+  --heart: #3a2226; --heart-line: #e08d9a; --brain: #2a2438; --brain-line: #b2a0dc;
+  --yukari: #b9a2e0; --yukari-bg: #2a2338; --akari: #e8b061; --akari-bg: #362a1a;
+  
+ } }
+.bg { fill: var(--surface); }
+text { font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif; fill: var(--fg); }
+.t { font-size: 14px; font-weight: 700; }
+.tl { font-size: 16px; font-weight: 700; }
+.ct { font-size: 12.5px; font-weight: 700; }
+.s { font-size: 11.5px; fill: var(--muted); }
+.m { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; fill: var(--muted); }
+.lbl { font-size: 11.5px; }
+.pt { font-size: 11px; font-weight: 700; fill: var(--accent); }
+.rl { font-size: 12px; font-weight: 700; fill: var(--muted); letter-spacing: 0.04em; }
+.gt { font-size: 11px; font-weight: 700; fill: var(--gate-line); }
+.region-c { fill: var(--reg-c); }
+.region-in { fill: var(--reg-in); }
+.region-h { fill: var(--reg-h); }
+.region-g { fill: var(--reg-g); }
+.region-d { fill: var(--reg-d); }
+.node { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.ghost { fill: var(--surface); stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 4 4; }
+.heart { fill: var(--heart); stroke: var(--heart-line); stroke-width: 1.6; }
+.brain { fill: var(--brain); stroke: var(--brain-line); stroke-width: 1.6; }
+.key { fill: var(--key-bg); stroke: var(--accent); stroke-width: 1.8; }
+.port { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.port-ghost { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 3; }
+.gate { fill: var(--gate); stroke: var(--gate-line); stroke-width: 1.4; }
+.frame { fill: none; stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 5 4; }
+.edge { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.edge-ghost { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+.lifeline { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.do-y { fill: var(--yukari-bg); stroke: var(--yukari); stroke-width: 1.8; }
+.do-a { fill: var(--akari-bg); stroke: var(--akari); stroke-width: 1.8; }
+.lane-y { fill: var(--yukari-bg); stroke: var(--yukari); stroke-width: 1.2; }
+.lane-a { fill: var(--akari-bg); stroke: var(--akari); stroke-width: 1.2; }
+.bus-y { stroke: var(--yukari); stroke-width: 2.2; fill: none; }
+.bus-a { stroke: var(--akari); stroke-width: 2.2; fill: none; }
+.ty { font-size: 13px; font-weight: 700; fill: var(--yukari); }
+.ta { font-size: 13px; font-weight: 700; fill: var(--akari); }
+.sep { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.ah { fill: currentColor; }
+</style>
+<rect class="bg" width="1100" height="560"/>
+          <defs>
+            <marker id="c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="ah"/>
+            </marker>
+          </defs>
+
+          <rect class="region-d" x="10" y="40" width="190" height="330" rx="10"/>
+          <text class="rl" x="24" y="64">Discord</text>
+          <rect class="region-c" x="225" y="40" width="570" height="370" rx="10"/>
+          <text class="rl" x="239" y="64">Cloudflare（コア）</text>
+          <rect class="region-in" x="270" y="80" width="500" height="310" rx="8"/>
+          <text class="rl" x="284" y="100">Partner DO（ゆかりさん）</text>
+          <rect class="region-h" x="10" y="420" width="300" height="130" rx="10"/>
+          <text class="rl" x="24" y="444">自宅</text>
+          <rect class="region-g" x="870" y="240" width="220" height="200" rx="10"/>
+          <text class="rl" x="884" y="264">gpu-box</text>
+
+          <rect class="node" x="25" y="80" width="160" height="270" rx="7"/>
+          <text class="t" x="105" y="205" text-anchor="middle">Discord</text>
+          <text class="s" x="105" y="225" text-anchor="middle">意思疎通の器官</text>
+
+          <rect class="heart" x="290" y="115" width="200" height="125" rx="8"/>
+          <text class="tl" x="390" y="141" text-anchor="middle">心</text>
+          <text class="s" x="390" y="165" text-anchor="middle">ペルソナ・価値観</text>
+          <text class="s" x="390" y="185" text-anchor="middle">感情・関係・意見と興味</text>
+          <text class="s" x="390" y="205" text-anchor="middle">記憶の中身</text>
+          <text class="s" x="390" y="228" text-anchor="middle">変化は自分の規則で受け入れる</text>
+
+          <rect class="brain" x="550" y="115" width="200" height="125" rx="8"/>
+          <text class="tl" x="650" y="141" text-anchor="middle">脳</text>
+          <text class="s" x="650" y="165" text-anchor="middle">知覚を受け取る・思い出す</text>
+          <text class="s" x="650" y="185" text-anchor="middle">考える（LLM は脳の器官）</text>
+          <text class="s" x="650" y="205" text-anchor="middle">何をするか決める</text>
+
+          <line class="edge" x1="550" y1="176" x2="494" y2="176" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="522" y="169" text-anchor="middle">読む</text>
+          <text class="lbl" x="522" y="193" text-anchor="middle">提案</text>
+
+          <rect class="key" x="290" y="275" width="460" height="100" rx="8"/>
+          <text class="tl" x="306" y="297">身体</text>
+          <rect class="node" x="305" y="305" width="100" height="36" rx="6"/>
+          <text class="ct" x="355" y="328" text-anchor="middle">IR → 値</text>
+          <rect class="node" x="415" y="305" width="100" height="36" rx="6"/>
+          <text class="ct" x="465" y="328" text-anchor="middle">段取り</text>
+          <rect class="node" x="525" y="305" width="105" height="36" rx="6"/>
+          <text class="ct" x="577" y="328" text-anchor="middle">身体の状態</text>
+          <rect class="node" x="640" y="305" width="100" height="36" rx="6"/>
+          <text class="ct" x="690" y="328" text-anchor="middle">声の性質</text>
+          <text class="s" x="355" y="360" text-anchor="middle">エンジン固有</text>
+          <text class="s" x="465" y="360" text-anchor="middle">起こす・待つ・送る</text>
+          <text class="s" x="577" y="360" text-anchor="middle">器官が使えるか</text>
+          <text class="m" x="690" y="360" text-anchor="middle">partners/yukarin</text>
+
+          <line class="edge" x1="620" y1="240" x2="620" y2="271" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="612" y="262" text-anchor="end">意図</text>
+          <line class="edge" x1="700" y1="271" x2="700" y2="244" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="708" y="262">状態・知覚</text>
+
+          <rect class="port" x="742" y="140" width="56" height="44" rx="6"/>
+          <text class="pt" x="770" y="159" text-anchor="middle">思考補助</text>
+          <text class="pt" x="770" y="174" text-anchor="middle">の口</text>
+          <rect class="port" x="242" y="300" width="56" height="44" rx="6"/>
+          <text class="pt" x="270" y="319" text-anchor="middle">意思疎通</text>
+          <text class="pt" x="270" y="334" text-anchor="middle">の口</text>
+          <rect class="port" x="742" y="302" width="56" height="44" rx="6"/>
+          <text class="pt" x="770" y="321" text-anchor="middle">発声</text>
+          <text class="pt" x="770" y="336" text-anchor="middle">の口</text>
+          <rect class="port-ghost" x="570" y="372" width="110" height="36" rx="6"/>
+          <text class="pt" x="625" y="395" text-anchor="middle">視覚の口（将来）</text>
+
+          <rect class="node" x="830" y="40" width="260" height="90" rx="7"/>
+          <text class="t" x="960" y="64" text-anchor="middle">LLM（Claude API）</text>
+          <text class="s" x="960" y="84" text-anchor="middle">脳の器官（思考の補助）</text>
+          <text class="s" x="960" y="104" text-anchor="middle">候補: Cloudflare の別モデル、ローカル LLM</text>
+          <polyline class="edge" points="798,162 812,162 812,85 826,85" marker-end="url(#c-arrow)"/>
+
+          <line class="edge" x1="242" y1="312" x2="189" y2="312" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="215" y="304" text-anchor="middle">送信</text>
+
+          <rect class="node" x="30" y="458" width="260" height="72" rx="7"/>
+          <text class="t" x="160" y="484" text-anchor="middle">Gateway</text>
+          <text class="s" x="160" y="504" text-anchor="middle">受信を中継するだけ（常時接続）</text>
+          <line class="edge" x1="105" y1="350" x2="105" y2="454" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="113" y="402">受信</text>
+          <line class="edge" x1="270" y1="458" x2="270" y2="348" marker-end="url(#c-arrow)"/>
+          <text class="lbl" x="278" y="438">HTTP</text>
+
+          <rect class="gate" x="810" y="280" width="40" height="140" rx="6"/>
+          <text class="gt" x="834" y="350" text-anchor="middle" transform="rotate(-90 834 350)">Tunnel + Access</text>
+          <line class="edge" x1="798" y1="324" x2="810" y2="324"/>
+          <line class="edge" x1="850" y1="320" x2="886" y2="320" marker-end="url(#c-arrow)"/>
+          <line class="edge" x1="850" y1="401" x2="886" y2="401" marker-end="url(#c-arrow)"/>
+
+          <rect class="node" x="890" y="292" width="185" height="56" rx="7"/>
+          <text class="t" x="982" y="315" text-anchor="middle">ochoko</text>
+          <text class="s" x="982" y="334" text-anchor="middle">発声の器官（A.I.VOICE）</text>
+          <rect class="node" x="890" y="378" width="185" height="46" rx="7"/>
+          <text class="t" x="982" y="396" text-anchor="middle">wol</text>
+          <text class="s" x="982" y="414" text-anchor="middle">電源（起こす）</text>
+          <line class="edge-ghost" x1="982" y1="378" x2="982" y2="352"/>
+
+          <line class="edge-ghost" x1="625" y1="408" x2="625" y2="436"/>
+          <rect class="ghost" x="525" y="440" width="200" height="56" rx="7"/>
+          <text class="t" x="625" y="463" text-anchor="middle">視覚（将来）</text>
+          <text class="s" x="625" y="482" text-anchor="middle">器官は未定</text>
+        </svg>
