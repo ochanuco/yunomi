@@ -1,6 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import type { TurnResponse } from "@yunomi/conversation";
+import type { GateDecision, TurnResponse } from "@yunomi/conversation";
 import {
 	type DomainError,
 	externalServiceUnavailable,
@@ -42,7 +42,7 @@ export const turn = (over: Partial<TurnResponse> = {}): TurnResponse => ({
 	...over,
 });
 
-export const llmOk = (output: TurnResponse, model = HAIKU) => ({
+export const llmOk = (output: TurnResponse | GateDecision, model = HAIKU) => ({
 	ok: true as const,
 	value: {
 		output,
@@ -57,6 +57,10 @@ export const llmOk = (output: TurnResponse, model = HAIKU) => ({
 		stopReason: "end_turn",
 	} satisfies LLMResult<unknown>,
 });
+
+/** Haiku の入る / 入らない判定。 */
+export const gate = (join: boolean, reason = "テスト") =>
+	llmOk({ join, reason });
 
 export const transientFailure = () => ({
 	ok: false as const,

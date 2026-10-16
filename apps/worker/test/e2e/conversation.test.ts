@@ -75,20 +75,24 @@ describe("reply と ignore", () => {
 		expect(row).toMatchObject({ decision: "ignore", reason: "llm" });
 	});
 
-	it("呼ばれていない発言は LLM を呼ばずに無視する", async () => {
+	it("ほかの人宛ての発言は LLM を呼ばずに無視する", async () => {
 		const s = newScenario();
 		const fake = await installFakeLlm([]);
 		const msg = inbound({
 			channelId: s.channelId,
 			author: s.author,
 			content: "今日は寒いね",
+			mentionedUserIds: ["someone-else"],
 		});
 
 		expect(await send(msg)).toEqual({ action: "ignore" });
 
 		expect(fake.requests).toHaveLength(0);
 		const [row] = await auditFor(msg.eventId);
-		expect(row).toMatchObject({ decision: "ignore", reason: "not_addressed" });
+		expect(row).toMatchObject({
+			decision: "ignore",
+			reason: "addressed_to_other",
+		});
 	});
 });
 

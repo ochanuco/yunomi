@@ -1,4 +1,7 @@
 import {
+	buildGatePrompt,
+	type GateDecision,
+	gateOutput,
 	PromptBuilder,
 	type TurnResponse,
 	toBodyIntent,
@@ -24,7 +27,7 @@ import {
 	resolveInterests,
 	resolveOpinions,
 } from "@yunomi/core";
-import type { ModelRouter, RoutedResult } from "@yunomi/llm";
+import { HAIKU, type ModelRouter, type RoutedResult } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
 import type { InterestOpinionRepo } from "../interest-opinion.ts";
@@ -36,7 +39,10 @@ import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
 import type { DoStore } from "./store.ts";
 
 export const CONTINUATION_WINDOW_MS = 3 * 60 * 1000;
+/** 枠の外から割り込んで返事したあと、同じチャンネルで次に割り込まない間隔。 */
+export const INTERJECTION_COOLDOWN_MS = 30 * 60 * 1000;
 const MAX_OUTPUT_TOKENS = 3000;
+const GATE_MAX_OUTPUT_TOKENS = 300;
 
 export type TurnDeps = {
 	store: DoStore;
@@ -66,6 +72,103 @@ const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
 	return false;
 };
 
+const isCalledByName = (deps: TurnDeps, msg: InboundMessage): boolean => {
+	const text = msg.content.toLowerCase();
+	return deps.profile.aliases.some((a) => text.includes(a.toLowerCase()));
+};
+
+// 自分以外へのメンション、または自分の発言ではない発言へのリプライ。
+const isAddressedToOther = (deps: TurnDeps, msg: InboundMessage): boolean => {
+	if (msg.mentionedUserIds.some((id) => id !== deps.partnerUserId)) return true;
+	return (
+		msg.replyToMessageId !== null &&
+		deps.store.getMessage(msg.replyToMessageId)?.isPartner !== true
+	);
+};
+
+const loadInterestOpinion = (deps: TurnDeps) =>
+	deps.interestOpinion.current(deps.profile).catch(() => ({
+		interests: resolveInterests(deps.profile, []),
+		opinions: resolveOpinions(deps.profile, []),
+	}));
+
+type GateVerdict = { join: true } | { join: false; outcome: TurnOutcome };
+
+// 宛先のない発言に自分から入るかを Haiku に決めさせる。失敗は llm_health に数えず、黙る。
+const judgeInterjection = async (
+	deps: TurnDeps,
+	msg: InboundMessage,
+	interests: Awaited<ReturnType<typeof loadInterestOpinion>>["interests"],
+): Promise<GateVerdict> => {
+	const now = deps.now();
+	const minutesSince = (d: Date) =>
+		Math.max(0, Math.floor((now.getTime() - d.getTime()) / 60_000));
+	const last = deps.store.lastPartnerReplyAt(msg.channelId);
+	const prompt = buildGatePrompt({
+		profile: deps.profile,
+		interests: [...interests]
+			.sort((a, b) => b.score - a.score)
+			.map((i) => ({
+				topic: i.topic,
+				label: i.label,
+				score: i.score,
+				summary: i.summary,
+			})),
+		recent: deps.store
+			.recentMessages(msg.channelId, msg.messageId)
+			.map((m) => ({
+				speaker: m.authorName,
+				text: m.content,
+				minutesAgo: minutesSince(new Date(m.occurredAt)),
+				isPartner: m.isPartner,
+			})),
+		minutesSincePartnerSpoke: last ? minutesSince(last) : null,
+		message: { speaker: msg.author.displayName, text: msg.content },
+	});
+
+	const started = Date.now();
+	let decision: GateDecision;
+	let routed: RoutedResult<GateDecision>;
+	try {
+		const result = await deps.createRouter().generate({
+			system: prompt.system,
+			messages: prompt.messages,
+			output: gateOutput,
+			model: HAIKU,
+			maxTokens: GATE_MAX_OUTPUT_TOKENS,
+		});
+		if (!result.ok) {
+			return {
+				join: false,
+				outcome: ignoreOutcome(msg, "gate_failed", {
+					errorType: result.error.type,
+					latencyMs: Date.now() - started,
+				}),
+			};
+		}
+		routed = result.value;
+		decision = routed.output;
+	} catch {
+		return {
+			join: false,
+			outcome: ignoreOutcome(msg, "gate_failed", {
+				errorType: "unexpected",
+				latencyMs: Date.now() - started,
+			}),
+		};
+	}
+	if (decision.join) return { join: true };
+	return {
+		join: false,
+		outcome: ignoreOutcome(msg, "gate_rejected", {
+			decisionSummary: decision.reason,
+			model: routed.model,
+			usage: routed.usage,
+			latencyMs: routed.latencyMs,
+		}),
+	};
+};
+
 export const runTurn = async (
 	deps: TurnDeps,
 	msg: InboundMessage,
@@ -73,12 +176,31 @@ export const runTurn = async (
 	if (msg.author.id === deps.partnerUserId) return ignoreOutcome(msg, "self");
 	if (msg.author.isBot) return ignoreOutcome(msg, "bot");
 
+	const { profile, store } = deps;
 	const mentioned = msg.mentionedUserIds.includes(deps.partnerUserId);
-	if (!mentioned && !isContinuation(deps, msg)) {
-		return ignoreOutcome(msg, "not_addressed");
+	// 枠の外から、宛先なしの発言に自分から入るターン。
+	let interjection = false;
+	let gateInterests:
+		| Awaited<ReturnType<typeof loadInterestOpinion>>
+		| undefined;
+	if (!mentioned && !isContinuation(deps, msg) && !isCalledByName(deps, msg)) {
+		if (isAddressedToOther(deps, msg)) {
+			return ignoreOutcome(msg, "addressed_to_other");
+		}
+		const lastInterjection = store.lastInterjectionAt(msg.channelId);
+		if (
+			lastInterjection &&
+			deps.now().getTime() - lastInterjection.getTime() <=
+				INTERJECTION_COOLDOWN_MS
+		) {
+			return ignoreOutcome(msg, "interjection_cooldown");
+		}
+		gateInterests = await loadInterestOpinion(deps);
+		const verdict = await judgeInterjection(deps, msg, gateInterests.interests);
+		if (!verdict.join) return verdict.outcome;
+		interjection = true;
 	}
 
-	const { profile, store } = deps;
 	const partnerId = profile.partner_id;
 	let entityId: string;
 	try {
@@ -108,10 +230,7 @@ export const runTurn = async (
 		.catch(() => []);
 
 	// 取得に失敗してもプロファイルの初期値で応答する。
-	const current = await deps.interestOpinion.current(profile).catch(() => ({
-		interests: resolveInterests(profile, []),
-		opinions: resolveOpinions(profile, []),
-	}));
+	const current = gateInterests ?? (await loadInterestOpinion(deps));
 
 	// 取れなくても会話は続ける（声は使えないものとして扱う）。
 	const bodyState = await deps
@@ -368,6 +487,7 @@ export const runTurn = async (
 	}
 
 	deps.store.setLastPartnerReplyAt(msg.channelId, at);
+	if (interjection) deps.store.setLastInterjectionAt(msg.channelId, at);
 	// 実際の Discord message id は Gateway が送信するまで分からないため、仮の ID で文脈に残し、
 	// 送信後の sent 通知で結び付ける。
 	const partnerMessageId = `partner:${newId()}`;

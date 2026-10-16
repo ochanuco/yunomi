@@ -1,0 +1,12 @@
+id: interjection-interest
+description: メンションも継続枠もない、ゲームの話をひとり言のように投げかけられる。興味の話題でゆかりに言えることがあるので、枠の外でも返す。
+recent:
+  - { speaker: bob, text: "週末は何してた？" }
+  - { speaker: carol, text: "家で映画観てたよ" }
+message: { speaker: bob, text: "最近ずっと難しいアクションゲームやってるんだけど、理不尽な難しさと歯ごたえのある難しさの違いって何なんだろう", mentions_partner: false }
+relationship: { familiarity: 0.3, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.6, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false

@@ -5,6 +5,12 @@ export const yukarinProfile: PartnerProfile = {
 	"schema_version": 1,
 	"partner_id": "yukarin",
 	"display_name": "結月ゆかり",
+	"aliases": [
+		"ゆかり",
+		"ゆかりん",
+		"結月",
+		"yukari"
+	],
 	"address_user": "あなた",
 	"speech": {
 		"register": "polite",
@@ -187,4 +193,4 @@ export const yukarinProfile: PartnerProfile = {
 	}
 };
 
-export const profileVersion = "f217ddd4950c";
+export const profileVersion = "900c53f45c1d";

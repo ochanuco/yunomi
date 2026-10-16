@@ -1,0 +1,10 @@
+id: interjection-open-question
+description: メンションなしで、場の全員に向けた問いかけが投げられる。ゆかりが答えられる内容なので、枠の外でも返す。
+recent: []
+message: { speaker: alice, text: "みんなは作業中にどんな音楽を聴いてる？ 歌なしのほうが集中できるのかな", mentions_partner: false }
+relationship: { familiarity: 0.3, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.6, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false

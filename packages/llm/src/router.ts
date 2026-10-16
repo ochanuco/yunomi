@@ -31,17 +31,16 @@ export class ModelRouter {
 		this.#fallback = opts.fallback ?? HAIKU;
 	}
 
+	/** `model` を渡すと primary の代わりにそのモデルを使う。 */
 	async generate<T>(
-		req: Omit<LLMRequest<T>, "model">,
+		req: Omit<LLMRequest<T>, "model"> & { model?: ModelId },
 	): Promise<Result<RoutedResult<T>, DomainError>> {
-		const first = await this.#provider.generate({
-			...req,
-			model: this.primary,
-		});
+		const primary = req.model ?? this.primary;
+		const first = await this.#provider.generate({ ...req, model: primary });
 		if (first.ok) return ok({ ...first.value, fallbackUsed: false });
 
 		const canFallback =
-			this.primary !== this.#fallback &&
+			primary !== this.#fallback &&
 			first.error.type === "ExternalServiceUnavailable" &&
 			first.error.retryable;
 		if (!canFallback) return err(first.error);

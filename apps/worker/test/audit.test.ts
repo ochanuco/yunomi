@@ -129,7 +129,11 @@ describe("audit_events", () => {
 	it("LLM を呼ばない ignore も 1 件記録される", async () => {
 		const stub = await setup("audit-ignore", []);
 		await stub.handleDiscordMessage(
-			inbound({ partnerId: "audit-ignore", content: "雑談" }),
+			inbound({
+				partnerId: "audit-ignore",
+				content: "雑談",
+				mentionedUserIds: ["someone-else"],
+			}),
 		);
 		await stub.flushBackground();
 
@@ -137,7 +141,7 @@ describe("audit_events", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({
 			decision: "ignore",
-			reason: "not_addressed",
+			reason: "addressed_to_other",
 			model: null,
 			input_tokens: 0,
 		});

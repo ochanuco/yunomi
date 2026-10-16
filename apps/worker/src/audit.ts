@@ -12,6 +12,10 @@ export type DecisionReason =
 	| "llm"
 	| "bot"
 	| "not_addressed"
+	| "addressed_to_other"
+	| "interjection_cooldown"
+	| "gate_rejected"
+	| "gate_failed"
 	| "coalesced"
 	| "self"
 	| "error";
