@@ -3,6 +3,8 @@
 schema_version: 1
 partner_id: yukarin
 display_name: 結月ゆかり
+# 本文に含まれるとメンションと同じく呼ばれたものとして扱う。部分一致で、英字は大文字小文字を区別しない。
+aliases: [ゆかり, ゆかりん, 結月, yukari]
 address_user: あなた
 speech:
   register: polite

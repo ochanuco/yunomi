@@ -35,6 +35,16 @@ describe("ModelRouter", () => {
 		expect(r.ok && r.value.fallbackUsed).toBe(false);
 	});
 
+	it("model を指定すると主モデルの代わりに使い、Haiku の障害では fallback しない", async () => {
+		const fake = new FakeLLMProvider([down()]);
+		const r = await new ModelRouter({ provider: fake }).generate({
+			...base,
+			model: "claude-haiku-5-5",
+		});
+		expect(fake.requests.map((q) => q.model)).toEqual(["claude-haiku-5-5"]);
+		expect(r.ok).toBe(false);
+	});
+
 	it("Sonnet の retryable な障害で Haiku に 1 回だけ fallback する", async () => {
 		const fake = new FakeLLMProvider([down(), ok(success("claude-haiku-5-5"))]);
 		const r = await new ModelRouter({

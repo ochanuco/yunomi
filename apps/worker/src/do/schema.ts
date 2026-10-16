@@ -62,6 +62,10 @@ const MIGRATIONS: string[][] = [
 			failure_streak INTEGER NOT NULL
 		)`,
 	],
+	[
+		// 枠の外から割り込んで返事した最後の時刻。既存行は NULL（まだ割り込んでいない）
+		"ALTER TABLE channel_state ADD COLUMN last_interjection_at TEXT",
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {

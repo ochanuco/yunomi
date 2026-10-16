@@ -11,6 +11,7 @@ export const partnerProfileSchema = v.object({
 	schema_version: v.pipe(v.number(), v.integer(), v.minValue(1)),
 	partner_id: v.pipe(v.string(), v.nonEmpty()),
 	display_name: v.pipe(v.string(), v.nonEmpty()),
+	aliases: v.array(v.pipe(v.string(), v.nonEmpty())),
 	address_user: v.pipe(v.string(), v.nonEmpty()),
 	speech: v.object({
 		register: v.picklist(["polite", "casual"]),

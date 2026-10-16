@@ -343,9 +343,10 @@ describe("保存しないターンと失敗", () => {
 			inbound({
 				author: { id: "io-author", displayName: "alice", isBot: false },
 				content: "別の人への話",
+				mentionedUserIds: ["someone-else"],
 			}),
 		);
-		expect(quiet.audit.reason).toBe("not_addressed");
+		expect(quiet.audit.reason).toBe("addressed_to_other");
 		expect(quiet.audit.interestOpinion).toBeNull();
 		expect(await count("interest_changes")).toBe(0);
 	});

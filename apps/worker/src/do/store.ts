@@ -188,6 +188,27 @@ export class DoStore {
 		);
 	}
 
+	lastInterjectionAt(channelId: string): Date | null {
+		const row = this.#sql
+			.exec<{ last_interjection_at: string | null }>(
+				"SELECT last_interjection_at FROM channel_state WHERE channel_id = ?",
+				channelId,
+			)
+			.toArray()[0];
+		return row?.last_interjection_at
+			? new Date(row.last_interjection_at)
+			: null;
+	}
+
+	setLastInterjectionAt(channelId: string, at: Date): void {
+		this.#sql.exec(
+			`INSERT INTO channel_state (channel_id, last_interjection_at) VALUES (?, ?)
+			ON CONFLICT (channel_id) DO UPDATE SET last_interjection_at = excluded.last_interjection_at`,
+			channelId,
+			at.toISOString(),
+		);
+	}
+
 	getState(): PartnerState | null {
 		const r = this.#sql
 			.exec<{

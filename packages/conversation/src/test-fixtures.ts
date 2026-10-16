@@ -5,6 +5,7 @@ export const profile: PartnerProfile = {
 	schema_version: 1,
 	partner_id: "test-partner",
 	display_name: "テスト",
+	aliases: ["テスト", "てすと"],
 	address_user: "あなた",
 	speech: { register: "polite", casualization_limit: 0.3 },
 	values: [

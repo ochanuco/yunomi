@@ -9,7 +9,11 @@ export type TurnOutcome = {
 	intent?: BodyIntent;
 };
 
-export type Pipeline = (msg: InboundMessage) => Promise<TurnOutcome>;
+/** onEngaged は、返事に進むと決まった時点で一度だけ呼ばれる。入力中の表示はここから始める。 */
+export type Pipeline = (
+	msg: InboundMessage,
+	onEngaged?: () => void,
+) => Promise<TurnOutcome>;
 
 export const inboundSummary = (
 	msg: InboundMessage,

@@ -47,6 +47,14 @@ describe("シナリオファイル", () => {
 		).toBeGreaterThanOrEqual(0.9);
 	});
 
+	it("枠の外でも入れる話題のシナリオは返す側の期待になっている", () => {
+		const byId = Object.fromEntries(scenarios.map((s) => [s.id, s]));
+		for (const id of ["interjection-interest", "interjection-open-question"]) {
+			expect(byId[id]?.message.mentions_partner).toBe(false);
+			expect(byId[id]?.expectations.reply_rate.min).toBeGreaterThanOrEqual(0.6);
+		}
+	});
+
 	it("Open Loop のシナリオは抽出すべき側と抽出しない側の期待になっている", () => {
 		const byId = Object.fromEntries(scenarios.map((s) => [s.id, s]));
 		expect(

@@ -1,6 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import type { TurnResponse } from "@yunomi/conversation";
+import type { GateDecision, TurnResponse } from "@yunomi/conversation";
 import {
 	type DomainError,
 	externalServiceUnavailable,
@@ -14,7 +14,11 @@ import {
 	SONNET,
 } from "@yunomi/llm";
 import { describe, expect, it } from "vitest";
-import { CONTINUATION_WINDOW_MS } from "../src/do/turn.ts";
+import {
+	CONTINUATION_WINDOW_MS,
+	GATE_TIMEOUT_MS,
+	INTERJECTION_COOLDOWN_MS,
+} from "../src/do/turn.ts";
 import { envelopeBody, inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
 
 const BOT = env.PARTNER_DISCORD_USER_ID;
@@ -45,7 +49,7 @@ const turnResponse = (over: Partial<TurnResponse> = {}): TurnResponse => ({
 	...over,
 });
 
-const llmOk = (output: TurnResponse, model = HAIKU) => ({
+const llmOk = (output: TurnResponse | GateDecision, model = HAIKU) => ({
 	ok: true as const,
 	value: {
 		output,
@@ -60,6 +64,9 @@ const llmOk = (output: TurnResponse, model = HAIKU) => ({
 		stopReason: "end_turn",
 	} satisfies LLMResult<unknown>,
 });
+
+const gateOk = (join: boolean, reason = "判定の理由") =>
+	llmOk({ join, reason });
 
 const llmErr = (error: DomainError) => ({ ok: false as const, error });
 
@@ -134,14 +141,20 @@ describe("reply / ignore の判定", () => {
 		});
 	});
 
-	it("メンションなし・継続窓の外 -> LLM を呼ばず ignore", async () => {
-		const { stub, fake } = await setup("chitchat");
+	it("メンションなし・継続窓の外 -> Haiku が入らないと判定したら gate_rejected", async () => {
+		const { stub, fake } = await setup("chitchat", {
+			script: [gateOk(false, "人どうしの会話の途中")],
+		});
 		const res = await stub.handleDiscordMessage(
 			inbound({ content: "ふむふむ" }),
 		);
 		expect(res.action).toBe("ignore");
-		expect(res.audit.reason).toBe("not_addressed");
-		expect(fake.requests).toHaveLength(0);
+		expect(res.audit).toMatchObject({
+			reason: "gate_rejected",
+			decisionSummary: "人どうしの会話の途中",
+			model: HAIKU,
+		});
+		expect(fake.requests.map((r) => r.model)).toEqual([HAIKU]);
 	});
 
 	it("直近の返事から窓内なら LLM に回し、窓を過ぎたら回さない", async () => {
@@ -149,6 +162,7 @@ describe("reply / ignore の判定", () => {
 			script: [
 				llmOk(turnResponse()),
 				llmOk(turnResponse({ utterance: "そうですね" })),
+				gateOk(false),
 			],
 		});
 		await stub.handleDiscordMessage(mention());
@@ -166,8 +180,8 @@ describe("reply / ignore の判定", () => {
 		const outside = await stub.handleDiscordMessage(
 			inbound({ content: "うん" }),
 		);
-		expect(outside.audit.reason).toBe("not_addressed");
-		expect(fake.requests).toHaveLength(2);
+		expect(outside.audit.reason).toBe("gate_rejected");
+		expect(fake.requests.map((r) => r.model)).toEqual([SONNET, SONNET, HAIKU]);
 	});
 
 	it("Yukarin の発言への返信は窓外でも LLM に回す", async () => {
@@ -253,7 +267,7 @@ describe("reply / ignore の判定", () => {
 
 	it("チャンネルログは古い順に入り、新着メッセージ自身は含まない", async () => {
 		const { stub, fake } = await setup("context", {
-			script: [llmOk(turnResponse())],
+			script: [gateOk(false), llmOk(turnResponse())],
 		});
 		await stub.handleDiscordMessage(
 			inbound({
@@ -262,10 +276,171 @@ describe("reply / ignore の判定", () => {
 			}),
 		);
 		await stub.handleDiscordMessage(mention());
-		const user = fake.requests[0]?.messages[0]?.content ?? "";
+		const user = fake.requests[1]?.messages[0]?.content ?? "";
 		const log = user.slice(0, user.indexOf("</channel_log>"));
 		expect(log).toContain("bob: 先行の雑談");
 		expect(log).not.toContain("ゆかりん、おはよう");
+	});
+});
+
+const interjectionAt = (stub: ReturnType<typeof partnerStub>) =>
+	runInDurableObject(
+		stub,
+		(_o, state) =>
+			state.storage.sql
+				.exec<{ last_interjection_at: string | null }>(
+					"SELECT last_interjection_at FROM channel_state",
+				)
+				.toArray()[0]?.last_interjection_at ?? null,
+	);
+
+describe("宛先のない発言への割り込み", () => {
+	const free = (over = {}) =>
+		inbound({ content: "このゲーム面白いよ", ...over });
+
+	it("本文にプロファイルの呼び名があれば、判定なしで Sonnet に回す（英字は大文字小文字を区別しない）", async () => {
+		const { stub, fake } = await setup("alias", {
+			script: [llmOk(turnResponse()), llmOk(turnResponse())],
+		});
+		const a = await stub.handleDiscordMessage(
+			free({ content: "結月さんは？" }),
+		);
+		const b = await stub.handleDiscordMessage(
+			free({ content: "Yukari どう？" }),
+		);
+		expect([a.action, b.action]).toEqual(["reply", "reply"]);
+		expect(fake.requests.map((r) => r.model)).toEqual([SONNET, SONNET]);
+		expect(await interjectionAt(stub)).toBeNull();
+	});
+
+	it("自分以外へのメンションは Haiku を呼ばず addressed_to_other", async () => {
+		const { stub, fake } = await setup("to-other-mention");
+		const res = await stub.handleDiscordMessage(
+			free({ mentionedUserIds: ["u9"] }),
+		);
+		expect(res.audit.reason).toBe("addressed_to_other");
+		expect(fake.requests).toHaveLength(0);
+	});
+
+	it("自分以外の発言へのリプライは、既知でも未知でも addressed_to_other", async () => {
+		const { stub, fake } = await setup("to-other-reply");
+		const bob = free({
+			author: { id: "u2", displayName: "bob", isBot: false },
+		});
+		await stub.handleDiscordMessage(free({ mentionedUserIds: ["u9"] }));
+		await stub.handleDiscordMessage(bob);
+		const known = await stub.handleDiscordMessage(
+			free({ replyToMessageId: bob.messageId }),
+		);
+		const unknown = await stub.handleDiscordMessage(
+			free({ replyToMessageId: "not-in-store" }),
+		);
+		expect(known.audit.reason).toBe("addressed_to_other");
+		expect(unknown.audit.reason).toBe("addressed_to_other");
+		expect(fake.requests.length).toBe(1);
+	});
+
+	it("Haiku が入ると判定したら Sonnet に回し、reply したときだけ割り込み時刻を記録する", async () => {
+		const { stub, fake } = await setup("join", {
+			script: [
+				gateOk(true, "ゲームの話題"),
+				llmOk(turnResponse({ utterance: "面白そうですね" })),
+			],
+		});
+		const res = await stub.handleDiscordMessage(free());
+		expect(res).toMatchObject({ action: "reply", content: "面白そうですね" });
+		expect(fake.requests.map((r) => r.model)).toEqual([HAIKU, SONNET]);
+		expect(fake.requests[0]?.timeoutMs).toBe(GATE_TIMEOUT_MS);
+		expect(fake.requests[1]?.timeoutMs).toBeUndefined();
+		expect(await interjectionAt(stub)).toBe(T0.toISOString());
+	});
+
+	it("入ると判定されても Sonnet が ignore を選べば、割り込み時刻は記録しない", async () => {
+		const { stub } = await setup("join-ignore", {
+			script: [
+				gateOk(true),
+				llmOk(turnResponse({ reply_policy: "ignore", utterance: "" })),
+			],
+		});
+		const res = await stub.handleDiscordMessage(free());
+		expect(res.audit).toMatchObject({ decision: "ignore", reason: "llm" });
+		expect(await interjectionAt(stub)).toBeNull();
+	});
+
+	it("メンションへの通常の返事では割り込み時刻を記録しない", async () => {
+		const { stub } = await setup("mention-no-stamp", {
+			script: [llmOk(turnResponse())],
+		});
+		await stub.handleDiscordMessage(mention());
+		expect(await interjectionAt(stub)).toBeNull();
+	});
+
+	it("割り込みから 30 分以内は Haiku を呼ばず interjection_cooldown、過ぎたら判定する", async () => {
+		const { stub, fake, clock } = await setup("cooldown", {
+			script: [gateOk(true), llmOk(turnResponse()), gateOk(false, "相づち")],
+		});
+		await stub.handleDiscordMessage(free());
+
+		clock.now = plus(INTERJECTION_COOLDOWN_MS - 1000);
+		const within = await stub.handleDiscordMessage(free());
+		expect(within.audit.reason).toBe("interjection_cooldown");
+		expect(fake.requests).toHaveLength(2);
+
+		clock.now = plus(INTERJECTION_COOLDOWN_MS + 1000);
+		const after = await stub.handleDiscordMessage(free());
+		expect(after.audit.reason).toBe("gate_rejected");
+		expect(fake.requests).toHaveLength(3);
+	});
+
+	it("割り込みの会話から記憶の候補が作られ、判定の失敗は黙って llm_health に数えない", async () => {
+		const { stub } = await setup("memory-and-failure", {
+			script: [
+				llmErr(externalServiceUnavailable({ service: "anthropic" })),
+				gateOk(true),
+				llmOk(
+					turnResponse({
+						memory_candidates: [
+							{
+								subject: "user",
+								predicate: "好きなジャンル",
+								object: { type: "string", value: "RPG" },
+								confidence: 0.9,
+								importance: 0.7,
+								source: "user_statement",
+							},
+						],
+					}),
+				),
+			],
+		});
+		const failed = await stub.handleDiscordMessage(free());
+		expect(failed.action).toBe("ignore");
+		expect(failed.audit).toMatchObject({
+			reason: "gate_failed",
+			degraded: false,
+			errorType: "ExternalServiceUnavailable",
+		});
+		const streak = await runInDurableObject(stub, (_o, state) =>
+			state.storage.sql.exec("SELECT * FROM llm_health").toArray(),
+		);
+		expect(streak).toEqual([]);
+
+		const joined = await stub.handleDiscordMessage(
+			free({ content: "RPG が好きなんだよね" }),
+		);
+		expect(joined.action).toBe("reply");
+		expect(joined.audit.memory?.outcomes).toHaveLength(1);
+	});
+
+	it("判定の出力が検証に失敗しても黙る", async () => {
+		const { stub } = await setup("gate-invalid", {
+			script: [llmErr(validationFailed({ issues: ["join: 型が違う"] }))],
+		});
+		const res = await stub.handleDiscordMessage(free());
+		expect(res.audit).toMatchObject({
+			reason: "gate_failed",
+			errorType: "ValidationFailed",
+		});
 	});
 });
 
