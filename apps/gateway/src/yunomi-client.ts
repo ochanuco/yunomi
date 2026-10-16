@@ -1,5 +1,6 @@
 import {
 	type DomainError,
+	type Envelope,
 	err,
 	externalServiceUnavailable,
 	ok,
@@ -9,11 +10,18 @@ import {
 	validationFailed,
 } from "@yunomi/core";
 import {
+	DISCORD_VOICE_EVENTS_PATH,
+	type DISCORD_VOICE_STATE_UPDATED,
 	type DiscordMessageCreatedEnvelope,
 	type DiscordSent,
+	type DiscordVoiceConnection,
+	type DiscordVoiceStateUpdatedPayload,
 	discordSentPathFor,
+	discordVoiceConnectionPathFor,
 	type GatewayResponse,
 	gatewayResponseSchema,
+	type VoiceResponse,
+	voiceResponseSchema,
 } from "@yunomi/protocol";
 import * as v from "valibot";
 import type { Logger } from "./logger.ts";
@@ -93,6 +101,35 @@ export class YunomiClient {
 			sent.discord_message_id,
 			"POST sent",
 			(json) => v.safeParse(v.object({ bound: v.boolean() }), json),
+		);
+	}
+
+	async sendVoiceEvent(
+		envelope: Envelope<
+			typeof DISCORD_VOICE_STATE_UPDATED,
+			DiscordVoiceStateUpdatedPayload
+		>,
+	): Promise<Result<VoiceResponse, DomainError>> {
+		return this.#withRetry(
+			`${this.#baseUrl}${DISCORD_VOICE_EVENTS_PATH}`,
+			JSON.stringify(envelope),
+			envelope.event_id,
+			"POST voice-events",
+			(json) => v.safeParse(voiceResponseSchema, json),
+		);
+	}
+
+	/** 実際に接続・切断できたあとの接続先を Worker に知らせる。channel_id が null なら未接続。 */
+	async reportVoiceConnection(
+		partnerId: string,
+		connection: DiscordVoiceConnection,
+	): Promise<Result<unknown, DomainError>> {
+		return this.#withRetry(
+			`${this.#baseUrl}${discordVoiceConnectionPathFor(partnerId)}`,
+			JSON.stringify(connection),
+			connection.guild_id,
+			"POST voice-connection",
+			(json) => v.safeParse(v.unknown(), json),
 		);
 	}
 

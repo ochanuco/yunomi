@@ -10,9 +10,12 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"@discordjs/voice": "^0.19.2",
+		"@snazzah/davey": "^0.1.12",
 		"@yunomi/core": "workspace:*",
 		"@yunomi/protocol": "workspace:*",
 		"discord.js": "^14.26.0",
+		"opusscript": "^0.0.8",
 		"tsx": "^4.21.0",
 		"valibot": "^1.5.0"
 	},

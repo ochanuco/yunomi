@@ -14,10 +14,12 @@ const message: MessageLike = {
 	mentionedUserIds: [],
 	mentionsBotRole: false,
 	replyToMessageId: null,
+	authorVoiceChannelId: null,
 	attachments: [],
 };
 
 const setup = (send: (e: unknown) => Promise<unknown>) => {
+	const voice = { apply: vi.fn(async (_d: unknown) => {}) };
 	const channel = {
 		lastMessageId: "3" as string | null | undefined,
 		send: vi.fn(async (_o: unknown) => ({ id: "500" })),
@@ -33,9 +35,10 @@ const setup = (send: (e: unknown) => Promise<unknown>) => {
 		client: client as never,
 		partnerId: "yukarin",
 		botUserId: "999",
+		voice,
 		logger,
 	});
-	return { channel, client, handle, logger };
+	return { channel, client, handle, logger, voice };
 };
 
 describe("createMessageHandler", () => {
@@ -158,5 +161,56 @@ describe("createMessageHandler", () => {
 			channel,
 		);
 		expect(client.send).not.toHaveBeenCalled();
+	});
+
+	it("ack の voice 指示を VoiceManager に渡す", async () => {
+		const voice = { join: { guild_id: "1", channel_id: "vc" } };
+		const {
+			channel,
+			handle,
+			voice: manager,
+		} = setup(async () => ok({ action: "ack", voice }));
+		await handle(message, channel);
+		expect(manager.apply).toHaveBeenCalledWith(voice);
+		expect(channel.send).not.toHaveBeenCalled();
+	});
+
+	it("reply の voice 指示も渡し、テキストの返信も送る", async () => {
+		const voice = { leave: { guild_id: "1" } };
+		const {
+			channel,
+			handle,
+			voice: manager,
+		} = setup(async () => ok({ action: "reply", content: "やあ", voice }));
+		await handle(message, channel);
+		expect(manager.apply).toHaveBeenCalledWith(voice);
+		expect(channel.send).toHaveBeenCalledTimes(1);
+	});
+
+	it("ignore では VC を操作しない", async () => {
+		const {
+			channel,
+			handle,
+			voice: manager,
+		} = setup(async () => ok({ action: "ignore" }));
+		await handle(message, channel);
+		expect(manager.apply).not.toHaveBeenCalled();
+	});
+
+	it("VC の操作が失敗しても返信は送る", async () => {
+		const {
+			channel,
+			handle,
+			voice: manager,
+		} = setup(async () =>
+			ok({
+				action: "reply",
+				content: "やあ",
+				voice: { leave: { guild_id: "1" } },
+			}),
+		);
+		manager.apply.mockRejectedValueOnce(new Error("boom"));
+		await handle(message, channel);
+		expect(channel.send).toHaveBeenCalledTimes(1);
 	});
 });
