@@ -377,6 +377,21 @@ describe("宛先のない発言への割り込み", () => {
 		);
 	});
 
+	it("bot の発言は人数に数えず、ログでは bot と示す", async () => {
+		const { stub, fake } = await setup("gate-bot", {
+			script: [gateOk(false)],
+		});
+		const notifier = { id: "b-notify", displayName: "茶畑", isBot: true };
+		const alice = { id: "u-gate-bot", displayName: "alice", isBot: false };
+		await stub.handleDiscordMessage(
+			free({ author: notifier, content: "GPU 機が復帰しました" }),
+		);
+		await stub.handleDiscordMessage(free({ author: alice }));
+		const gate = fake.requests[0]?.messages[0]?.content ?? "";
+		expect(gate).toContain("alice だけで、あなたと 2 人きり");
+		expect(gate).toContain("茶畑（bot）");
+	});
+
 	it("関係のある発言者なら、ゲートに関係の段階と数値を渡す", async () => {
 		const { stub, fake } = await setup("gate-rel", {
 			script: [llmOk(turnResponse()), gateOk(false)],

@@ -25,6 +25,7 @@ export type GateLine = {
 	minutesAgo: number;
 	/** ゆかり自身の発言。 */
 	isPartner: boolean;
+	isBot: boolean;
 };
 
 export type GateInput = {
@@ -36,7 +37,7 @@ export type GateInput = {
 	/** ゆかりがこのチャンネルで最後に話してからの分数。話していなければ null。 */
 	minutesSincePartnerSpoke: number | null;
 	message: { speaker: string; text: string };
-	/** 直近ログと新着メッセージにいる人間の作者の数（ゆかりを除く）。 */
+	/** 直近ログと新着メッセージにいる人間の作者の数（ゆかりと bot を除く）。 */
 	headcount: number;
 	/** ゆかりの今の状態。 */
 	state: Pick<PartnerState, "mood" | "energy" | "presence">;
@@ -130,7 +131,7 @@ const interestBlock = (interests: InterestLine[]): string =>
 	].join("\n");
 
 const renderLine = (l: GateLine): string =>
-	`${l.speaker}${l.isPartner ? "（あなた）" : ""}（${l.minutesAgo} 分前）: ${l.text}`;
+	`${l.speaker}${l.isPartner ? "（あなた）" : l.isBot ? "（bot）" : ""}（${l.minutesAgo} 分前）: ${l.text}`;
 
 const headcountLine = (input: GateInput): string =>
 	input.headcount === 1

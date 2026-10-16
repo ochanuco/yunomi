@@ -113,7 +113,8 @@ const judgeInterjection = async (
 		.recentMessages(msg.channelId, msg.messageId)
 		.slice(-GATE_RECENT_LIMIT);
 	const humans = new Set(
-		recent.filter((m) => !m.isPartner).map((m) => m.authorId),
+		// 通知を流す bot を人と数えると、2 人きりの場を人どうしの会話と取り違える。
+		recent.filter((m) => !m.isPartner && !m.isBot).map((m) => m.authorId),
 	);
 	humans.add(msg.author.id);
 	// 状態の seed は書き込みを伴うので、ゲートでは読むだけにして初期値で代える。
@@ -140,6 +141,7 @@ const judgeInterjection = async (
 			text: m.content,
 			minutesAgo: minutesSince(new Date(m.occurredAt)),
 			isPartner: m.isPartner,
+			isBot: m.isBot,
 		})),
 		minutesSincePartnerSpoke: last ? minutesSince(last) : null,
 		message: { speaker: msg.author.displayName, text: msg.content },
