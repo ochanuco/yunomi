@@ -9,6 +9,11 @@ export type MemoryObject = { type: MemoryObjectType; value: string };
 
 export type MemorySource = "user_statement" | "inferred";
 
+/** lasting は呼び名・好み・住んでいる所のように続く事実、episode は予定・行った所のようにその時かぎりのこと。 */
+export const memoryKinds = ["lasting", "episode"] as const;
+
+export type MemoryKind = (typeof memoryKinds)[number];
+
 export const PROMOTION_MIN_CONFIDENCE = 0.8;
 export const CANDIDATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 

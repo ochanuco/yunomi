@@ -61,8 +61,20 @@ export const baseInput = (): PromptInput => ({
 	state: { mood: 0.25, energy: 0.5 },
 	relationship: { speakerName: "alice", familiarity: 0.4, trust: 0.35 },
 	memory: [
-		{ subject: "alice", predicate: "好きな飲み物", object: "緑茶" },
-		{ subject: "alice", predicate: "職業", object: "エンジニア" },
+		{
+			subject: "alice",
+			predicate: "好きな飲み物",
+			object: "緑茶",
+			kind: "lasting",
+			observedAt: "2026-09-01T03:00:00Z",
+		},
+		{
+			subject: "alice",
+			predicate: "職業",
+			object: "エンジニア",
+			kind: "lasting",
+			observedAt: "2026-09-01T03:00:00Z",
+		},
 	],
 	interests: [
 		{ topic: "music", label: "音楽", score: 0.55, summary: "仮" },

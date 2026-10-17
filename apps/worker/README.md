@@ -123,7 +123,7 @@ LLM 障害は `degradedMode` / `systemStress` に自動で反映する（`applyL
 
 ## Memory
 
-LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。prompt には話者の現行 Fact を importance 降順・observed_at 降順で上位 12 件入れる。書き込みは次のターンが読めるよう応答前に完了させる。
+LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。候補の `kind`（`lasting` / `episode`）は Fact の `decay_policy`（`standard` / `episodic`）に写す。prompt には話者の現行 Fact のうち、`standard` を importance 降順・observed_at 降順で上位 12 件、`episodic` を observed_at 降順で上位 8 件入れる。`episodic` は聞いた日を添え、JST の暦日で 3 日以上たったものは「前に聞いた話」に回す。書き込みは次のターンが読めるよう応答前に完了させる。
 
 ## Open Loop
 

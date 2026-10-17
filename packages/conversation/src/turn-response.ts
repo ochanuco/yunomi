@@ -1,6 +1,7 @@
 import {
 	type BodyIntent,
 	type BodyState,
+	memoryKinds,
 	type PacePhrase,
 	performanceEmotions,
 } from "@yunomi/core";
@@ -64,6 +65,7 @@ export const turnResponseSchema = v.object({
 			confidence: unit,
 			importance: unit,
 			source: v.picklist(["user_statement", "inferred"]),
+			kind: v.picklist(memoryKinds),
 		}),
 	),
 	/** 相手との間で未解決の話題。なければ空配列。due_at は読み取れたときだけ ISO 8601 で、なければ null。 */

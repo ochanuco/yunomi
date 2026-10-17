@@ -2,7 +2,9 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { TurnResponse } from "@yunomi/conversation";
 import { FakeLLMProvider, HAIKU, ModelRouter } from "@yunomi/llm";
+import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
+import { createMemoryRepo, PROMPT_EPISODE_LIMIT } from "../src/memory.ts";
 import { inbound, partnerStub } from "./helpers.ts";
 
 const BOT = env.PARTNER_DISCORD_USER_ID;
@@ -16,6 +18,7 @@ const candidate = (over: Partial<Candidate> = {}): Candidate => ({
 	confidence: 0.9,
 	importance: 0.7,
 	source: "user_statement",
+	kind: "lasting",
 	...over,
 });
 
@@ -84,19 +87,20 @@ const say = (author: ReturnType<typeof newAuthor>, over = {}) =>
 	});
 
 const memoryOf = (req: { system: { text: string }[] } | undefined) =>
-	req?.system.find((b) => b.text.startsWith("## 関連する記憶"))?.text ?? "";
+	req?.system.find((b) => b.text.startsWith("## 覚えていること"))?.text ?? "";
 
 type FactRow = {
 	id: string;
 	predicate: string;
 	object_value: string;
 	observed_at: string;
+	decay_policy: string;
 };
 
 const factsOf = async (entityId: string) =>
 	(
 		await env.DB.prepare(
-			"SELECT id, predicate, object_value, observed_at FROM facts WHERE subject_entity_id = ? ORDER BY importance DESC",
+			"SELECT id, predicate, object_value, observed_at, decay_policy FROM facts WHERE subject_entity_id = ? ORDER BY importance DESC",
 		)
 			.bind(entityId)
 			.all<FactRow>()
@@ -159,6 +163,49 @@ describe("Fact memory", () => {
 		const rows = await factsOf(await entityOf(a));
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.observed_at).toBe("2026-10-12T03:00:00.000Z");
+	});
+
+	it("kind を decay_policy に写して Fact に残す", async () => {
+		const a = newAuthor();
+		const { stub } = await setup("mem-kind", [
+			[
+				candidate({ predicate: "lives-in", kind: "lasting" }),
+				candidate({
+					predicate: "plans-to-have-lunch-in",
+					object: { type: "string", value: "京都" },
+					kind: "episode",
+				}),
+			],
+		]);
+		await stub.handleDiscordMessage(say(a));
+		const rows = await factsOf(await entityOf(a));
+		expect(
+			Object.fromEntries(rows.map((r) => [r.predicate, r.decay_policy])),
+		).toEqual({
+			"lives-in": "standard",
+			"plans-to-have-lunch-in": "episodic",
+		});
+	});
+
+	it("同じ値の再申告で kind が変わっていれば decay_policy も直す", async () => {
+		const a = newAuthor();
+		const { stub, clock } = await setup("mem-refresh-kind", [
+			[candidate({ kind: "lasting" })],
+			[candidate({ kind: "episode" })],
+			[candidate({ kind: "lasting" })],
+		]);
+		const policy = async () => (await factsOf(await entityOf(a)))[0];
+		await stub.handleDiscordMessage(say(a));
+		expect((await policy())?.decay_policy).toBe("standard");
+		clock.now = new Date("2026-10-12T03:00:00Z");
+		await stub.handleDiscordMessage(say(a));
+		expect(await policy()).toMatchObject({
+			decay_policy: "episodic",
+			observed_at: "2026-10-12T03:00:00.000Z",
+		});
+		clock.now = new Date("2026-10-13T03:00:00Z");
+		await stub.handleDiscordMessage(say(a));
+		expect((await policy())?.decay_policy).toBe("standard");
 	});
 
 	it("値が違えば conflict として残し、Fact は置換しない", async () => {
@@ -254,6 +301,34 @@ describe("Fact memory", () => {
 		expect(memoryOf(fake.requests[1])).toContain("（なし）");
 	});
 
+	it("出来事は聞いた日つきで出し、日が経つと前に聞いた話に移す", async () => {
+		const a = newAuthor();
+		const { stub, fake, clock } = await setup("mem-episode", [
+			[
+				candidate({
+					predicate: "plans-to-have-lunch-in",
+					object: { type: "string", value: "京都" },
+					kind: "episode",
+				}),
+			],
+			[],
+			[],
+		]);
+		await stub.handleDiscordMessage(say(a));
+		clock.now = new Date("2026-10-12T03:00:00Z");
+		await stub.handleDiscordMessage(say(a, { content: "次" }));
+		expect(memoryOf(fake.requests[1])).toBe(
+			"## 覚えていること\n- alice plans-to-have-lunch-in 京都（10/11、昨日）",
+		);
+		clock.now = new Date("2026-10-17T03:00:00Z");
+		await stub.handleDiscordMessage(say(a, { content: "さらに次" }));
+		const block = memoryOf(fake.requests[2]);
+		expect(block).toContain("## 覚えていること\n（なし）");
+		expect(block).toContain(
+			"## 前に聞いた話\n日が経った出来事や予定。相手が触れたときに思い出す程度にし、自分からは持ち出さない。\n- alice plans-to-have-lunch-in 京都（10/11、6 日前）",
+		);
+	});
+
 	it("プロンプトには importance 順の上位 12 件だけを入れる", async () => {
 		const a = newAuthor();
 		const many = Array.from({ length: 14 }, (_, i) =>
@@ -271,5 +346,92 @@ describe("Fact memory", () => {
 		expect(block).toContain("item-13");
 		expect(block).not.toContain("item-00");
 		expect(block).not.toContain("item-01 ");
+	});
+});
+
+describe("topFacts", () => {
+	const insertFact = (
+		entityId: string,
+		predicate: string,
+		importance: number,
+		observedAt: string,
+		decayPolicy: string,
+	) =>
+		env.DB.prepare(
+			`INSERT INTO facts (id, partner_id, subject_entity_id, predicate, object_type, object_value, object_display, confidence, importance, source, observed_at, valid_from, valid_to, decay_policy, superseded_by)
+			VALUES (?, 'p-top-facts', ?, ?, 'string', ?, NULL, 0.9, ?, 'user_statement', ?, ?, NULL, ?, NULL)`,
+		)
+			.bind(
+				crypto.randomUUID(),
+				entityId,
+				predicate,
+				`v-${predicate}`,
+				importance,
+				observedAt,
+				observedAt,
+				decayPolicy,
+			)
+			.run();
+
+	it("続く事実を重要度順、出来事を新しい順に並べ、出来事は上限までにする", async () => {
+		const entityId = crypto.randomUUID();
+		await env.DB.prepare(
+			"INSERT INTO entities (id, kind, display_name, created_at) VALUES (?, 'person', 'top-facts', '2026-10-01T00:00:00Z')",
+		)
+			.bind(entityId)
+			.run();
+		await insertFact(
+			entityId,
+			"lasting-low",
+			0.3,
+			"2026-10-01T00:00:00Z",
+			"standard",
+		);
+		await insertFact(
+			entityId,
+			"lasting-high",
+			0.9,
+			"2026-10-01T00:00:00Z",
+			"standard",
+		);
+		// 未知の値は standard として扱う。
+		await insertFact(
+			entityId,
+			"lasting-other",
+			0.5,
+			"2026-10-01T00:00:00Z",
+			"legacy",
+		);
+		const episodeCount = PROMPT_EPISODE_LIMIT + 2;
+		for (let i = 0; i < episodeCount; i++) {
+			const day = String(i + 1).padStart(2, "0");
+			// 出来事は importance が高くても続く事実の後ろに並ぶ。
+			await insertFact(
+				entityId,
+				`episode-${day}`,
+				1,
+				`2026-10-${day}T00:00:00.000Z`,
+				"episodic",
+			);
+		}
+
+		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
+			"p-top-facts",
+			entityId,
+		);
+
+		expect(facts.map((f) => [f.kind, f.predicate])).toEqual([
+			["lasting", "lasting-high"],
+			["lasting", "lasting-other"],
+			["lasting", "lasting-low"],
+			...Array.from({ length: PROMPT_EPISODE_LIMIT }, (_, i) => [
+				"episode",
+				`episode-${String(episodeCount - i).padStart(2, "0")}`,
+			]),
+		]);
+		expect(facts.at(-1)).toMatchObject({
+			object: "v-episode-03",
+			observedAt: "2026-10-03T00:00:00.000Z",
+		});
 	});
 });

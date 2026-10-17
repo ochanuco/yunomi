@@ -302,6 +302,8 @@ export const runTurn = async (
 			subject: msg.author.displayName,
 			predicate: f.predicate,
 			object: f.object,
+			kind: f.kind,
+			observedAt: f.observedAt,
 		})),
 		interests: [...current.interests]
 			.sort((a, b) => b.score - a.score)
@@ -457,6 +459,7 @@ export const runTurn = async (
 					confidence: c.confidence,
 					importance: c.importance,
 					source: c.source,
+					kind: c.kind,
 				})),
 			),
 			error: null,

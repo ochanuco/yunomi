@@ -2,6 +2,7 @@ import {
 	type BodyState,
 	formatJst,
 	INTEREST_PROMPT_LIMIT,
+	type MemoryKind,
 	OPEN_LOOP_PROMPT_LIMIT,
 	OPINION_PROMPT_LIMIT,
 	type PartnerProfile,
@@ -15,6 +16,9 @@ export type MemoryFact = {
 	subject: string;
 	predicate: string;
 	object: string;
+	kind: MemoryKind;
+	/** UTC の ISO 8601。表示は JST にする。 */
+	observedAt: string;
 };
 
 export type OpenLoopLine = {
@@ -70,7 +74,7 @@ export type PromptInput = {
 	jokeStatus?: Record<string, JokeStatus>;
 	state: { mood: number; energy: number };
 	relationship: { speakerName: string; familiarity: number; trust: number };
-	/** 重要度順に並べて渡す。予算超過時は末尾から削る。 */
+	/** 続く事実、新しい出来事の順に渡す。予算超過時は末尾から削る。 */
 	memory: MemoryFact[];
 	/** 話し相手の open な Open Loop。重要度順で渡す。先頭から OPEN_LOOP_PROMPT_LIMIT 件だけ使う。 */
 	openLoops: OpenLoopLine[];
@@ -180,13 +184,50 @@ const stateBlock = (s: PromptInput["state"]): string =>
 const relationshipBlock = (r: PromptInput["relationship"]): string =>
 	`## ${r.speakerName} との関係\n- 親しさ: ${fmt(r.familiarity)}（0 〜 1）\n- 信頼: ${fmt(r.trust)}（0 〜 1）`;
 
-const memoryBlock = (facts: MemoryFact[]): string =>
-	[
-		"## 関連する記憶",
-		...(facts.length
-			? facts.map((f) => `- ${f.subject} ${f.predicate} ${f.object}`)
-			: ["（なし）"]),
+// 日数は JST の暦日の差で数える。24 時間の差だと、夜に聞いた話が翌朝になっても 0 日のままになる。
+const DAY_MS = 24 * 60 * 60 * 1000;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** この日数以上たった出来事は、自分からは持ち出さない区画に回す。 */
+const EPISODE_STALE_DAYS = 3;
+
+const RELATIVE_DAYS = ["今日", "昨日", "一昨日"] as const;
+
+const jstDay = (at: Date): number =>
+	Math.floor((at.getTime() + JST_OFFSET_MS) / DAY_MS);
+
+/** 未来の observedAt（時計のずれ）は 0 日にする。 */
+const daysSinceHeard = (f: MemoryFact, now: Date): number =>
+	Math.max(0, jstDay(now) - jstDay(new Date(f.observedAt)));
+
+const isStaleEpisode = (f: MemoryFact, now: Date): boolean =>
+	f.kind === "episode" && daysSinceHeard(f, now) >= EPISODE_STALE_DAYS;
+
+const memoryLine = (f: MemoryFact, now: Date): string => {
+	const line = `- ${f.subject} ${f.predicate} ${f.object}`;
+	if (f.kind === "lasting") return line;
+	const heard = new Date(new Date(f.observedAt).getTime() + JST_OFFSET_MS);
+	const date = `${heard.getUTCMonth() + 1}/${heard.getUTCDate()}`;
+	const days = daysSinceHeard(f, now);
+	return `${line}（${date}、${RELATIVE_DAYS[days] ?? `${days} 日前`}）`;
+};
+
+const memoryBlock = (facts: MemoryFact[], now: Date): string => {
+	const stale = facts.filter((f) => isStaleEpisode(f, now));
+	const current = facts.filter((f) => !isStaleEpisode(f, now));
+	return [
+		"## 覚えていること",
+		...(current.length ? current.map((f) => memoryLine(f, now)) : ["（なし）"]),
+		...(stale.length
+			? [
+					"",
+					"## 前に聞いた話",
+					"日が経った出来事や予定。相手が触れたときに思い出す程度にし、自分からは持ち出さない。",
+					...stale.map((f) => memoryLine(f, now)),
+				]
+			: []),
 	].join("\n");
+};
 
 const openLoopBlock = (loops: OpenLoopLine[]): string =>
 	[
@@ -228,7 +269,6 @@ const opinionBlock = (opinions: OpinionLine[]): string =>
 	].join("\n");
 
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 // 曜日は JST の日付で数える。UTC の曜日だと JST の朝 9 時前にずれる。
 const clockBlock = (now: Date): string => {
@@ -317,6 +357,7 @@ const TASK_BLOCK = [
 	"- interest_signals は、このターンで「興味」の話題への関心が目に見えて強まった（up）・薄れた（down）ときだけ入れる（最大 2 件、なければ空配列）。topic は「興味」にあるキーだけを書き、reason は短く書く。",
 	"- opinion_signals は、「意見」の話題について、相手の話に納得できる理由があり、自分の意見が強まった（strengthen）・弱まった（weaken）・考え直しはじめた（shift）ときだけ入れる（最大 1 件、なければ空配列）。topic は「意見」にあるキーだけを書く。new_stance は shift のときだけ新しい考えを短く書き、それ以外は null。同じ主張を繰り返されただけ、押しの強さだけでは入れない。",
 	"- memory_candidates には、新着メッセージの発言者が新着メッセージの中で自分について明示的に述べた事実だけを入れる。チャンネルログの発言からは入れない。推測は source を inferred にする。",
+	"- memory_candidates の kind は、呼び名・好み・住んでいる所・仕事のように続く事実なら lasting、予定・行った所・その日の出来事のようにその時かぎりのことなら episode にする。",
 	"- open_loops には、相手自身の予定・結果待ち・困りごとの続きなど、あとで聞き返したくなる未解決の話題だけを入れる（最大 2 件、なければ空配列）。雑談の相槌、一般論、すでに終わった話は入れない。「未解決の話題」にある内容は重複して入れない。",
 	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601（タイムゾーン付き）で書く。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
 	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
@@ -372,7 +413,7 @@ export class PromptBuilder {
 		const memory = [...input.memory];
 		let recent = [...input.recent];
 
-		const memTokens = () => estimateTokens(memoryBlock(memory));
+		const memTokens = () => estimateTokens(memoryBlock(memory, input.now));
 		const fixed =
 			estimateTokens(persona) +
 			estimateTokens(rules) +
@@ -414,7 +455,7 @@ export class PromptBuilder {
 				{ text: relationship, cache: false },
 				{ text: interest, cache: false },
 				{ text: opinion, cache: false },
-				{ text: memoryBlock(memory), cache: false },
+				{ text: memoryBlock(memory, input.now), cache: false },
 				{ text: openLoop, cache: false },
 				{ text: channel, cache: false },
 				{ text: body, cache: false },
