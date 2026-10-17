@@ -7,6 +7,7 @@ import {
 	openLoop,
 	opinion,
 	relationship,
+	stateHistory,
 	status,
 } from "./fixtures.ts";
 import {
@@ -18,6 +19,7 @@ import {
 	formatInterests,
 	formatOpenLoops,
 	formatOpinions,
+	formatStateHistory,
 	formatStatus,
 	jst,
 	table,
@@ -177,5 +179,45 @@ describe("formatInterests / formatOpinions", () => {
 	it("空のときは明示する", () => {
 		expect(formatInterests([])).toBe("(Interest なし)");
 		expect(formatOpinions([])).toBe("(Opinion なし)");
+	});
+});
+
+describe("formatStateHistory", () => {
+	it("要約のあとに変化を古い順で並べる", () => {
+		const out = formatStateHistory(stateHistory);
+		expect(out).toContain("0.50 → 0.60");
+		expect(out).toContain("0.30 → 0.35");
+		expect(out).toContain("範囲 0.50 〜 0.60");
+		const times = ["2026-10-05 12:00", "2026-10-06 12:00", "2026-10-07 12:00"];
+		const at = times.map((t) => out.lastIndexOf(t));
+		expect(at).toEqual([...at].sort((a, b) => a - b));
+		expect(at.every((i) => i >= 0)).toBe(true);
+		expect(out).toContain("llm_consecutive_failures");
+		expect(out).not.toContain("上限を超えた");
+	});
+
+	it("truncated なら注記する", () => {
+		expect(formatStateHistory({ ...stateHistory, truncated: true })).toContain(
+			"上限を超えた",
+		);
+	});
+
+	it("履歴が空なら変化なし", () => {
+		const out = formatStateHistory({
+			...stateHistory,
+			transitions: [],
+			relationships: [],
+		});
+		expect(out).toContain("(変化なし)");
+	});
+
+	it("state が無ければ注記する", () => {
+		const out = formatStateHistory({
+			...stateHistory,
+			state_at_start: null,
+			transitions: [],
+			relationships: [],
+		});
+		expect(out).toContain("(まだ無い)");
 	});
 });

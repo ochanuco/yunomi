@@ -25,6 +25,8 @@ import {
 	SnapshotSummarySchema,
 	type SnapshotsResponse,
 	SnapshotsResponseSchema,
+	type StateHistoryResponse,
+	StateHistoryResponseSchema,
 	type StatusResponse,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
@@ -52,6 +54,7 @@ export type AdminClient = {
 	interests(): Promise<InterestsResponse>;
 	opinions(): Promise<OpinionsResponse>;
 	kpis(q: { days: number }): Promise<KpisResponse>;
+	stateHistory(q: { days: number }): Promise<StateHistoryResponse>;
 	audit(q: {
 		limit: number;
 		cursor?: string;
@@ -141,6 +144,7 @@ export const createClient = (
 		interests: () => call("interests", InterestsResponseSchema),
 		opinions: () => call("opinions", OpinionsResponseSchema),
 		kpis: (q) => call("kpis", KpisResponseSchema, q),
+		stateHistory: (q) => call("state-history", StateHistoryResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
 		snapshots: () => call("snapshots", SnapshotsResponseSchema),
 		createSnapshot: () =>

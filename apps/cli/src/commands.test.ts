@@ -9,6 +9,7 @@ import {
 	openLoop,
 	opinion,
 	relationship,
+	stateHistory,
 	status,
 } from "./fixtures.ts";
 
@@ -48,6 +49,7 @@ const api = (url: URL) => {
 	}
 	if (path === "interests") return { items: [interest] };
 	if (path === "opinions") return { items: [opinion] };
+	if (path === "state-history") return stateHistory;
 	if (path === "kpis") return { items: [kpiDay] };
 	if (path === "memory") {
 		return url.searchParams.get("kind") === "candidates"
@@ -159,6 +161,30 @@ describe("run", () => {
 		await run(["kpi", "--json"], h.deps);
 		expect(h.urls[0]?.searchParams.get("days")).toBe("30");
 		expect(JSON.parse(h.out[0] ?? "").items[0].turns).toBe(10);
+	});
+
+	it("state-history は days を渡して要約と変化を出す", async () => {
+		const h = harness(api);
+		expect(await run(["state-history", "--days", "3"], h.deps)).toBe(0);
+		expect(h.urls[0]?.pathname).toBe(
+			"/admin/api/partners/yukarin/state-history",
+		);
+		expect(h.urls[0]?.searchParams.get("days")).toBe("3");
+		expect(h.out[0]).toContain("mood");
+		expect(h.out[0]).toContain("alice");
+	});
+
+	it("state-history --json は応答をそのまま出す", async () => {
+		const h = harness(api);
+		await run(["state-history", "--json"], h.deps);
+		expect(h.urls[0]?.searchParams.get("days")).toBe("7");
+		expect(JSON.parse(h.out[0] ?? "").transitions).toHaveLength(2);
+	});
+
+	it("state-history の応答が契約に合わなければ 1", async () => {
+		const h = harness(() => ({ since: "x" }));
+		expect(await run(["state-history"], h.deps)).toBe(1);
+		expect(h.err.join("\n")).toContain("admin-contract");
 	});
 
 	it("audit tail は古い順に出す", async () => {

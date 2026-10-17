@@ -6,8 +6,12 @@ import type {
 	KpiDay,
 	OpenLoopView,
 	OpinionView,
+	RelationshipChangeView,
 	RelationshipView,
 	SnapshotSummary,
+	StateHistoryResponse,
+	StateTransitionView,
+	StateValues,
 	StatusResponse,
 } from "@yunomi/admin-contract";
 
@@ -254,6 +258,155 @@ export const formatKpis = (items: KpiDay[]): string =>
 					`${k.usage.cache_read_tokens}/${k.usage.cache_write_tokens}`,
 				]),
 			);
+
+type Param = {
+	key: "mood" | "energy" | "system_stress";
+	label: string;
+};
+
+const PARAMS: Param[] = [
+	{ key: "mood", label: "mood" },
+	{ key: "energy", label: "energy" },
+	{ key: "system_stress", label: "system_stress" },
+];
+
+const range = (values: number[]) => {
+	const sorted = [...values].sort((a, b) => a - b);
+	return `${num(sorted[0] ?? 0)} 〜 ${num(sorted.at(-1) ?? 0)}`;
+};
+
+const stateSummary = (h: StateHistoryResponse): string[] => {
+	const first = h.transitions[0];
+	const start = h.state_at_start ?? first?.before ?? null;
+	const current = h.transitions.at(-1)?.after ?? start;
+	if (!start || !current) return ["state: (まだ無い)"];
+	const states: StateValues[] = [start, ...h.transitions.map((t) => t.after)];
+	const rows = PARAMS.map((p) => [
+		p.label,
+		num(start[p.key]),
+		"→",
+		num(current[p.key]),
+		`範囲 ${range(states.map((s) => s[p.key]))}`,
+	]);
+	rows.push([
+		"degraded",
+		String(start.degraded_mode),
+		"→",
+		String(current.degraded_mode),
+		`${h.transitions.filter((t) => t.before.degraded_mode !== t.after.degraded_mode).length} 回切り替え`,
+	]);
+	rows.push(["presence", start.presence, "→", current.presence, ""]);
+	return [table(["PARAM", "START", "", "NOW", ""], rows)];
+};
+
+const relationshipSummary = (h: StateHistoryResponse): string[] => {
+	const byEntity = new Map<string, RelationshipChangeView[]>();
+	for (const c of h.relationships) {
+		byEntity.set(c.entity_id, [...(byEntity.get(c.entity_id) ?? []), c]);
+	}
+	if (byEntity.size === 0) return [];
+	return [
+		table(
+			["RELATIONSHIP", "FAMILIARITY", "TRUST"],
+			[...byEntity.values()].map((changes) => {
+				const first = changes[0] as RelationshipChangeView;
+				const last = changes.at(-1) as RelationshipChangeView;
+				return [
+					truncate(first.display_name ?? first.entity_id, 24),
+					`${num(first.familiarity - first.familiarity_delta)} → ${num(last.familiarity)}`,
+					`${num(first.trust - first.trust_delta)} → ${num(last.trust)}`,
+				];
+			}),
+		),
+	];
+};
+
+type ChangeRow = { at: string; cells: string[] };
+
+const stateChanges = (t: StateTransitionView): ChangeRow[] => {
+	const rows: ChangeRow[] = [];
+	const add = (item: string, before: string, after: string, delta: string) =>
+		rows.push({
+			at: t.occurred_at,
+			cells: [
+				jst(t.occurred_at),
+				"state",
+				item,
+				`${before} → ${after}`,
+				delta,
+				t.reason,
+			],
+		});
+	for (const p of PARAMS) {
+		if (t.before[p.key] !== t.after[p.key]) {
+			add(
+				p.label,
+				num(t.before[p.key]),
+				num(t.after[p.key]),
+				signed(t.after[p.key] - t.before[p.key]),
+			);
+		}
+	}
+	if (t.before.degraded_mode !== t.after.degraded_mode) {
+		add(
+			"degraded",
+			String(t.before.degraded_mode),
+			String(t.after.degraded_mode),
+			"",
+		);
+	}
+	if (t.before.presence !== t.after.presence) {
+		add("presence", t.before.presence, t.after.presence, "");
+	}
+	return rows;
+};
+
+const relationshipChanges = (c: RelationshipChangeView): ChangeRow[] => {
+	const target = truncate(c.display_name ?? c.entity_id, 24);
+	const reason = truncate(`${c.reason}: ${c.summary}`, 60);
+	const rows: ChangeRow[] = [];
+	const add = (item: string, now: number, delta: number) => {
+		if (delta === 0) return;
+		rows.push({
+			at: c.occurred_at,
+			cells: [
+				jst(c.occurred_at),
+				target,
+				item,
+				`${num(now - delta)} → ${num(now)}`,
+				signed(delta),
+				reason,
+			],
+		});
+	};
+	add("familiarity", c.familiarity, c.familiarity_delta);
+	add("trust", c.trust, c.trust_delta);
+	return rows;
+};
+
+export const formatStateHistory = (h: StateHistoryResponse): string => {
+	const changes = [
+		...h.transitions.flatMap(stateChanges),
+		...h.relationships.flatMap(relationshipChanges),
+	].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+	const lines = [
+		`期間: ${jst(h.since)} JST から（遷移 ${h.transitions.length} 件、関係 ${h.relationships.length} 件）`,
+		"",
+		...stateSummary(h),
+		...relationshipSummary(h).flatMap((l) => ["", l]),
+		"",
+		changes.length === 0
+			? "(変化なし)"
+			: table(
+					["TIME (JST)", "TARGET", "ITEM", "CHANGE", "DELTA", "REASON"],
+					changes.map((r) => r.cells),
+				),
+	];
+	if (h.truncated) {
+		lines.push("", "(件数が上限を超えたため、古い側は含まれていない)");
+	}
+	return lines.join("\n");
+};
 
 const shortModel = (m: string | null) => (m ? m.replace(/^claude-/, "") : "-");
 
