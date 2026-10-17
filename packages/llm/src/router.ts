@@ -1,5 +1,5 @@
 import type { DomainError, Result } from "@yunomi/core";
-import { err, ok } from "@yunomi/core";
+import { err, externalServiceUnavailable, ok } from "@yunomi/core";
 import {
 	HAIKU,
 	type LLMProvider,
@@ -7,11 +7,15 @@ import {
 	type LLMResult,
 	type ModelId,
 	SONNET,
+	type StepRequest,
+	type StepResult,
 } from "./types.ts";
 
 export type Env = "development" | "production";
 
 export type RoutedResult<T> = LLMResult<T> & { fallbackUsed: boolean };
+
+export type RoutedStepResult<T> = StepResult<T> & { fallbackUsed: boolean };
 
 export type ModelRouterOptions = {
 	provider: LLMProvider;
@@ -35,8 +39,35 @@ export class ModelRouter {
 	async generate<T>(
 		req: Omit<LLMRequest<T>, "model"> & { model?: ModelId },
 	): Promise<Result<RoutedResult<T>, DomainError>> {
-		const primary = req.model ?? this.primary;
-		const first = await this.#provider.generate({ ...req, model: primary });
+		return this.#route(req.model, (model) =>
+			this.#provider.generate({ ...req, model }),
+		);
+	}
+
+	/**
+	 * 道具のやりとりの 1 往復。結果の `model` が実際に使われたモデルなので、
+	 * 続きの step にはそのモデルを `model` に渡す。
+	 */
+	async step<T>(
+		req: Omit<StepRequest<T>, "model"> & { model?: ModelId },
+	): Promise<Result<RoutedStepResult<T>, DomainError>> {
+		return this.#route(req.model, async (model) => {
+			if (!this.#provider.step) {
+				return err({
+					...externalServiceUnavailable({ service: "llm:step-unsupported" }),
+					retryable: false,
+				});
+			}
+			return this.#provider.step({ ...req, model });
+		});
+	}
+
+	async #route<R>(
+		requested: ModelId | undefined,
+		call: (model: ModelId) => Promise<Result<R, DomainError>>,
+	): Promise<Result<R & { fallbackUsed: boolean }, DomainError>> {
+		const primary = requested ?? this.primary;
+		const first = await call(primary);
 		if (first.ok) return ok({ ...first.value, fallbackUsed: false });
 
 		const canFallback =
@@ -45,10 +76,7 @@ export class ModelRouter {
 			first.error.retryable;
 		if (!canFallback) return err(first.error);
 
-		const second = await this.#provider.generate({
-			...req,
-			model: this.#fallback,
-		});
+		const second = await call(this.#fallback);
 		if (!second.ok) return err(second.error);
 		return ok({ ...second.value, fallbackUsed: true });
 	}
