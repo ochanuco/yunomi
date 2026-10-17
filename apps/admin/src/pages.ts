@@ -7,6 +7,7 @@ import type {
 import { type Api, ApiError } from "./api.ts";
 import { append, h } from "./dom.ts";
 import { jstTime } from "./format.ts";
+import { parseDays } from "./history.ts";
 import { mergeNewest } from "./paging.ts";
 import { buildHash, type Route } from "./route.ts";
 import {
@@ -54,16 +55,21 @@ const frame = (root: HTMLElement) => {
 	};
 };
 
-export const statePage: Page = (root, _route, api) => {
+export const statePage: Page = (root, route, api, now = () => new Date()) => {
+	// 期間は hash のクエリに持つ。切り替えは hashchange でページごと作り直すので、ポーリングでは消えない。
+	const days = parseDays(route.params.get("days"));
 	const f = frame(root);
 	return {
 		async refresh() {
 			try {
-				const [status, rels] = await Promise.all([
+				const [status, rels, history] = await Promise.all([
 					api.status(),
 					api.relationships(),
+					api.stateHistory(days),
 				]);
-				f.body.replaceChildren(renderStatus(status, rels.items));
+				f.body.replaceChildren(
+					renderStatus(status, rels.items, { days, data: history, now: now() }),
+				);
 				f.ok();
 			} catch (e) {
 				f.fail(e);

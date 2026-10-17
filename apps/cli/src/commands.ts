@@ -12,6 +12,7 @@ import {
 	formatOpenLoops,
 	formatOpinions,
 	formatSnapshots,
+	formatStateHistory,
 	formatStatus,
 } from "./format.ts";
 import { decryptSnapshot } from "./snapshot-codec.ts";
@@ -124,6 +125,13 @@ const execute = async (
 		case "kpi": {
 			const r = await client.kpis({ days: command.days });
 			deps.out(global.json ? JSON.stringify(r, null, 2) : formatKpis(r.items));
+			return;
+		}
+		case "state-history": {
+			const r = await client.stateHistory({ days: command.days });
+			deps.out(
+				global.json ? JSON.stringify(r, null, 2) : formatStateHistory(r),
+			);
 			return;
 		}
 		case "audit-tail":

@@ -1,4 +1,8 @@
 import { parseArgs } from "node:util";
+import {
+	STATE_HISTORY_DEFAULT_DAYS,
+	STATE_HISTORY_MAX_DAYS,
+} from "@yunomi/admin-contract";
 
 export type Command =
 	| { name: "help" }
@@ -13,6 +17,7 @@ export type Command =
 	| { name: "interests" }
 	| { name: "opinions" }
 	| { name: "kpi"; days: number }
+	| { name: "state-history"; days: number }
 	| { name: "audit-tail"; count: number; follow: boolean }
 	| { name: "snapshot-list" }
 	| { name: "snapshot-create" }
@@ -42,6 +47,17 @@ const toDays = (raw: string | undefined) => {
 	if (!Number.isInteger(n) || n < 1 || n > MAX_KPI_DAYS) {
 		throw new Error(
 			`--days は 1 から ${MAX_KPI_DAYS} の整数で指定する: ${raw}`,
+		);
+	}
+	return n;
+};
+
+const toHistoryDays = (raw: string | undefined) => {
+	if (raw === undefined) return STATE_HISTORY_DEFAULT_DAYS;
+	const n = Number(raw);
+	if (!Number.isInteger(n) || n < 1 || n > STATE_HISTORY_MAX_DAYS) {
+		throw new Error(
+			`--days は 1 から ${STATE_HISTORY_MAX_DAYS} の整数で指定する: ${raw}`,
 		);
 	}
 	return n;
@@ -161,6 +177,15 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (first === "state-history") {
+			only(["days"]);
+			noExtra([second, ...rest].filter((x) => x !== undefined));
+			return {
+				ok: true,
+				command: { name: "state-history", days: toHistoryDays(values.days) },
+				global,
+			};
+		}
 		if (first === "audit" && second === "tail") {
 			only(["n", "follow"]);
 			noExtra(rest);
@@ -240,6 +265,8 @@ export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う C
                                           プロファイルの初期値（source: profile）
   ykm opinions                            現在の Opinion（stance と confidence）
   ykm kpi [--days N]                      生活日ごとの KPI（既定 30 日、当日は含まない）
+  ykm state-history [--days N]            State のパラメータと関係の変化（既定 7 日、最大 90 日）。
+                                          開始→現在の要約のあとに、変化を古い順で並べる
   ykm audit tail [-n N] [-f]              直近の audit（-f で 5 秒ごとに追う）
   ykm snapshot list                       Partner Snapshot の一覧（暗号化済み）
   ykm snapshot create                     Snapshot を今すぐ作成

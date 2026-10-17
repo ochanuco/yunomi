@@ -8,6 +8,8 @@ import {
 	MemoryResponseSchema,
 	type RelationshipsResponse,
 	RelationshipsResponseSchema,
+	type StateHistoryResponse,
+	StateHistoryResponseSchema,
 	type StatusResponse,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
@@ -18,6 +20,7 @@ export class ApiError extends Error {}
 export type Api = {
 	status(): Promise<StatusResponse>;
 	relationships(): Promise<RelationshipsResponse>;
+	stateHistory(days: number): Promise<StateHistoryResponse>;
 	memory(q: {
 		kind: MemoryKind;
 		limit: number;
@@ -70,6 +73,8 @@ export const createApi = (
 	return {
 		status: () => call("status", StatusResponseSchema),
 		relationships: () => call("relationships", RelationshipsResponseSchema),
+		stateHistory: (days) =>
+			call("state-history", StateHistoryResponseSchema, { days }),
 		memory: (q) => call("memory", MemoryResponseSchema, q),
 		audit: (q) => call("audit", AuditResponseSchema, q),
 	};

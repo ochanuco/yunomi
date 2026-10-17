@@ -7,6 +7,7 @@ import {
 	candidate,
 	fact,
 	relationship,
+	stateHistory,
 	status,
 } from "./fixtures.ts";
 
@@ -15,6 +16,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 const fakeApi = (over: Partial<Api> = {}): Api => ({
 	status: async () => status,
 	relationships: async () => ({ items: [relationship] }),
+	stateHistory: async () => stateHistory,
 	memory: async ({ kind }) =>
 		kind === "facts"
 			? { kind, items: [fact], next_cursor: null }

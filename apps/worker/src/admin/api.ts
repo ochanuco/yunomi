@@ -7,6 +7,9 @@ import {
 	type OpenLoopsResponse,
 	type OpinionsResponse,
 	type RelationshipsResponse,
+	STATE_HISTORY_DEFAULT_DAYS,
+	STATE_HISTORY_MAX_DAYS,
+	type StateHistoryResponse,
 	type StatusResponse,
 } from "@yunomi/admin-contract";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
@@ -18,6 +21,7 @@ import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
 import { handleSnapshots } from "./snapshots.ts";
+import { readStateHistory } from "./state-history.ts";
 
 export const DEFAULT_PAGE_LIMIT = 50;
 export const MAX_PAGE_LIMIT = 200;
@@ -26,7 +30,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
-	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|interests|opinions|audit|kpis)$`,
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|interests|opinions|audit|kpis|state-history)$`,
 );
 
 const SNAPSHOT_ROUTE = new RegExp(
@@ -219,6 +223,40 @@ export async function handleAdminApi(
 				yukarinProfile.living_rhythm.lifestyle_day_boundary,
 			);
 			return json({ items } satisfies KpisResponse);
+		}
+		case "state-history": {
+			const rawDays = url.searchParams.get("days");
+			let days = STATE_HISTORY_DEFAULT_DAYS;
+			if (rawDays !== null) {
+				days = Number(rawDays);
+				if (
+					!Number.isInteger(days) ||
+					days < 1 ||
+					days > STATE_HISTORY_MAX_DAYS
+				) {
+					return fail(400, "invalid_days");
+				}
+			}
+			const since = new Date(Date.now() - days * 86_400_000);
+			const [state, relationships] = await Promise.all([
+				stub().adminState(),
+				stub().adminRelationships(),
+			]);
+			const views = await queries.relationshipViews(relationships);
+			const names = new Map(
+				views.flatMap((r) =>
+					r.display_name === null ? [] : [[r.entity_id, r.display_name]],
+				),
+			);
+			return json(
+				(await readStateHistory(
+					drizzle(env.DB),
+					partnerId,
+					since,
+					{ state, relationships },
+					names,
+				)) satisfies StateHistoryResponse,
+			);
 		}
 		default: {
 			const page = parsePage(url);

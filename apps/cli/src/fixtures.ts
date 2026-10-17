@@ -8,6 +8,7 @@ import type {
 	OpinionView,
 	RelationshipView,
 	Snapshot,
+	StateHistoryResponse,
 	StatusResponse,
 } from "@yunomi/admin-contract";
 
@@ -156,6 +157,74 @@ export const kpiDay: KpiDay = {
 		cache_read_tokens: 50,
 		cache_write_tokens: 10,
 	},
+};
+
+export const stateHistory: StateHistoryResponse = {
+	since: "2026-10-04T03:00:00.000Z",
+	state_at_start: {
+		mood: 0.5,
+		energy: 0.6,
+		presence: "active",
+		system_stress: 0,
+		degraded_mode: false,
+	},
+	transitions: [
+		{
+			id: "t1",
+			occurred_at: "2026-10-05T03:00:00.000Z",
+			reason: "turn_delta",
+			source_event_id: "e1",
+			before: {
+				mood: 0.5,
+				energy: 0.6,
+				presence: "active",
+				system_stress: 0,
+				degraded_mode: false,
+			},
+			after: {
+				mood: 0.6,
+				energy: 0.55,
+				presence: "active",
+				system_stress: 0,
+				degraded_mode: false,
+			},
+		},
+		{
+			id: "t2",
+			occurred_at: "2026-10-07T03:00:00.000Z",
+			reason: "llm_consecutive_failures",
+			source_event_id: "e2",
+			before: {
+				mood: 0.6,
+				energy: 0.55,
+				presence: "active",
+				system_stress: 0,
+				degraded_mode: false,
+			},
+			after: {
+				mood: 0.6,
+				energy: 0.55,
+				presence: "active",
+				system_stress: 0.4,
+				degraded_mode: true,
+			},
+		},
+	],
+	relationships: [
+		{
+			id: "r1",
+			entity_id: "e-alice",
+			display_name: "alice",
+			occurred_at: "2026-10-06T03:00:00.000Z",
+			reason: "turn",
+			summary: "よく話した",
+			familiarity_delta: 0.05,
+			trust_delta: 0,
+			familiarity: 0.35,
+			trust: 0.5,
+		},
+	],
+	truncated: false,
 };
 
 export const TEST_AGE_IDENTITY =

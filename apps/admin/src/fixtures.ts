@@ -3,6 +3,8 @@ import type {
 	CandidateView,
 	FactView,
 	RelationshipView,
+	StateHistoryResponse,
+	StateValues,
 	StatusResponse,
 } from "@yunomi/admin-contract";
 
@@ -93,3 +95,68 @@ export const auditItem = (over: Partial<AuditItem> = {}): AuditItem => ({
 	created_at: "2026-10-11T03:00:01.000Z",
 	...over,
 });
+
+const values = (over: Partial<StateValues> = {}): StateValues => ({
+	mood: 0.2,
+	energy: 0.5,
+	presence: "available",
+	system_stress: 0,
+	degraded_mode: false,
+	...over,
+});
+
+export const stateHistory: StateHistoryResponse = {
+	since: "2026-10-10T00:00:00.000Z",
+	state_at_start: values(),
+	transitions: [
+		{
+			id: "t1",
+			occurred_at: "2026-10-10T06:00:00.000Z",
+			reason: "turn_delta",
+			source_event_id: "ev1",
+			before: values(),
+			after: values({ mood: 0.4, energy: 0.45 }),
+		},
+		{
+			id: "t2",
+			occurred_at: "2026-10-10T08:00:00.000Z",
+			reason: "llm_consecutive_failures",
+			source_event_id: "ev2",
+			before: values({ mood: 0.4, energy: 0.45 }),
+			after: values({
+				mood: 0.4,
+				energy: 0.45,
+				system_stress: 0.5,
+				degraded_mode: true,
+			}),
+		},
+		{
+			id: "t3",
+			occurred_at: "2026-10-10T09:00:00.000Z",
+			reason: "llm_recovered",
+			source_event_id: "ev3",
+			before: values({
+				mood: 0.4,
+				energy: 0.45,
+				system_stress: 0.5,
+				degraded_mode: true,
+			}),
+			after: values({ mood: 0.4, energy: 0.45 }),
+		},
+	],
+	relationships: [
+		{
+			id: "r1",
+			entity_id: "e1",
+			display_name: "alice",
+			occurred_at: "2026-10-10T06:00:00.000Z",
+			reason: "turn_delta",
+			summary: "",
+			familiarity_delta: 0.02,
+			trust_delta: -0.01,
+			familiarity: 0.12,
+			trust: 0.32,
+		},
+	],
+	truncated: false,
+};

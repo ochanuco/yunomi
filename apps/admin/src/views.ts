@@ -3,10 +3,20 @@ import type {
 	CandidateView,
 	FactView,
 	RelationshipView,
+	StateHistoryResponse,
 	StatusResponse,
 } from "@yunomi/admin-contract";
+import { renderChart } from "./chart.ts";
 import { h } from "./dom.ts";
 import { jst, num, shortModel } from "./format.ts";
+import {
+	changeRows,
+	degradedSpans,
+	HISTORY_DAYS,
+	relationshipSeries,
+	stateSeries,
+} from "./history.ts";
+import { buildHash } from "./route.ts";
 
 export const renderError = (message: string): HTMLElement =>
 	h("p", { class: "error", role: "alert" }, message);
@@ -39,9 +49,128 @@ const kv = (pairs: [string, string][]): HTMLElement =>
 		...pairs.flatMap(([k, val]) => [h("dt", {}, k), h("dd", {}, val)]),
 	);
 
+export type HistoryView = {
+	days: number;
+	data: StateHistoryResponse;
+	now: Date;
+};
+
+const CHANGE_ROWS = 50;
+
+const renderHistory = ({ days, data, now }: HistoryView): HTMLElement => {
+	const until = now.getTime();
+	const from = Date.parse(data.since);
+	const base = { from, to: until };
+	const rels = relationshipSeries(data, until);
+	const rows = changeRows(data, CHANGE_ROWS);
+	const hasState = data.transitions.length > 0 || data.state_at_start !== null;
+	return h(
+		"section",
+		{ class: "history" },
+		h("h2", {}, "推移"),
+		h(
+			"nav",
+			{ class: "range" },
+			...HISTORY_DAYS.map((d) =>
+				h(
+					"a",
+					{
+						href: buildHash("state", { days: String(d) }),
+						"aria-current": d === days ? "page" : null,
+					},
+					d === 1 ? "24h" : `${d}d`,
+				),
+			),
+		),
+		data.truncated
+			? h(
+					"p",
+					{ class: "note" },
+					"件数が上限を超えたため、古い変化は省いている（新しい側だけ表示）",
+				)
+			: null,
+		hasState
+			? h(
+					"div",
+					{},
+					renderChart({
+						...base,
+						title: "mood / energy",
+						yMin: -1,
+						yMax: 1,
+						baseline: 0,
+						spans: degradedSpans(data, until),
+						series: [
+							{
+								label: "mood",
+								cls: "s-mood",
+								points: stateSeries(data, "mood", until),
+							},
+							{
+								label: "energy",
+								cls: "s-energy",
+								points: stateSeries(data, "energy", until),
+							},
+						],
+					}),
+					renderChart({
+						...base,
+						title: "system stress",
+						yMin: 0,
+						yMax: 1,
+						spans: degradedSpans(data, until),
+						series: [
+							{
+								label: "system_stress",
+								cls: "s-stress",
+								points: stateSeries(data, "system_stress", until),
+							},
+						],
+					}),
+				)
+			: empty("この期間に State の変化がない"),
+		...rels.map((r) => {
+			const all = [...r.familiarity, ...r.trust].map((p) => p.v);
+			return renderChart({
+				...base,
+				title: `${r.name}: familiarity / trust`,
+				yMin: Math.min(0, ...all),
+				yMax: Math.max(1, ...all),
+				series: [
+					{ label: "familiarity", cls: "s-familiarity", points: r.familiarity },
+					{ label: "trust", cls: "s-trust", points: r.trust },
+				],
+			});
+		}),
+		h("h3", {}, "直近の変化"),
+		rows.length === 0
+			? empty("この期間に変化がない")
+			: table(
+					["時刻 (JST)", "対象", "項目", "前 → 後", "差分", "reason"],
+					rows.map((r) =>
+						tr([
+							jst(r.at),
+							r.target,
+							r.item,
+							`${r.before} → ${r.after}`,
+							r.diff === null
+								? ""
+								: h(
+										"span",
+										{ class: r.diff > 0 ? "delta-pos" : "delta-neg" },
+										`${r.diff > 0 ? "+" : ""}${num(r.diff)}`,
+									),
+							r.reason,
+						]),
+					),
+				),
+	);
+};
+
 export const renderStatus = (
 	s: StatusResponse,
 	rels: RelationshipView[],
+	history?: HistoryView,
 ): HTMLElement =>
 	h(
 		"div",
@@ -81,6 +210,7 @@ export const renderStatus = (
 						]),
 					),
 				),
+		history ? renderHistory(history) : null,
 	);
 
 const factState = (f: FactView, now: Date) => {

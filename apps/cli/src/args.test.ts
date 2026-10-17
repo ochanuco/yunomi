@@ -67,6 +67,21 @@ describe("parseCli", () => {
 		expect(parseCli(["opinions", "extra"]).ok).toBe(false);
 	});
 
+	it("state-history の既定は 7 日、--days は 90 まで", () => {
+		expect(ok(["state-history"]).command).toEqual({
+			name: "state-history",
+			days: 7,
+		});
+		expect(ok(["state-history", "--days", "90"]).command).toEqual({
+			name: "state-history",
+			days: 90,
+		});
+		expect(parseCli(["state-history", "--days", "0"]).ok).toBe(false);
+		expect(parseCli(["state-history", "--days", "91"]).ok).toBe(false);
+		expect(parseCli(["state-history", "--limit", "5"]).ok).toBe(false);
+		expect(parseCli(["state-history", "extra"]).ok).toBe(false);
+	});
+
 	it("kpi の既定は 30 日、--days で変える", () => {
 		expect(ok(["kpi"]).command).toEqual({ name: "kpi", days: 30 });
 		expect(ok(["kpi", "--days", "7", "--json"]).command).toEqual({
