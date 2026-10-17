@@ -11,6 +11,7 @@ import {
 	gateOutput,
 	PromptBuilder,
 	selectExamples,
+	selectOpening,
 	type TurnResponse,
 	toBodyIntent,
 	toPromptMessage,
@@ -297,6 +298,7 @@ export const runTurn = async (
 			seed: msg.messageId,
 			count: EXAMPLE_COUNT,
 		}),
+		opening: selectOpening(msg.messageId),
 		bodyState,
 		state: state0,
 		relationship: {
