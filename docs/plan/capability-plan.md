@@ -25,6 +25,7 @@
 | CE3 | カレンダーの確認と登録が、Worker の中で gate と adapter を通って動く | CE1, CE2, CE4 |
 | CE4 | Google の OAuth が通り、prod で通しの確認が取れる | なし |
 | CE5 | （後続）Gmail の検索・本文の要約・下書き | CE3 |
+| CE6 | 「くずはの麦とラーメン開いてる？」と聞くと、Yukarin が Google マップの営業時間を調べて答える | CE3 |
 
 ### CE1. 道具の契約と gate
 
@@ -56,6 +57,14 @@
 - 前提: 本文の要約はオーナーの DM の中だけで行う。今の Gateway はギルドのメッセージしか中継しないため、DM の受信を先に足す。Gmail の scope は Google の分類で restricted なので、未審査で使えるかを確かめる。
 - この計画では Issue を G01 の 1 つだけ立て、カレンダーの MVP が終わってから分割する。
 
+### CE6. 場所の検索（Google Places）
+
+- 技術範囲: `packages/capabilities` に道具 `place_search`（カテゴリ `place_read`、`auto`）と Google Places API (New) の Text Search の adapter を足す。入力は自由文の検索語だけとし、地名は検索語に含めてもらう。`languageCode: "ja"`、`regionCode: "JP"`、候補は 3 件まで。返す項目は名前、住所、営業状態、営業中か（`currentOpeningHours.openNow`）、今日の営業時間。認証は API キー（`X-Goog-Api-Key`）で、Calendar の OAuth とは独立させる。`apps/worker` の組み立てを道具ごとに分け、Calendar の認証情報がなくても Places の API キーがあれば Places だけ有効にする。secret `GOOGLE_PLACES_API_KEY`、`TOOLS_BLOCK` への使い方の追記、`partners/yukarin/profile.yaml` の `capability_defaults` への `place_read: auto` の追加。
+- 非ゴール: 混雑状況（Places API に取得手段がない）、現在地や自宅を起点にした周辺検索、行きつけの店の保存、レビューと写真、地図の表示。
+- Done: `fetch` を差し替えたテストで、営業中、営業時間外、候補なし、複数候補、API のエラーが扱える。Calendar の認証情報がない組み立てでも `place_search` が登録される。prod で「くずはの麦とラーメン開いてる？」に営業時間つきで答えられる。
+
+`fieldMask` に `currentOpeningHours` を含むため、1 回の検索は Text Search の Enterprise 区分で課金される（月 1,000 回まで無料、超過分は 1,000 回あたり $35）。Google Cloud の割り当てで 1 日の上限を設け、無料枠を超えないようにする。Google の規約では `place_id` 以外の保存が制限されるため、検索結果は Audit にも会話の記録にも残さない。
+
 ## Issue 一覧
 
 番号は計画上の ID。右端の列が GitHub Issue の番号。
@@ -71,8 +80,10 @@
 | C07 | CE3 | Worker の組み立てと保存、Audit | C05, C06 | - | #138 |
 | C08 | CE4 | Google の OAuth と secret の登録、prod での通しの確認 | なし（通しの確認は C07） | C01〜C06 と並行 | #137 |
 | G01 | CE5 | Gmail を読めるようにする（後続） | C07 | - | #139 |
+| P01 | CE6 | 場所の検索の道具と Google Places の adapter、組み立ての分離 | C07 | P02 と並行 | |
+| P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | |
 
-C08 の Google Cloud と OAuth の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
+C08 と P02 の Google Cloud の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
 ## 依存グラフ
 
@@ -88,6 +99,8 @@ graph TD
   C06 --> C07
   C08 --> C07
   C07 --> G01
+  C07 --> P01
+  P02 --> P01
 ```
 
 ### クリティカルパス
@@ -114,6 +127,8 @@ C01 → C02 → C05 → C07 と、C03 → C04 → C05 → C07 の 2 本。C05 �
 - tools と `output_config.format`（json_schema）を同じリクエストで使い、道具のループのあとで TurnResponse を返せるか。Sonnet（server-side fallback の beta 付き）と Haiku の両方で確かめる（C03）。
 - Google Calendar の予定 ID をクライアント側で指定できる条件（使える文字と長さ）。メッセージ ID から作る方式が成り立つか（C06）。
 - 同意画面を本番にしたとき、未審査のまま自分のアカウントで `calendar.events` を使えるか（C08）。
+- 道具の結果（tool_result）が、ターンをまたいで会話の記録に残らないか。残るなら Places の結果は除く（P01）。
+- 「麦とラーメン くずは」で目的の店が最上位に出て、営業時間が登録されているか（P02）。
 
 ### 判断が必要な点
 
@@ -122,6 +137,8 @@ C01 → C02 → C05 → C07 と、C03 → C04 → C05 → C07 の 2 本。C05 �
 要判断: 保留の期限。この計画では 10 分とし、同じチャンネルで新しい提案が来たら古い保留は取り消す。
 
 要判断: dev での扱い。dev の Worker には Google の認証情報を置かず、カレンダーの道具は prod だけで有効にする（認証情報が揃わなければ道具を無効にする組み立てなので、dev では今までどおり道具なしで動く）。prod はオーナーのメインカレンダー（`primary`）を使う。dev での確認は fake の adapter を使ったテストで行い、通しの確認は prod で行う。
+
+要判断: Places の dev での扱い。Calendar と同じく、API キーは prod の Worker にだけ置く。dev での確認は fake の adapter を使ったテストで行う。
 
 要判断: `tool_intents` の扱い。この計画では TurnResponse から外し、Audit に実際の道具の呼び出しを残す。Admin の表示も合わせて変える。
 
