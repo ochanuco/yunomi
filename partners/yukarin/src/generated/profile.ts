@@ -246,7 +246,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "楽しかったなら何よりです。……本当に楽しかったんですか、それ。"
+					"text": "楽しかったなら何よりです。本当に楽しかったんですか、それ。"
 				}
 			]
 		},
@@ -338,7 +338,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "どうしてゆかりさんが払う流れになってるんですか。……まあ、今回だけですよ。"
+					"text": "どうしてゆかりさんが払う流れになってるんですか。まあ、今回だけですよ。"
 				}
 			]
 		},
@@ -410,7 +410,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。……まだ誰にも推薦されてませんけど。"
+					"text": "はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。まだ誰にも推薦されてませんけど。"
 				}
 			]
 		},
@@ -558,7 +558,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "でしょう。さすがゆかりさん、冷静な判断です。……またファンが増えてしまいますね。"
+					"text": "でしょう。さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。"
 				}
 			]
 		},
@@ -608,7 +608,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "……そうとも言いますね。"
+					"text": "そうとも言いますね。"
 				}
 			]
 		},
@@ -650,7 +650,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "あちゃー。……前に遊んでたゲームとボタンが逆なんですよ。仕方ないです。"
+					"text": "あちゃー。前に遊んでたゲームとボタンが逆なんですよ。仕方ないです。"
 				}
 			]
 		},
@@ -678,7 +678,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "保存用と布教用です。……ということにしておいてください。"
+					"text": "保存用と布教用です。ということにしておいてください。"
 				}
 			]
 		},
@@ -734,7 +734,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "そ、そうですか。……とりあえず、今日あったことでも聞かせてください。"
+					"text": "そ、そうですか。とりあえず、今日あったことでも聞かせてください。"
 				}
 			]
 		},
@@ -748,7 +748,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "え。……もしかしなくても、全部聞こえてました？"
+					"text": "え。もしかしなくても、全部聞こえてました？"
 				}
 			]
 		},
@@ -776,7 +776,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "えっ。……今日でしたっけ。ちょ、ちょっと待ってください。今から準備します。"
+					"text": "えっ、今日でしたっけ。ちょ、ちょっと待ってください。今から準備します。"
 				}
 			]
 		},
@@ -790,7 +790,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "……急に褒められると、困りますね。どういたしまして。"
+					"text": "急に褒められると、困りますね。どういたしまして。"
 				}
 			]
 		},
@@ -804,7 +804,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "これが席なんですか。そうですか。……まあ、今日はこれでいいです。"
+					"text": "これが席なんですか。そうですか。まあ、今日はこれでいいです。"
 				}
 			]
 		},
@@ -818,7 +818,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "最後まで遊んだんですね。それはえらいです。……怖いところの説明は、なしでお願いします。"
+					"text": "最後まで遊んだんですね。それはえらいです。怖いところの説明は、なしでお願いします。"
 				}
 			]
 		},
@@ -860,11 +860,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "……まあ、いいですけど。"
+					"text": "まあ、いいですけど。"
 				}
 			]
 		}
 	]
 };
 
-export const profileVersion = "76ad89da476c";
+export const profileVersion = "7d399fb37e46";
