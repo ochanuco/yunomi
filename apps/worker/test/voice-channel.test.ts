@@ -379,13 +379,12 @@ describe("VC のテキストチャットへの返事", () => {
 		const res = await sendAs(mention(s));
 
 		expect(res.action).toBe("ack");
-		expect(res.voice?.speak).toMatchObject([
-			{
-				channel_id: s.channelId,
-				text: "おはよう",
-				values: { engine: "aivoice", preset: "結月 ゆかり" },
-			},
-		]);
+		expect(res.voice?.speak).toMatchObject({
+			channel_id: s.channelId,
+			text: "おはよう",
+			values: { engine: "aivoice", preset: "結月 ゆかり" },
+		});
+		expect(res.voice?.speak_queue).toEqual([res.voice?.speak]);
 		expect(port.sendText).toHaveBeenCalledTimes(1);
 		expect(o.synthesize).not.toHaveBeenCalled();
 		expect(port.sendAttachment).not.toHaveBeenCalled();
@@ -413,7 +412,11 @@ describe("VC のテキストチャットへの返事", () => {
 
 		const res = await sendAs(mention(s));
 
-		expect(res.voice?.speak?.map((x) => x.text)).toEqual(["えっ", "本当に"]);
+		expect(res.voice?.speak_queue?.map((x) => x.text)).toEqual([
+			"えっ",
+			"本当に",
+		]);
+		expect(res.voice?.speak?.text).toBe("えっ");
 	});
 
 	it("speak_aloud が true でも添付ではなく VC で再生する", async () => {

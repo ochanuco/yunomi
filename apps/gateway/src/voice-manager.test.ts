@@ -262,18 +262,19 @@ describe("apply (voice directive)", () => {
 		const m = setup();
 		await m.manager.apply({
 			join: { guild_id: "1", channel_id: "vc1" },
-			speak: [{ channel_id: "vc1", text: "やあ", values }],
+			speak: { channel_id: "vc1", text: "やあ", values },
 			leave: { guild_id: "1" },
 		});
 		expect(m.lib.joinVoiceChannel).toHaveBeenCalled();
 		expect(conn(m).destroy).toHaveBeenCalled();
 	});
 
-	it("複数件の speak は順に積んで再生する", async () => {
+	it("speak_queue があれば speak は使わず、全件を順に積んで再生する", async () => {
 		const m = setup();
 		await m.manager.join("1", "vc1");
 		await m.manager.apply({
-			speak: [
+			speak: { channel_id: "vc1", text: "1", values },
+			speak_queue: [
 				{ channel_id: "vc1", text: "1", values },
 				{ channel_id: "vc1", text: "2", values },
 			],
@@ -282,6 +283,13 @@ describe("apply (voice directive)", () => {
 		expect(
 			m.ochoko.synthesizeWithRetry.mock.calls.map((c) => c[0]?.text),
 		).toEqual(["1", "2"]);
+	});
+
+	it("speak だけの古い Worker の指示も再生する", async () => {
+		const m = setup();
+		await m.manager.join("1", "vc1");
+		await m.manager.apply({ speak: { channel_id: "vc1", text: "1", values } });
+		await vi.waitFor(() => expect(m.players[0]?.play).toHaveBeenCalledTimes(1));
 	});
 
 	it("undefined は何もしない", async () => {

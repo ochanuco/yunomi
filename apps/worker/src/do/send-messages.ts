@@ -4,6 +4,8 @@ import type { CommunicationPort, DomainError } from "@yunomi/core";
 export const MESSAGE_GAP_BASE_MS = 600;
 export const MESSAGE_GAP_PER_CHAR_MS = 40;
 export const MESSAGE_GAP_MAX_MS = 2500;
+// 1 ターンが Gateway の待ち時間（60 秒）に近づかないよう、間の合計にも上限を置く。超えた分は間なしで送る。
+export const MESSAGE_GAPS_TOTAL_MAX_MS = 8000;
 
 // Discord の nonce は 25 文字まで。
 const NONCE_MAX_LENGTH = 25;
@@ -54,13 +56,22 @@ export const sendMessages = async (
 	messages: readonly OutgoingMessage[],
 ): Promise<SendMessagesResult> => {
 	const sentIds: string[] = [];
+	let gapBudget = MESSAGE_GAPS_TOTAL_MAX_MS;
 	for (const [i, m] of messages.entries()) {
 		if (i > 0) {
-			void deps.port.sendTyping({ channelId: deps.channelId }).then((r) => {
-				if (!r.ok)
-					console.warn("discord typing failed", r.error.type, r.error.message);
-			});
-			await deps.sleep(messageGapMs(m.text));
+			const gap = Math.min(messageGapMs(m.text), gapBudget);
+			if (gap > 0) {
+				gapBudget -= gap;
+				void deps.port.sendTyping({ channelId: deps.channelId }).then((r) => {
+					if (!r.ok)
+						console.warn(
+							"discord typing failed",
+							r.error.type,
+							r.error.message,
+						);
+				});
+				await deps.sleep(gap);
+			}
 			if (deps.stopBefore?.(i)) {
 				return { sentIds, end: { type: "stopped", at: i } };
 			}

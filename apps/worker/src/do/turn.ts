@@ -38,7 +38,7 @@ import {
 	resolveOpinions,
 } from "@yunomi/core";
 import { HAIKU, type ModelRouter, type RoutedResult } from "@yunomi/llm";
-import type { InboundMessage } from "@yunomi/protocol";
+import { type InboundMessage, toReplyResponse } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
 import type { InterestOpinionRepo } from "../interest-opinion.ts";
 import type { MemoryRepo } from "../memory.ts";
@@ -588,19 +588,20 @@ export const runTurn = async (
 		content,
 		occurredAt: at.toISOString(),
 	}));
+	const reply = toReplyResponse({
+		messages: partnerMessages.map((m) => ({
+			content: m.content,
+			partner_message_id: m.messageId,
+		})),
+		replyToMessageId: msg.messageId,
+	});
+	if (!reply) return ignoreOutcome(msg, "llm", common);
 	return {
 		intent: toBodyIntent(output, bodyState),
 		voiceChannel: output.voice_channel,
 		bodyState,
 		partnerMessages,
-		response: {
-			action: "reply",
-			messages: partnerMessages.map((m) => ({
-				content: m.content,
-				partner_message_id: m.messageId,
-			})),
-			reply_to_message_id: msg.messageId,
-		},
+		response: reply,
 		audit: {
 			inbound: inboundSummary(msg),
 			decision: "reply",

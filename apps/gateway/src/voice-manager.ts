@@ -15,7 +15,11 @@ import {
 	VoiceConnectionStatus,
 } from "@discordjs/voice";
 import type { SpeechRequest } from "@yunomi/core";
-import type { VoiceDirective } from "@yunomi/protocol";
+import {
+	type SpeakDirective,
+	speakQueueOf,
+	type VoiceDirective,
+} from "@yunomi/protocol";
 import type { Logger } from "./logger.ts";
 import { silentLogger } from "./logger.ts";
 import type { OchokoClient } from "./ochoko-client.ts";
@@ -103,7 +107,7 @@ export class VoiceManager {
 		if (directive.join) {
 			await this.join(directive.join.guild_id, directive.join.channel_id);
 		}
-		for (const speak of directive.speak ?? []) this.speak(speak);
+		for (const speak of speakQueueOf(directive)) this.speak(speak);
 		if (directive.leave) this.leave(directive.leave.guild_id);
 	}
 
@@ -161,7 +165,7 @@ export class VoiceManager {
 		}
 	}
 
-	speak(speak: NonNullable<VoiceDirective["speak"]>[number]): void {
+	speak(speak: SpeakDirective): void {
 		if (!this.#deps.ochoko) {
 			if (!this.#warnedNoOchoko) {
 				this.#warnedNoOchoko = true;

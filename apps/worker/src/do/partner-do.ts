@@ -19,9 +19,12 @@ import {
 	dedupeKey,
 	type GatewayResponse,
 	type InboundMessage,
+	replyMessagesOf,
+	type SpeakDirective,
 	type VoiceDirective,
 	type VoiceResponse,
 	type VoiceStateUpdate,
+	withSpeakQueue,
 } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
@@ -245,7 +248,7 @@ export class PartnerDO extends DurableObject<Env> {
 		const voice = this.#voiceDirective(
 			inbound,
 			outcome,
-			outcome.response.messages.map((m) => m.content),
+			replyMessagesOf(outcome.response).map((m) => m.content),
 		);
 		return toResult({
 			...outcome,
@@ -319,7 +322,8 @@ export class PartnerDO extends DurableObject<Env> {
 		delivered: readonly string[],
 	): VoiceDirective | undefined {
 		const connected = this.#store.getVoiceConnection()?.channelId ?? null;
-		const directive: VoiceDirective = {};
+		const directive: Omit<VoiceDirective, "speak" | "speak_queue"> = {};
+		let queue: SpeakDirective[] = [];
 		const wants = outcome.voiceChannel ?? "stay";
 		if (wants === "join") {
 			const target = inbound.authorVoiceChannelId;
@@ -341,7 +345,7 @@ export class PartnerDO extends DurableObject<Env> {
 		) {
 			const values = this.#aivoiceValues(outcome.intent);
 			if (values) {
-				directive.speak = delivered.map((text) => ({
+				queue = delivered.map((text) => ({
 					channel_id: connected,
 					text,
 					values,
@@ -349,7 +353,8 @@ export class PartnerDO extends DurableObject<Env> {
 				if (outcome.bodyState === "asleep") this.#wakeVoiceOrgan();
 			}
 		}
-		return Object.keys(directive).length > 0 ? directive : undefined;
+		const voice = withSpeakQueue(directive, queue);
+		return Object.keys(voice).length > 0 ? voice : undefined;
 	}
 
 	/** Gateway が VC に実際に接続・切断したあとの報告。VC の状態はこれで初めて確定する。 */

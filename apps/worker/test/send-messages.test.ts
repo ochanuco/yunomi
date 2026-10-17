@@ -2,6 +2,7 @@ import { ok } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import {
 	MESSAGE_GAP_MAX_MS,
+	MESSAGE_GAPS_TOTAL_MAX_MS,
 	messageGapMs,
 	messageNonce,
 	sendMessages,
@@ -60,6 +61,30 @@ describe("sendMessages", () => {
 			[0, "d-a"],
 			[1, "d-b"],
 		]);
+	});
+
+	it("間の合計が上限に達したら、残りは入力中も待ちもなしで送る", async () => {
+		const p = port();
+		const sleeps: number[] = [];
+		const long = Array.from({ length: 6 }, (_, i) => ({
+			text: "あ".repeat(100),
+			nonce: `n:${i}`,
+		}));
+		const r = await sendMessages(
+			{
+				port: p,
+				channelId: "c",
+				sleep: async (ms) => {
+					sleeps.push(ms);
+				},
+				onSent: () => {},
+			},
+			long,
+		);
+		expect(r.sentIds).toHaveLength(6);
+		expect(sleeps).toEqual([2500, 2500, 2500, 500]);
+		expect(sleeps.reduce((a, b) => a + b, 0)).toBe(MESSAGE_GAPS_TOTAL_MAX_MS);
+		expect(p.sendTyping).toHaveBeenCalledTimes(4);
 	});
 
 	it("1 件だけなら待たず、入力中も出さない", async () => {

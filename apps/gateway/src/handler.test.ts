@@ -46,7 +46,7 @@ describe("createMessageHandler", () => {
 		const { channel, handle } = setup(async () =>
 			ok({
 				action: "reply",
-				messages: [{ content: "やあ @everyone" }],
+				content: "やあ @everyone",
 				reply_to_message_id: "3",
 			}),
 		);
@@ -61,7 +61,7 @@ describe("createMessageHandler", () => {
 
 	it("直近の発言が宛先なら返信形式にせず普通に送る", async () => {
 		const { channel, handle } = setup(async () =>
-			ok({ action: "reply", messages: [{ content: "やあ" }] }),
+			ok({ action: "reply", content: "やあ" }),
 		);
 		await handle(message, channel);
 		expect(channel.send).toHaveBeenCalledWith({
@@ -72,7 +72,7 @@ describe("createMessageHandler", () => {
 
 	it("reply_to が無ければ元メッセージに返信する", async () => {
 		const { channel, handle } = setup(async () =>
-			ok({ action: "reply", messages: [{ content: "やあ" }] }),
+			ok({ action: "reply", content: "やあ" }),
 		);
 		channel.lastMessageId = "9";
 		await handle(message, channel);
@@ -85,6 +85,8 @@ describe("createMessageHandler", () => {
 		const { channel, client, handle } = setup(async () =>
 			ok({
 				action: "reply",
+				content: "えっ\n本当に",
+				partner_message_id: "partner:x:0",
 				messages: [
 					{ content: "えっ", partner_message_id: "partner:x:0" },
 					{ content: "本当に", partner_message_id: "partner:x:1" },
@@ -125,6 +127,8 @@ describe("createMessageHandler", () => {
 		const { channel, client, handle } = setup(async () =>
 			ok({
 				action: "reply",
+				content: "1\n2\n3",
+				partner_message_id: "partner:x:0",
 				messages: [
 					{ content: "1", partner_message_id: "partner:x:0" },
 					{ content: "2", partner_message_id: "partner:x:1" },
@@ -142,10 +146,7 @@ describe("createMessageHandler", () => {
 
 	it("送信後に partner 発言の Discord message id を通知する", async () => {
 		const { channel, client, handle } = setup(async () =>
-			ok({
-				action: "reply",
-				messages: [{ content: "やあ", partner_message_id: "partner:x" }],
-			}),
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
 		);
 		await handle(message, channel);
 		expect(client.notifySent).toHaveBeenCalledWith("yukarin", {
@@ -157,7 +158,7 @@ describe("createMessageHandler", () => {
 
 	it("partner_message_id が無い reply は通知しない", async () => {
 		const { channel, client, handle } = setup(async () =>
-			ok({ action: "reply", messages: [{ content: "やあ" }] }),
+			ok({ action: "reply", content: "やあ" }),
 		);
 		await handle(message, channel);
 		expect(client.notifySent).not.toHaveBeenCalled();
@@ -165,10 +166,7 @@ describe("createMessageHandler", () => {
 
 	it("通知が失敗しても handler は落ちない", async () => {
 		const { channel, client, handle } = setup(async () =>
-			ok({
-				action: "reply",
-				messages: [{ content: "やあ", partner_message_id: "partner:x" }],
-			}),
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
 		);
 		client.notifySent.mockResolvedValueOnce(
 			err({ type: "ExternalServiceUnavailable" }),
@@ -181,10 +179,7 @@ describe("createMessageHandler", () => {
 
 	it("Worker が partner 発言を結び付けられなかったら warn を残す", async () => {
 		const { channel, client, handle, logger } = setup(async () =>
-			ok({
-				action: "reply",
-				messages: [{ content: "やあ", partner_message_id: "partner:x" }],
-			}),
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
 		);
 		client.notifySent.mockResolvedValueOnce(ok({ bound: false }));
 		await handle(message, channel);
@@ -196,10 +191,7 @@ describe("createMessageHandler", () => {
 
 	it("Discord への送信が失敗したら通知しない", async () => {
 		const { channel, client, handle } = setup(async () =>
-			ok({
-				action: "reply",
-				messages: [{ content: "やあ", partner_message_id: "partner:x" }],
-			}),
+			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),
 		);
 		channel.send.mockRejectedValueOnce(new Error("missing access"));
 		await handle(message, channel);
@@ -252,9 +244,7 @@ describe("createMessageHandler", () => {
 			channel,
 			handle,
 			voice: manager,
-		} = setup(async () =>
-			ok({ action: "reply", messages: [{ content: "やあ" }], voice }),
-		);
+		} = setup(async () => ok({ action: "reply", content: "やあ", voice }));
 		await handle(message, channel);
 		expect(manager.apply).toHaveBeenCalledWith(voice);
 		expect(channel.send).toHaveBeenCalledTimes(1);
@@ -278,7 +268,7 @@ describe("createMessageHandler", () => {
 		} = setup(async () =>
 			ok({
 				action: "reply",
-				messages: [{ content: "やあ" }],
+				content: "やあ",
 				voice: { leave: { guild_id: "1" } },
 			}),
 		);

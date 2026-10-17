@@ -60,7 +60,7 @@ describe("YunomiClient.send", () => {
 			[
 				json({
 					action: "reply",
-					messages: [{ content: "やあ" }],
+					content: "やあ",
 					reply_to_message_id: "3",
 				}),
 			],
@@ -71,7 +71,7 @@ describe("YunomiClient.send", () => {
 			ok: true,
 			value: {
 				action: "reply",
-				messages: [{ content: "やあ" }],
+				content: "やあ",
 				reply_to_message_id: "3",
 			},
 		});

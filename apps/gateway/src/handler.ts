@@ -1,4 +1,4 @@
-import type { VoiceDirective } from "@yunomi/protocol";
+import { replyMessagesOf, type VoiceDirective } from "@yunomi/protocol";
 import type { Logger } from "./logger.ts";
 import { type MessageLike, toEnvelope } from "./to-envelope.ts";
 import type { VoiceManager } from "./voice-manager.ts";
@@ -103,7 +103,8 @@ export const createMessageHandler =
 		const target = response.reply_to_message_id ?? message.id;
 		// 直近の発言が宛先そのままなら普通のメッセージで送り、間に他の発言があるときだけ 1 件目を返信形式にする
 		const quiet = channel.lastMessageId === target;
-		for (const [i, m] of response.messages.entries()) {
+		const messages = replyMessagesOf(response);
+		for (const [i, m] of messages.entries()) {
 			let sent: { id: string };
 			try {
 				sent = await channel.send({
@@ -118,7 +119,7 @@ export const createMessageHandler =
 				log.error("discord send failed", {
 					message_id: message.id,
 					index: i,
-					unsent: response.messages.length - i,
+					unsent: messages.length - i,
 					error: e instanceof Error ? e.name : "unknown",
 				});
 				return;

@@ -519,6 +519,8 @@ describe("HTTP 経由", () => {
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({
 			action: "reply",
+			content: "はい",
+			partner_message_id: expect.stringMatching(/^partner:/),
 			messages: [
 				{
 					content: "はい",

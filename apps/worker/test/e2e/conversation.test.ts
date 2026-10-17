@@ -54,6 +54,8 @@ describe("reply と ignore", () => {
 
 		expect(res).toEqual({
 			action: "reply",
+			content: "おはようございます",
+			partner_message_id: expect.stringMatching(/^partner:/),
 			messages: [
 				{
 					content: "おはようございます",

@@ -308,6 +308,21 @@ describe("Worker からの送信", () => {
 			]);
 		});
 
+		it("送っている途中に Gateway が同じ発言を再送しても、二重に送らない", async () => {
+			const s = newScenario();
+			await installFakeLlm([llmOk(three())]);
+			const { port } = await recording();
+			const msg = mention(s);
+
+			const [a, b] = await Promise.all([send(msg), send(msg)]);
+
+			expect(a).toEqual({ action: "ack" });
+			expect(b).toEqual({ action: "ack" });
+			expect(port.sendText).toHaveBeenCalledTimes(3);
+			expect(await send(msg)).toEqual({ action: "ack" });
+			expect(port.sendText).toHaveBeenCalledTimes(3);
+		});
+
 		it("途中の 1 件が失敗したら残りは送らず、送れた分だけを記録する", async () => {
 			const s = newScenario();
 			await installFakeLlm([llmOk(three())]);
