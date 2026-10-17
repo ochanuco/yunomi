@@ -23,6 +23,7 @@ import {
 	applyLlmSuccess,
 	applyRelationshipDelta,
 	applyStateDelta,
+	applyTimeDecay,
 	type BodyState,
 	type DomainError,
 	externalServiceUnavailable,
@@ -261,7 +262,7 @@ export const runTurn = async (
 	}
 
 	const seededAt = deps.now();
-	const state0 = store.getState() ?? seedState(deps, seededAt);
+	const state0 = loadDecayedState(deps, msg, seededAt);
 	const rel0 =
 		store.getRelationship(partnerId, entityId) ??
 		seedRelationship(deps, entityId, seededAt);
@@ -681,6 +682,31 @@ const recordHealth = (
 			occurredAt: at,
 		}),
 	);
+};
+
+// 読みから保存まで await を挟まない（他チャンネルのターンとの競合を避ける）。seed 直後は減衰しない。
+const loadDecayedState = (
+	deps: TurnDeps,
+	msg: InboundMessage,
+	at: Date,
+): PartnerState => {
+	const stored = deps.store.getState();
+	if (!stored) return seedState(deps, at);
+	const decay = applyTimeDecay(stored, deps.profile.initial_state, at);
+	if (decay.state === stored) return stored;
+	deps.store.putState(decay.state);
+	deps.background(
+		deps.history.recordStateTransition({
+			partnerId: deps.profile.partner_id,
+			before: stored,
+			after: decay.state,
+			delta: decay.applied,
+			reason: "time_decay",
+			sourceEventId: msg.eventId,
+			occurredAt: at,
+		}),
+	);
+	return decay.state;
 };
 
 // 初回のみ。プロファイルの初期値を DO に永続化してから使う。

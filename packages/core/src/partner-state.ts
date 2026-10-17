@@ -190,6 +190,52 @@ export const applyRelationshipDelta = (
 	};
 };
 
+/** mood / energy がベースラインへ戻る指数減衰の半減期（時間）。 */
+export const STATE_DECAY_HALF_LIFE_HOURS = 12;
+/**
+ * これ未満の経過では減衰を適用しない。会話中の毎ターンに微小な減衰の遷移が
+ * 履歴へ積もるのを避け、updatedAt も動かさないので経過は次のターンへ持ち越される。
+ */
+export const DECAY_MIN_ELAPSED_MS = 30 * 60 * 1000;
+
+export type StateBaseline = { mood: number; energy: number };
+
+export type TimeDecayUpdate = {
+	state: PartnerState;
+	applied: StateDelta;
+};
+
+/** mood と energy だけをベースラインへ戻す。他のフィールドは動かさない。 */
+export const applyTimeDecay = (
+	state: PartnerState,
+	baseline: StateBaseline,
+	now: Date,
+): TimeDecayUpdate => {
+	const none = { state, applied: { mood: 0, energy: 0 } };
+	const elapsedMs = now.getTime() - new Date(state.updatedAt).getTime();
+	if (!Number.isFinite(elapsedMs) || elapsedMs < DECAY_MIN_ELAPSED_MS) {
+		return none;
+	}
+	const factor = 2 ** (-elapsedMs / 3_600_000 / STATE_DECAY_HALF_LIFE_HOURS);
+	const step = (field: "mood" | "energy", min: number, max: number) => {
+		const b = baseline[field];
+		const next = clamp(b + (state[field] - b) * factor, min, max);
+		return round(next - state[field]);
+	};
+	const applied = { mood: step("mood", -1, 1), energy: step("energy", 0, 1) };
+	if (applied.mood === 0 && applied.energy === 0) return none;
+	return {
+		state: {
+			...state,
+			mood: round(state.mood + applied.mood),
+			energy: round(state.energy + applied.energy),
+			version: state.version + 1,
+			updatedAt: now.toISOString(),
+		},
+		applied,
+	};
+};
+
 /** degradedMode に入るまでに必要な、成功を挟まない LLM 失敗の連続回数。 */
 export const DEGRADED_FAILURE_THRESHOLD = 3;
 /** degradedMode に入った瞬間の systemStress 加算。 */

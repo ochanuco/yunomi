@@ -13,7 +13,7 @@ export type StateTransitionRecord = {
 	before: PartnerState;
 	after: PartnerState;
 	delta: StateDelta;
-	reason: "turn_delta" | LlmHealthReason;
+	reason: "turn_delta" | "time_decay" | LlmHealthReason;
 	sourceEventId: string;
 	occurredAt: Date;
 };

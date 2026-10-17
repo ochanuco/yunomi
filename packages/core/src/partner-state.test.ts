@@ -5,9 +5,12 @@ import {
 	applyLlmSuccess,
 	applyRelationshipDelta,
 	applyStateDelta,
+	applyTimeDecay,
 	type DailyAccumulator,
+	DECAY_MIN_ELAPSED_MS,
 	initialPartnerState,
 	initialRelationship,
+	STATE_DECAY_HALF_LIFE_HOURS,
 } from "./partner-state.ts";
 
 const profile = {
@@ -230,5 +233,81 @@ describe("LLM の健全性による state 遷移", () => {
 		const ok = applyLlmSuccess(two.state, T);
 		const next = failN(2, ok.state, ok.failureStreak);
 		expect(next.state.degradedMode).toBe(false);
+	});
+});
+
+describe("時間減衰", () => {
+	const baseline = { mood: 0.2, energy: 0.6 };
+	const hours = (h: number) => new Date(T.getTime() + h * 3_600_000);
+	const at = (mood: number, energy: number) => ({
+		...initialPartnerState(profile, T),
+		mood,
+		energy,
+		presence: "busy" as const,
+		systemStress: 0.3,
+		degradedMode: true,
+	});
+
+	it("半減期ちょうどでベースラインとの差が半分になる", () => {
+		const r = applyTimeDecay(
+			at(1, 1),
+			baseline,
+			hours(STATE_DECAY_HALF_LIFE_HOURS),
+		);
+		expect(r.state.mood).toBeCloseTo(0.6);
+		expect(r.state.energy).toBeCloseTo(0.8);
+		expect(r.applied.mood).toBeCloseTo(-0.4);
+		expect(r.applied.energy).toBeCloseTo(-0.2);
+		expect(r.state.version).toBe(2);
+		expect(r.state.updatedAt).toBe(hours(12).toISOString());
+	});
+
+	it("ベースラインより下からも戻る", () => {
+		const r = applyTimeDecay(at(-0.6, 0.2), baseline, hours(12));
+		expect(r.state.mood).toBeCloseTo(-0.2);
+		expect(r.state.energy).toBeCloseTo(0.4);
+	});
+
+	it("30 分未満は同一オブジェクトを返す", () => {
+		const s = at(1, 1);
+		const r = applyTimeDecay(
+			s,
+			baseline,
+			new Date(T.getTime() + DECAY_MIN_ELAPSED_MS - 1),
+		);
+		expect(r.state).toBe(s);
+		expect(r.applied).toEqual({ mood: 0, energy: 0 });
+	});
+
+	it("30 分ちょうどから適用する", () => {
+		const r = applyTimeDecay(
+			at(1, 1),
+			baseline,
+			new Date(T.getTime() + DECAY_MIN_ELAPSED_MS),
+		);
+		expect(r.state.version).toBe(2);
+	});
+
+	it("すでにベースラインなら変化なしで同一オブジェクト", () => {
+		const s = at(0.2, 0.6);
+		expect(applyTimeDecay(s, baseline, hours(100)).state).toBe(s);
+	});
+
+	it("長時間でも範囲内に収まりベースラインへ収束する", () => {
+		const r = applyTimeDecay(at(1, 0), baseline, hours(1000));
+		expect(r.state.mood).toBeCloseTo(0.2);
+		expect(r.state.energy).toBeCloseTo(0.6);
+		expect(r.state.mood).toBeGreaterThanOrEqual(-1);
+		expect(r.state.mood).toBeLessThanOrEqual(1);
+	});
+
+	it("mood と energy 以外は動かさない", () => {
+		const s = at(1, 1);
+		const r = applyTimeDecay(s, baseline, hours(12));
+		expect(r.state).toMatchObject({
+			presence: "busy",
+			systemStress: 0.3,
+			degradedMode: true,
+		});
 	});
 });
