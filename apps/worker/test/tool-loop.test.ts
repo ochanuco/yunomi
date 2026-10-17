@@ -394,15 +394,13 @@ describe("登録の提案・了承・取り消し", () => {
 			status: "expired",
 			resolvedAt: clock.now.toISOString(),
 		});
-		// 状態遷移を拒否するのは、すでに expired にされているから。
 		expect(res.audit.toolCalls[0]).toMatchObject({
 			decision: "pending_confirm",
-			outcome: "error",
-			summary: "InvalidStateTransition",
+			outcome: "expired",
 		});
-		expect(lastToolResults(fake.stepRequests[3])[0]).toMatchObject({
-			isError: true,
-		});
+		const [result] = lastToolResults(fake.stepRequests[3]);
+		expect(result).toMatchObject({ isError: true });
+		expect(result?.body).toMatchObject({ status: "expired" });
 	});
 });
 

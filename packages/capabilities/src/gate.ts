@@ -302,6 +302,17 @@ export const createCapabilityGate = (deps: {
 
 		const op = await findPending(pendingId, context);
 		if (!op) return notFound("pending_confirm");
+		// ターンの頭で期限切れとして保存済みの保留にも、状態遷移のエラーではなく期限切れとして答える。
+		if (op.status === "expired") {
+			return {
+				body: { status: "expired", note: EXPIRED_NOTE },
+				isError: true,
+				decision: "pending_confirm",
+				outcome: "expired",
+				summary: `${op.tool} の保留が期限切れ`,
+				pendingId,
+			};
+		}
 
 		const verdict = confirm(op, context, now());
 		if (verdict.type === "rejected") {
