@@ -1,4 +1,9 @@
-import { PromptBuilder, turnOutput } from "@yunomi/conversation";
+import {
+	EXAMPLE_COUNT,
+	PromptBuilder,
+	selectExamples,
+	turnOutput,
+} from "@yunomi/conversation";
 import type { PartnerProfile } from "@yunomi/core";
 import { type Env, type LLMProvider, ModelRouter, SONNET } from "@yunomi/llm";
 import { buildJudgeRequest, type JudgeVerdict, judgeOutput } from "./judge.ts";
@@ -258,11 +263,19 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	for (const scenario of opts.scenarios) {
 		// judge にも同じ時刻を渡す。渡さないと、返事が触れた正しい時刻を作り話と判定する。
 		const now = opts.now?.() ?? new Date();
-		const prompt = builder.build(toPromptInput(scenario, opts.profile, now));
+		const input = toPromptInput(scenario, opts.profile, now);
 		const samples: Sample[] = [];
 		const errors: string[] = [];
 
 		for (let i = 0; i < opts.samples; i++) {
+			// サンプルごとに会話例を変え、特定の例に結果が引きずられないようにする。
+			const prompt = builder.build({
+				...input,
+				examples: selectExamples(opts.profile.examples, {
+					seed: `${scenario.id}:${i}`,
+					count: EXAMPLE_COUNT,
+				}),
+			});
 			const res = await router.generate({
 				system: prompt.system,
 				messages: prompt.messages,

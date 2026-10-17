@@ -1,4 +1,8 @@
-import { PromptBuilder } from "@yunomi/conversation";
+import {
+	EXAMPLE_COUNT,
+	PromptBuilder,
+	selectExamples,
+} from "@yunomi/conversation";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { describe, expect, it } from "vitest";
 import { loadScenarios, toPromptInput } from "../../src/scenario.ts";
@@ -18,7 +22,13 @@ const bodyless = {
 const shape = (scenarioId: string) => {
 	const s = scenarios.find((x) => x.id === scenarioId);
 	if (!s) throw new Error(scenarioId);
-	const p = builder.build(toPromptInput(s, bodyless));
+	const p = builder.build({
+		...toPromptInput(s, bodyless),
+		examples: selectExamples(yukarinProfile.examples, {
+			seed: "snapshot",
+			count: EXAMPLE_COUNT,
+		}),
+	});
 	return {
 		system: p.system.map((b) => ({ cache: b.cache, headers: headers(b.text) })),
 		userTags: (p.messages[0]?.content.match(/<\/?[a-z_]+>/g) ?? []) as string[],
@@ -29,8 +39,14 @@ describe("PromptBuilder × シナリオ", () => {
 	it.each(scenarios.map((s) => s.id))("%s でプロンプトが組み上がる", (id) => {
 		const s = scenarios.find((x) => x.id === id);
 		if (!s) throw new Error(id);
-		const p = builder.build(toPromptInput(s, yukarinProfile));
-		expect(p.system).toHaveLength(12);
+		const p = builder.build({
+			...toPromptInput(s, yukarinProfile),
+			examples: selectExamples(yukarinProfile.examples, {
+				seed: s.id,
+				count: EXAMPLE_COUNT,
+			}),
+		});
+		expect(p.system).toHaveLength(13);
 		const user = p.messages[0]?.content ?? "";
 		expect(user).toContain(`${s.message.speaker}`);
 		expect(user).toContain(s.message.text);
