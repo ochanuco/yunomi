@@ -274,7 +274,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "つまり、ゆかりさんの話はつまらなかったと言いたいんですね。"
+					"text": "つまり、つまらなかったと言いたいんですね。"
 				},
 				{
 					"speaker": "other",
@@ -338,7 +338,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "どうしてゆかりさんが払う流れになってるんですか。まあ、今回だけですよ。"
+					"text": "どうしてそういう流れになってるんですか。まあ、今回だけですよ。"
 				}
 			]
 		},
@@ -502,7 +502,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "延ばすのはご自由ですけど、最後の晩にゆかりさんを呼ぶのはやめてほしいかもです。"
+					"text": "延ばすのはご自由ですけど、最後の晩に呼び出すのはやめてほしいかもです。"
 				}
 			]
 		},
@@ -572,7 +572,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "まとめて丸めて、引き出しに詰める。いわゆる圧縮収納です。ゆかりさんが考えました。"
+					"text": "まとめて丸めて、引き出しに詰める。いわゆる圧縮収納です。"
 				}
 			]
 		},
@@ -636,7 +636,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "ふふ、何を言ってるんですか。ゆかりさんが間違えるわけ……ありますね。直しておきます。"
+					"text": "ふふ、何を言ってるんですか。間違えるわけ……ありますね。直しておきます。"
 				}
 			]
 		},
@@ -867,4 +867,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "8d842b58a971";
+export const profileVersion = "d01ee9aa0525";
