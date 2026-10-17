@@ -83,7 +83,6 @@ export const turnResponseSchema = v.object({
 	speak_aloud: v.boolean(),
 	/** VC への出入り。stay は何もしない。join は誘われて自分も入りたいときだけ、leave は頼まれたときや別れの挨拶のとき。 */
 	voice_channel: v.picklist(["join", "leave", "stay"]),
-	tool_intents: v.array(v.object({ name: v.string(), summary: v.string() })),
 	needs_review: v.boolean(),
 });
 

@@ -1,6 +1,7 @@
 export * from "./adapters/google-calendar.ts";
 export * from "./contract.ts";
 export * from "./definitions/calendar.ts";
+export * from "./gate.ts";
 export * from "./input.ts";
 export * from "./pending.ts";
 export * from "./policy.ts";

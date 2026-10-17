@@ -22,6 +22,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
+        "## 現在日時",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
         "## 現在の状態",
       ],
     },
@@ -100,6 +106,12 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
         "## 話し方",
         "## 価値観・境界",
         "## 持ちネタ",
+      ],
+    },
+    {
+      "cache": false,
+      "headers": [
+        "## 現在日時",
       ],
     },
     {

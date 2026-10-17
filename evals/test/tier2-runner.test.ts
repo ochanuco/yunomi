@@ -76,7 +76,6 @@ const turn = (
 		},
 		speak_aloud: false,
 		voice_channel: "stay",
-		tool_intents: [],
 		needs_review: false,
 	});
 

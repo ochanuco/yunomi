@@ -64,7 +64,6 @@ const turnJson = (utterance: string, policy = "reply") => ({
 	},
 	speak_aloud: false,
 	voice_channel: "stay",
-	tool_intents: [],
 	needs_review: false,
 });
 
@@ -123,7 +122,7 @@ describe("audit_events", () => {
 		});
 		expect(JSON.parse(rows[0]?.detail_json ?? "{}")).toMatchObject({
 			relationship: { applied: { familiarity: 0.01 } },
-			toolIntents: [],
+			toolCalls: [],
 		});
 	});
 
@@ -201,7 +200,7 @@ describe("保持期間", () => {
 				usage: null,
 				latencyMs: null,
 				errorType: null,
-				toolIntents: [],
+				toolCalls: [],
 				state: null,
 				relationship: null,
 				memory: null,

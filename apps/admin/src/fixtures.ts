@@ -88,7 +88,7 @@ export const auditItem = (over: Partial<AuditItem> = {}): AuditItem => ({
 	},
 	latency_ms: 812,
 	inbound_content: "ゆかりん、おはよう",
-	detail: { toolIntents: [] },
+	detail: { toolCalls: [] },
 	occurred_at: "2026-10-11T03:00:00.000Z",
 	created_at: "2026-10-11T03:00:01.000Z",
 	...over,

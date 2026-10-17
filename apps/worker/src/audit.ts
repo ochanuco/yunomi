@@ -1,3 +1,4 @@
+import type { ToolCallRecord } from "@yunomi/capabilities";
 import type {
 	RelationshipDelta,
 	RelationshipUpdateRejected,
@@ -44,8 +45,8 @@ export type TurnAuditData = {
 	usage: Usage | null;
 	latencyMs: number | null;
 	errorType: string | null;
-	/** MVP では実行せず記録だけ残す（他ユーザーからの指示注入対策）。 */
-	toolIntents: { name: string; summary: string }[];
+	/** このターンで gate を通した道具の呼び出し。道具を持たない経路では空。 */
+	toolCalls: ToolCallRecord[];
 	/** applied は clamp 後に実際に反映した変化量。rejected は異常値として棄却した提案。 */
 	state: { applied: StateDelta; rejected: RelationshipUpdateRejected[] } | null;
 	relationship: {

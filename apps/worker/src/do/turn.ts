@@ -1,4 +1,9 @@
 import {
+	expireDue,
+	type PendingOperation,
+	type ToolCallRecord,
+} from "@yunomi/capabilities";
+import {
 	buildGatePrompt,
 	GATE_RECENT_LIMIT,
 	type GateDecision,
@@ -38,6 +43,7 @@ import type { EntityResolver } from "./entities.ts";
 import type { HistoryWriter } from "./history.ts";
 import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
 import type { DoStore } from "./store.ts";
+import { runToolLoop, type TurnCapabilities } from "./tool-loop.ts";
 
 export const CONTINUATION_WINDOW_MS = 3 * 60 * 1000;
 /** 枠の外から割り込んで返事したあと、同じチャンネルで次に割り込まない間隔。 */
@@ -64,6 +70,8 @@ export type TurnDeps = {
 	background: (task: Promise<void>) => void;
 	/** 返事に進むと決まった時点（入口を通った、または割り込みで Haiku が入ると判定した直後）で一度呼ぶ。 */
 	onEngaged?: () => void;
+	/** 設定されているときだけ、ターンが LLM の tool use のループを回す。 */
+	capabilities?: TurnCapabilities;
 };
 
 const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
@@ -268,6 +276,19 @@ export const runTurn = async (
 		.bodyState()
 		.catch((): BodyState => "unavailable");
 
+	const speakerIsOwner = deps.capabilities?.isOwner(msg.author.id) ?? false;
+	const tools = deps.capabilities
+		? {
+				speakerIsOwner,
+				pending: await pendingLines(
+					deps.capabilities,
+					partnerId,
+					msg,
+					seededAt,
+				),
+			}
+		: undefined;
+
 	const prompt = new PromptBuilder().build({
 		profile,
 		bodyState,
@@ -298,6 +319,7 @@ export const runTurn = async (
 		})),
 		openLoops,
 		now: seededAt,
+		tools,
 		channel: { name: null, presence: null },
 		voice: {
 			connectedChannelId: store.getVoiceConnection()?.channelId ?? null,
@@ -312,13 +334,31 @@ export const runTurn = async (
 
 	const started = Date.now();
 	let result: Result<RoutedResult<TurnResponse>, DomainError>;
+	let toolCalls: ToolCallRecord[] = [];
 	try {
-		result = await deps.createRouter().generate({
-			system: prompt.system,
-			messages: prompt.messages,
-			output: turnOutput,
-			maxTokens: MAX_OUTPUT_TOKENS,
-		});
+		if (deps.capabilities) {
+			const looped = await runToolLoop({
+				router: deps.createRouter(),
+				capabilities: deps.capabilities,
+				now: deps.now,
+				system: prompt.system,
+				messages: prompt.messages,
+				maxTokens: MAX_OUTPUT_TOKENS,
+				partnerId,
+				speaker: { id: msg.author.id, isOwner: speakerIsOwner },
+				channelId: msg.channelId,
+				messageId: msg.messageId,
+			});
+			result = looped.result;
+			toolCalls = looped.toolCalls;
+		} else {
+			result = await deps.createRouter().generate({
+				system: prompt.system,
+				messages: prompt.messages,
+				output: turnOutput,
+				maxTokens: MAX_OUTPUT_TOKENS,
+			});
+		}
 	} catch {
 		result = {
 			ok: false,
@@ -342,6 +382,7 @@ export const runTurn = async (
 			result.error,
 			Date.now() - started,
 			health.enteredDegraded ? "entered" : null,
+			toolCalls,
 		);
 	}
 
@@ -514,7 +555,7 @@ export const runTurn = async (
 		fallbackUsed,
 		usage,
 		latencyMs,
-		toolIntents: output.tool_intents,
+		toolCalls,
 		degradedTransition: health.recovered ? ("recovered" as const) : null,
 	};
 	if (!replying) {
@@ -562,13 +603,39 @@ const degraded = (
 	error: DomainError,
 	latencyMs: number,
 	degradedTransition: TurnAuditData["degradedTransition"] = null,
+	toolCalls: ToolCallRecord[] = [],
 ): TurnOutcome =>
 	ignoreOutcome(msg, "error", {
 		degraded: true,
 		errorType: error.type,
 		latencyMs,
 		degradedTransition,
+		toolCalls,
 	});
+
+// 取得に失敗したら保留なしとして続ける。期限切れの保留は了承できないので載せない。
+const pendingLines = async (
+	capabilities: TurnCapabilities,
+	partnerId: string,
+	msg: InboundMessage,
+	now: Date,
+) => {
+	let open: readonly PendingOperation[];
+	try {
+		open = await capabilities.pending.listOpen(partnerId, msg.channelId);
+	} catch {
+		open = [];
+	}
+	const due = new Set(expireDue(open, now).map((op) => op.id));
+	return open
+		.filter((op) => !due.has(op.id))
+		.map((op) => ({
+			id: op.id,
+			tool: op.tool,
+			input: JSON.stringify(op.input),
+			expiresAt: op.expiresAt,
+		}));
+};
 
 // state の保存と D1 履歴の登録。変化がなければ何もしない。
 const recordHealth = (

@@ -110,6 +110,9 @@ importers:
       '@yunomi/admin-contract':
         specifier: workspace:*
         version: link:../../packages/admin-contract
+      '@yunomi/capabilities':
+        specifier: workspace:*
+        version: link:../../packages/capabilities
       '@yunomi/conversation':
         specifier: workspace:*
         version: link:../../packages/conversation

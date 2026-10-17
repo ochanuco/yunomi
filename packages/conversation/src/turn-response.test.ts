@@ -52,7 +52,6 @@ const valid = () => ({
 	},
 	speak_aloud: true,
 	voice_channel: "stay",
-	tool_intents: [],
 	needs_review: false,
 });
 
@@ -186,7 +185,7 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(15);
+		).toHaveLength(14);
 	});
 });
 

@@ -59,7 +59,7 @@ export const toAuditRow = (
 			memory: audit.memory,
 			openLoops: audit.openLoops,
 			interestOpinion: audit.interestOpinion,
-			toolIntents: audit.toolIntents,
+			toolCalls: audit.toolCalls,
 			degradedTransition: audit.degradedTransition,
 		}),
 		occurredAt: ctx.occurredAt.toISOString(),
