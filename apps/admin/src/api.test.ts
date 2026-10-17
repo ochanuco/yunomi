@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, createApi } from "./api.ts";
-import { status } from "./fixtures.ts";
+import { stateHistory, status } from "./fixtures.ts";
 
 describe("createApi", () => {
 	it("same-origin の /admin/api/ を叩いて契約で検証する", async () => {
@@ -23,6 +23,16 @@ describe("createApi", () => {
 		expect(calls[0]).toBe(
 			"/admin/api/partners/yukarin/memory?kind=facts&limit=50&cursor=abc",
 		);
+	});
+
+	it("state-history は days を付けて検証する", async () => {
+		const calls: string[] = [];
+		const api = createApi(async (input) => {
+			calls.push(String(input));
+			return Response.json(stateHistory);
+		});
+		expect(await api.stateHistory(30)).toEqual(stateHistory);
+		expect(calls[0]).toBe("/admin/api/partners/yukarin/state-history?days=30");
 	});
 
 	it("HTTP エラーはコード付き", async () => {

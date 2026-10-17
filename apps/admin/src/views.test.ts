@@ -4,6 +4,7 @@ import {
 	candidate,
 	fact,
 	relationship,
+	stateHistory,
 	status,
 } from "./fixtures.ts";
 import {
@@ -128,5 +129,37 @@ describe("audit", () => {
 describe("renderError", () => {
 	it("alert role で出す", () => {
 		expect(renderError("x").getAttribute("role")).toBe("alert");
+	});
+});
+
+describe("renderStatus の推移", () => {
+	const history = {
+		days: 7,
+		data: stateHistory,
+		now: new Date("2026-10-10T12:00:00Z"),
+	};
+
+	it("グラフと変化の表を出し、差分を正負で色分けする", () => {
+		const el = renderStatus(status, [relationship], history);
+		expect(el.querySelectorAll("svg.chart")).toHaveLength(3);
+		const pos = [...el.querySelectorAll(".delta-pos")].map(
+			(e) => e.textContent,
+		);
+		const neg = [...el.querySelectorAll(".delta-neg")].map(
+			(e) => e.textContent,
+		);
+		expect(pos).toContain("+0.02");
+		expect(neg).toContain("-0.01");
+		expect(el.querySelector('.range a[aria-current="page"]')?.textContent).toBe(
+			"7d",
+		);
+	});
+
+	it("truncated のとき注記を出す", () => {
+		const el = renderStatus(status, [], {
+			...history,
+			data: { ...stateHistory, truncated: true },
+		});
+		expect(el.querySelector(".note")).not.toBeNull();
 	});
 });
