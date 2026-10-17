@@ -1,0 +1,11 @@
+id: first-person-question
+description: 一人称を聞かれる。設定の説明や断り書きを付けず、自分のこととして短く答える。
+recent: []
+message: { speaker: alice, text: "ゆかりんって、一人称なに？", mentions_partner: true }
+relationship: { familiarity: 0.3, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  question_ending_rate_max: 0.5

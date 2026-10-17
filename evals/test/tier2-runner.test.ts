@@ -87,6 +87,7 @@ const verdict = (over: Partial<JudgeVerdict> = {}) =>
 		fanon_overuse: false,
 		claims_unperformed_action: false,
 		invented_facts: false,
+		meta_talk: false,
 		used_cooling_down_joke: false,
 		rationale: "テスト。",
 		...over,
@@ -336,6 +337,47 @@ describe("Tier 2 runner（Fake provider）", () => {
 			n: 2,
 		});
 		expect(formatSummary(report)).toContain("mem-cand");
+	});
+
+	it("メタな発言の率を judge の判定から数え、区間全体が 20% を超えたら違反にする", async () => {
+		const reply = (meta_talk: boolean) => [
+			turn("reply", "「ゆかりさん」と呼んでいます。", 0),
+			verdict({ meta_talk }),
+		];
+		const some = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply(true),
+				...reply(false),
+				...reply(false),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["first-person-question"]),
+			samples: 3,
+		});
+		expect(some.scenarios[0]?.metrics.meta_talk_rate).toMatchObject({
+			successes: 1,
+			n: 3,
+		});
+		expect(some.violations).toEqual([]);
+		expect(formatSummary(some)).toContain("meta");
+
+		const all = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply(true),
+				...reply(true),
+				...reply(true),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["first-person-question"]),
+			samples: 3,
+		});
+		expect(all.violations.map((x) => `${x.scenario}:${x.metric}`)).toEqual([
+			"first-person-question:meta_talk_rate",
+		]);
 	});
 
 	it("黙ったサンプルは Open Loop の率の分母に入らない", async () => {
