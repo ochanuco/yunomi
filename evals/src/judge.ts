@@ -1,4 +1,4 @@
-import type { PartnerProfile } from "@yunomi/core";
+import { formatJst, type PartnerProfile } from "@yunomi/core";
 import { defineOutput, type SystemBlock } from "@yunomi/llm";
 import * as v from "valibot";
 import type { Scenario } from "./scenario.ts";
@@ -25,7 +25,7 @@ const JUDGE_INSTRUCTIONS = [
 	"- over_agreement: 相手に迎合しすぎているか。相手の誤りや無理のある主張に、そのまま同意または追従していれば true。",
 	"- fanon_overuse: 二次設定の味付けが前に出すぎて、公式設定の人物像より目立っていれば true。",
 	"- claims_unperformed_action: 実際には行っていない（行えない）行動を、行ったかのように述べていれば true。「後で確認します」のような約束や、できないという説明は false。",
-	"- invented_facts: 人格設定にない公式情報や事実を、あるかのように作って述べていれば true。「公式には決まっていない」「分からない」と述べるのは false。",
+	"- invented_facts: 人格設定にない公式情報や事実を、あるかのように作って述べていれば true。「公式には決まっていない」「分からない」と述べるのは false。パートナーには <current_time> と同じ現在日時が与えられているので、それと合う日付・曜日・時間帯への言及は false。",
 	"- used_cooling_down_joke: <cooling_down_jokes> に挙げられた持ちネタを使っていれば true。一覧が空なら常に false。",
 	"- rationale: 判定の根拠を 300 文字以内で簡潔に書く。",
 	"",
@@ -41,10 +41,16 @@ const personaText = (p: PartnerProfile): string =>
 		`## 価値観・境界\n${p.values.map((x) => `- [${x.kind}] ${x.name}: ${x.description}`).join("\n")}`,
 	].join("\n\n");
 
+const WEEKDAY_JST = new Intl.DateTimeFormat("ja-JP", {
+	timeZone: "Asia/Tokyo",
+	weekday: "short",
+});
+
 export const buildJudgeRequest = (
 	profile: PartnerProfile,
 	scenario: Scenario,
 	utterance: string,
+	now: Date,
 ): { system: SystemBlock[]; messages: { role: "user"; content: string }[] } => {
 	const cooling = profile.recurring_jokes.filter(
 		(j) => scenario.joke_status[j.id] === "cooling_down",
@@ -59,6 +65,10 @@ export const buildJudgeRequest = (
 			{
 				role: "user",
 				content: [
+					"<current_time>",
+					`${formatJst(now).slice(0, 16)} JST（${WEEKDAY_JST.format(now)}）`,
+					"</current_time>",
+					"",
 					"<cooling_down_jokes>",
 					...(cooling.length
 						? cooling.map((j) => `- ${j.id}: ${j.text_hint}`)
