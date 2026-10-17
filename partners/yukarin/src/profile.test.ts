@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { partnerProfileSchema, toAivoiceValues } from "@yunomi/core";
+import {
+	EXAMPLE_SCENES,
+	partnerProfileSchema,
+	toAivoiceValues,
+} from "@yunomi/core";
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 import {
@@ -66,6 +70,14 @@ describe("yukarin profile", () => {
 				speech: { ...p.speech, casualization_limit: 0.9 },
 			}),
 		).not.toBe(profileVersion);
+	});
+
+	it("会話例はどの場面にも 3 件以上ある", () => {
+		for (const scene of EXAMPLE_SCENES) {
+			expect(
+				yukarinProfile.examples.filter((x) => x.scene === scene).length,
+			).toBeGreaterThanOrEqual(3);
+		}
 	});
 
 	it("範囲外の値を拒否する", () => {

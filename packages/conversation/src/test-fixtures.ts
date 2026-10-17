@@ -52,6 +52,7 @@ export const profile: PartnerProfile = {
 		fanon: "二次設定の仮本文。",
 		yunomi: "丁寧で落ち着いた人格の仮本文。",
 	},
+	examples: [],
 };
 
 export const baseInput = (): PromptInput => ({

@@ -9,6 +9,35 @@ export const capabilityModeSchema = v.picklist(["auto", "confirm", "deny"]);
 
 export type CapabilityMode = v.InferOutput<typeof capabilityModeSchema>;
 
+export const EXAMPLE_SCENES = [
+	"tsukkomi",
+	"boke_reply",
+	"bit",
+	"barb",
+	"smug",
+	"cover_up",
+	"flustered",
+	"plain",
+] as const;
+
+export const conversationExampleSchema = v.object({
+	id: v.pipe(v.string(), v.nonEmpty()),
+	scene: v.picklist(EXAMPLE_SCENES),
+	turns: v.pipe(
+		v.array(
+			v.object({
+				speaker: v.picklist(["other", "partner"]),
+				text: v.pipe(v.string(), v.nonEmpty()),
+			}),
+		),
+		v.minLength(1),
+	),
+});
+
+export type ConversationExample = v.InferOutput<
+	typeof conversationExampleSchema
+>;
+
 export const partnerProfileSchema = v.object({
 	schema_version: v.pipe(v.number(), v.integer(), v.minValue(1)),
 	partner_id: v.pipe(v.string(), v.nonEmpty()),
@@ -65,6 +94,13 @@ export const partnerProfileSchema = v.object({
 		fanon: v.string(),
 		yunomi: v.string(),
 	}),
+	examples: v.pipe(
+		v.array(conversationExampleSchema),
+		v.check(
+			(xs) => new Set(xs.map((x) => x.id)).size === xs.length,
+			"examples の id が重複している",
+		),
+	),
 });
 
 export type PartnerProfile = v.InferOutput<typeof partnerProfileSchema>;
