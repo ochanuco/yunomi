@@ -20,13 +20,16 @@ const OWNER = "u1";
 const BOT = env.PARTNER_DISCORD_USER_ID;
 const T0 = new Date("2026-10-11T03:00:00Z");
 
-const fullEnv: Required<CapabilityEnv> = {
+const fullEnv = {
 	GOOGLE_CLIENT_ID: "client-id",
 	GOOGLE_CLIENT_SECRET: "client-secret",
 	GOOGLE_REFRESH_TOKEN: "refresh-token",
 	GOOGLE_CALENDAR_ID: "owner@example.com",
 	OWNER_DISCORD_USER_ID: OWNER,
-};
+} satisfies CapabilityEnv;
+const placesEnv = {
+	GOOGLE_PLACES_API_KEY: "places-key",
+} satisfies CapabilityEnv;
 
 const inertStore: PendingStore = {
 	listOpen: async () => [],
@@ -51,7 +54,7 @@ describe("defaultCapabilities", () => {
 		]);
 	});
 
-	it.each(Object.keys(fullEnv) as (keyof CapabilityEnv)[])(
+	it.each(Object.keys(fullEnv) as (keyof typeof fullEnv)[])(
 		"%s が欠けていれば null（道具なし）",
 		(key) => {
 			const { [key]: _omitted, ...rest } = fullEnv;
@@ -59,7 +62,7 @@ describe("defaultCapabilities", () => {
 		},
 	);
 
-	it.each(Object.keys(fullEnv) as (keyof CapabilityEnv)[])(
+	it.each(Object.keys(fullEnv) as (keyof typeof fullEnv)[])(
 		"%s が空文字でも null",
 		(key) => {
 			expect(
@@ -67,6 +70,34 @@ describe("defaultCapabilities", () => {
 			).toBeNull();
 		},
 	);
+
+	it("Places の API キーだけなら、場所の検索だけを持つ（カレンダーの道具は無い）", () => {
+		const caps = defaultCapabilities(placesEnv, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"place_search",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+		expect(caps?.isOwner(OWNER)).toBe(false);
+	});
+
+	it("カレンダーの認証情報と Places の API キーが両方あれば、両方の道具を持つ", () => {
+		const caps = defaultCapabilities({ ...fullEnv, ...placesEnv }, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"calendar_list_events",
+			"calendar_create_event",
+			"place_search",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+		expect(caps?.isOwner(OWNER)).toBe(true);
+	});
+
+	it("Places の API キーが空文字なら null", () => {
+		expect(
+			defaultCapabilities({ GOOGLE_PLACES_API_KEY: "" }, baseDeps),
+		).toBeNull();
+	});
 
 	it("何も無ければ null", () => {
 		expect(defaultCapabilities({}, baseDeps)).toBeNull();
