@@ -110,7 +110,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 | `ANTHROPIC_API_KEY` | 必須。ないと応答を生成できない |
 | `DISCORD_BOT_TOKEN` | `discordSendFromWorker` が `"1"` のとき必須 |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
-| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダーと Google Places）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
 
 ```sh
 cd apps/worker

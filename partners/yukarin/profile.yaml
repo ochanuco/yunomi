@@ -131,3 +131,4 @@ capability_defaults:
   file_write: deny
   calendar_read: auto
   calendar_write: confirm
+  place_read: auto

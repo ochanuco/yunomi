@@ -1,7 +1,9 @@
 import {
+	type CapabilityAdapter,
 	type CapabilityPolicy,
 	createCapabilityGate,
 	createGoogleCalendarAdapter,
+	createGooglePlacesAdapter,
 	createToolRegistry,
 	type PendingStore,
 } from "@yunomi/capabilities";
@@ -13,6 +15,7 @@ export type CapabilityEnv = {
 	GOOGLE_CLIENT_SECRET?: string;
 	GOOGLE_REFRESH_TOKEN?: string;
 	GOOGLE_CALENDAR_ID?: string;
+	GOOGLE_PLACES_API_KEY?: string;
 	OWNER_DISCORD_USER_ID?: string;
 };
 
@@ -24,7 +27,10 @@ export type CapabilityDeps = {
 	fetch?: typeof fetch;
 };
 
-/** Google の認証情報とオーナーの Discord user id が揃っているときだけ作る。 */
+/**
+ * 道具ごとに、その認証情報が揃っているときだけ登録する。どれも登録されなければ null。
+ * カレンダーはオーナーの Discord user id も要る。
+ */
 export const defaultCapabilities = (
 	env: CapabilityEnv,
 	deps: CapabilityDeps,
@@ -34,22 +40,30 @@ export const defaultCapabilities = (
 		GOOGLE_CLIENT_SECRET: clientSecret,
 		GOOGLE_REFRESH_TOKEN: refreshToken,
 		GOOGLE_CALENDAR_ID: calendarId,
+		GOOGLE_PLACES_API_KEY: placesApiKey,
 		OWNER_DISCORD_USER_ID: ownerId,
 	} = env;
-	if (!clientId || !clientSecret || !refreshToken || !calendarId || !ownerId) {
-		return null;
-	}
 	// fetch を this なしで呼ぶと Workers では Illegal invocation になるため、包んで渡す。
 	const doFetch: typeof fetch =
 		deps.fetch ?? ((input, init) => fetch(input, init));
-	const registry = createToolRegistry([
-		createGoogleCalendarAdapter({
-			fetch: doFetch,
-			credentials: { clientId, clientSecret, refreshToken },
-			calendarId,
-			now: deps.now,
-		}),
-	]);
+	const adapters: CapabilityAdapter[] = [];
+	if (clientId && clientSecret && refreshToken && calendarId && ownerId) {
+		adapters.push(
+			createGoogleCalendarAdapter({
+				fetch: doFetch,
+				credentials: { clientId, clientSecret, refreshToken },
+				calendarId,
+				now: deps.now,
+			}),
+		);
+	}
+	if (placesApiKey) {
+		adapters.push(
+			createGooglePlacesAdapter({ fetch: doFetch, apiKey: placesApiKey }),
+		);
+	}
+	if (adapters.length === 0) return null;
+	const registry = createToolRegistry(adapters);
 	if (!registry.ok) {
 		console.error("capability registry invalid", registry.error);
 		return null;
@@ -62,6 +76,6 @@ export const defaultCapabilities = (
 			now: deps.now,
 		}),
 		pending: deps.pending,
-		isOwner: (speakerId) => speakerId === ownerId,
+		isOwner: (speakerId) => !!ownerId && speakerId === ownerId,
 	};
 };

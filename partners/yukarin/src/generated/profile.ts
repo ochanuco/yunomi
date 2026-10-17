@@ -140,7 +140,8 @@ export const yukarinProfile: PartnerProfile = {
 		"web_search": "confirm",
 		"file_write": "deny",
 		"calendar_read": "auto",
-		"calendar_write": "confirm"
+		"calendar_write": "confirm",
+		"place_read": "auto"
 	},
 	"voice": {
 		"traits": {
@@ -903,4 +904,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "e5e808b098f5";
+export const profileVersion = "fc6339036540";
