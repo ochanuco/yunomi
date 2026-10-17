@@ -8,7 +8,7 @@ import type {
 } from "@yunomi/admin-contract";
 import { renderChart } from "./chart.ts";
 import { h } from "./dom.ts";
-import { jst, num, shortModel } from "./format.ts";
+import { jst, pct, shortModel, signedPct } from "./format.ts";
 import {
 	changeRows,
 	degradedSpans,
@@ -158,7 +158,7 @@ const renderHistory = ({ days, data, now }: HistoryView): HTMLElement => {
 								: h(
 										"span",
 										{ class: r.diff > 0 ? "delta-pos" : "delta-neg" },
-										`${r.diff > 0 ? "+" : ""}${num(r.diff)}`,
+										signedPct(r.diff),
 									),
 							r.reason,
 						]),
@@ -178,10 +178,10 @@ export const renderStatus = (
 		h("h2", {}, "State"),
 		s.state
 			? kv([
-					["mood", num(s.state.mood)],
-					["energy", num(s.state.energy)],
+					["mood", pct(s.state.mood)],
+					["energy", pct(s.state.energy)],
 					["presence", s.state.presence],
-					["system stress", num(s.state.system_stress)],
+					["system stress", pct(s.state.system_stress)],
 					["degraded", s.state.degraded_mode ? "yes" : "no"],
 					["version", String(s.state.version)],
 					["更新 (JST)", jst(s.state.updated_at)],
@@ -204,8 +204,8 @@ export const renderStatus = (
 					rels.map((r) =>
 						tr([
 							r.display_name ?? r.entity_id,
-							num(r.familiarity),
-							num(r.trust),
+							pct(r.familiarity),
+							pct(r.trust),
 							jst(r.updated_at),
 						]),
 					),
@@ -230,8 +230,8 @@ export const renderFacts = (items: FactView[], now: Date): HTMLElement =>
 						factState(f, now),
 						f.predicate,
 						f.object_display ?? f.object_value,
-						num(f.confidence),
-						num(f.importance),
+						pct(f.confidence),
+						pct(f.importance),
 						f.source,
 					]),
 				),
@@ -257,7 +257,7 @@ export const renderCandidates = (items: CandidateView[]): HTMLElement =>
 						c.subject_text ?? "(話者)",
 						c.predicate,
 						c.object_value,
-						num(c.confidence),
+						pct(c.confidence),
 						c.source,
 					]),
 				),

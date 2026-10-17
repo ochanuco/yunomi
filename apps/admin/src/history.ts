@@ -4,6 +4,7 @@ import {
 	type StateHistoryResponse,
 	type StateValues,
 } from "@yunomi/admin-contract";
+import { pct } from "./format.ts";
 
 export const HISTORY_DAYS = [1, 7, 30] as const;
 export type HistoryDays = (typeof HISTORY_DAYS)[number];
@@ -144,8 +145,6 @@ export type ChangeRow = {
 const NUMERIC_KEYS: NumericKey[] = ["mood", "energy", "system_stress"];
 const OTHER_KEYS = ["presence", "degraded_mode"] as const;
 
-const show = (n: number) => n.toFixed(2);
-
 const stateRows = (h: StateHistoryResponse): ChangeRow[] =>
 	h.transitions.flatMap((x) => {
 		const base = {
@@ -158,8 +157,8 @@ const stateRows = (h: StateHistoryResponse): ChangeRow[] =>
 			(k): ChangeRow => ({
 				...base,
 				item: k,
-				before: show(x.before[k]),
-				after: show(x.after[k]),
+				before: pct(x.before[k]),
+				after: pct(x.after[k]),
 				diff: x.after[k] - x.before[k],
 			}),
 		);
@@ -192,8 +191,8 @@ const relationshipRows = (h: StateHistoryResponse): ChangeRow[] =>
 						{
 							...base,
 							item,
-							before: show(after - delta),
-							after: show(after),
+							before: pct(after - delta),
+							after: pct(after),
 							diff: delta,
 						},
 					];
