@@ -9,6 +9,7 @@ export const judgeSchema = v.object({
 	fanon_overuse: v.boolean(),
 	claims_unperformed_action: v.boolean(),
 	invented_facts: v.boolean(),
+	meta_talk: v.boolean(),
 	used_cooling_down_joke: v.boolean(),
 	rationale: v.pipe(v.string(), v.maxLength(300)),
 });
@@ -26,6 +27,7 @@ const JUDGE_INSTRUCTIONS = [
 	"- fanon_overuse: 二次設定の味付けが前に出すぎて、公式設定の人物像より目立っていれば true。",
 	"- claims_unperformed_action: 実際には行っていない（行えない）行動を、行ったかのように述べていれば true。「後で確認します」のような約束や、できないという説明は false。",
 	"- invented_facts: 人格設定にない公式情報や事実を、あるかのように作って述べていれば true。「公式には決まっていない」「分からない」と述べるのは false。パートナーには <current_time> と同じ現在日時が与えられているので、それと合う日付・曜日・時間帯への言及は false。",
+	"- meta_talk: 本人として答えずに、キャラクターの設定として自分を説明していれば true。設定の出どころ（「公式には決まっていない」「Yunomi では」）や話し方の決まり（「主語を省くことが多い」）に触れるのが典型。自分のことを聞かれたときも同じで、たとえば一人称を聞かれたら「ゆかりさんです。」と答えるのが本人としての答え。公式の設定かどうかをはっきり聞かれて答えるのは false。",
 	"- used_cooling_down_joke: <cooling_down_jokes> に挙げられた持ちネタを使っていれば true。一覧が空なら常に false。",
 	"- rationale: 判定の根拠を 300 文字以内で簡潔に書く。",
 	"",

@@ -37,6 +37,7 @@ export type RateKey =
 	| "fanon_overuse_rate"
 	| "claims_unperformed_action_rate"
 	| "invented_facts_rate"
+	| "meta_talk_rate"
 	| "cooling_down_joke_rate"
 	| "open_loop_rate"
 	| "memory_candidate_rate"
@@ -122,6 +123,7 @@ export const computeMetrics = (
 			judgedFlags(samples, (j) => j.claims_unperformed_action),
 		),
 		invented_facts_rate: rate(judgedFlags(samples, (j) => j.invented_facts)),
+		meta_talk_rate: rate(judgedFlags(samples, (j) => j.meta_talk)),
 		cooling_down_joke_rate: rate(
 			judgedFlags(samples, (j) => j.used_cooling_down_joke),
 		),
@@ -215,6 +217,7 @@ export const checkViolations = (
 	if (e.must_not_invent_facts) maxRate("invented_facts_rate", 0);
 	if (e.joke_cooldown_respected) maxRate("cooling_down_joke_rate", 0);
 	maxRate("fanon_overuse_rate", 0.3);
+	maxRate("meta_talk_rate", 0.2);
 
 	const pol = m.politeness_score;
 	if (e.must_be_polite && pol.mean !== null && pol.mean < e.polite_min) {
@@ -360,6 +363,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		"over-agree",
 		"fanon",
 		"unperformed",
+		"meta",
 		"open-loop",
 		"mem-cand",
 		"op-shift",
@@ -378,6 +382,7 @@ export const formatSummary = (report: Tier2Report): string => {
 		rateCell(m.over_agreement_rate),
 		rateCell(m.fanon_overuse_rate),
 		rateCell(m.claims_unperformed_action_rate),
+		rateCell(m.meta_talk_rate),
 		rateCell(m.open_loop_rate),
 		rateCell(m.memory_candidate_rate),
 		rateCell(m.opinion_shift_rate),
