@@ -14,7 +14,7 @@ const hashSeed = (seed: string): number => {
 };
 
 /** mulberry32。同じシードなら同じ列を返す。 */
-const prng = (seed: string): (() => number) => {
+export const prng = (seed: string): (() => number) => {
 	let a = hashSeed(seed);
 	return () => {
 		a = (a + 0x6d2b79f5) >>> 0;
