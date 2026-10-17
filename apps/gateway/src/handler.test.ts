@@ -81,6 +81,69 @@ describe("createMessageHandler", () => {
 		});
 	});
 
+	it("複数件は順に送り、返信形式は 1 件目だけ、送れたものごとに通知する", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({
+				action: "reply",
+				content: "えっ\n本当に",
+				partner_message_id: "partner:x:0",
+				messages: [
+					{ content: "えっ", partner_message_id: "partner:x:0" },
+					{ content: "本当に", partner_message_id: "partner:x:1" },
+				],
+			}),
+		);
+		channel.lastMessageId = "9";
+		channel.send
+			.mockResolvedValueOnce({ id: "501" })
+			.mockResolvedValueOnce({ id: "502" });
+		await handle(message, channel);
+		expect(channel.send.mock.calls.map((c) => c[0])).toEqual([
+			{
+				content: "えっ",
+				reply: { messageReference: "3", failIfNotExists: false },
+				allowedMentions: { repliedUser: false, parse: [] },
+			},
+			{
+				content: "本当に",
+				allowedMentions: { repliedUser: false, parse: [] },
+			},
+		]);
+		expect(client.notifySent.mock.calls.map((c) => c[1])).toEqual([
+			{
+				partner_message_id: "partner:x:0",
+				channel_id: "2",
+				discord_message_id: "501",
+			},
+			{
+				partner_message_id: "partner:x:1",
+				channel_id: "2",
+				discord_message_id: "502",
+			},
+		]);
+	});
+
+	it("途中で送れなかったら残りは送らない", async () => {
+		const { channel, client, handle } = setup(async () =>
+			ok({
+				action: "reply",
+				content: "1\n2\n3",
+				partner_message_id: "partner:x:0",
+				messages: [
+					{ content: "1", partner_message_id: "partner:x:0" },
+					{ content: "2", partner_message_id: "partner:x:1" },
+					{ content: "3", partner_message_id: "partner:x:2" },
+				],
+			}),
+		);
+		channel.send
+			.mockResolvedValueOnce({ id: "501" })
+			.mockRejectedValueOnce(new Error("missing access"));
+		await handle(message, channel);
+		expect(channel.send).toHaveBeenCalledTimes(2);
+		expect(client.notifySent).toHaveBeenCalledTimes(1);
+	});
+
 	it("送信後に partner 発言の Discord message id を通知する", async () => {
 		const { channel, client, handle } = setup(async () =>
 			ok({ action: "reply", content: "やあ", partner_message_id: "partner:x" }),

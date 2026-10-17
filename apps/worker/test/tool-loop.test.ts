@@ -139,7 +139,10 @@ describe("道具を持たないターン", () => {
 			o.createRouter = () => new ModelRouter({ provider: fake });
 		});
 		const res = await stub.handleDiscordMessage(ask("やあ"));
-		expect(res).toMatchObject({ action: "reply", content: "こんにちは" });
+		expect(res).toMatchObject({
+			action: "reply",
+			messages: [{ content: "こんにちは" }],
+		});
 		expect(res.audit.toolCalls).toEqual([]);
 		expect(fake.requests).toHaveLength(1);
 		expect(fake.stepRequests).toHaveLength(0);
@@ -161,7 +164,7 @@ describe("予定の確認", () => {
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "明日は 19 時から歯医者の予定がありますよ",
+			messages: [{ content: "明日は 19 時から歯医者の予定がありますよ" }],
 			reply_to_message_id: msg.messageId,
 		});
 		expect(fake.requests).toHaveLength(0);
@@ -289,7 +292,7 @@ describe("登録の提案・了承・取り消し", () => {
 		const { fake, calls, ops, res } = await propose("propose");
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "18日 19:00 から歯医者、で入れていい？",
+			messages: [{ content: "18日 19:00 から歯医者、で入れていい？" }],
 		});
 		expect(calls).toHaveLength(0);
 		expect(ops.size).toBe(1);
@@ -332,7 +335,10 @@ describe("登録の提案・了承・取り消し", () => {
 		expect(pendingBlock).toContain(
 			`- [${op.id}] calendar_create_event ${JSON.stringify(createInput)}（期限 12:10 JST）`,
 		);
-		expect(res).toMatchObject({ action: "reply", content: "入れました" });
+		expect(res).toMatchObject({
+			action: "reply",
+			messages: [{ content: "入れました" }],
+		});
 		expect(calls).toHaveLength(1);
 		expect(calls[0]).toMatchObject({
 			tool: "calendar_create_event",
@@ -363,7 +369,10 @@ describe("登録の提案・了承・取り消し", () => {
 		const res = await stub.handleDiscordMessage(
 			inbound({ content: "やっぱりやめて", mentionedUserIds: [BOT] }),
 		);
-		expect(res).toMatchObject({ action: "reply", content: "やめておきますね" });
+		expect(res).toMatchObject({
+			action: "reply",
+			messages: [{ content: "やめておきますね" }],
+		});
 		expect(ops.get(op.id)?.status).toBe("cancelled");
 		expect(calls).toHaveLength(0);
 		expect(res.audit.toolCalls[0]).toMatchObject({
@@ -419,7 +428,7 @@ describe("オーナー以外", () => {
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "それは私にはできません",
+			messages: [{ content: "それは私にはできません" }],
 		});
 		expect(systemText(fake.stepRequests[0])).toContain(
 			"- 新着メッセージの発言者: オーナーではない",
@@ -454,7 +463,7 @@ describe("ループの上限", () => {
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "ここまでの結果で答えます",
+			messages: [{ content: "ここまでの結果で答えます" }],
 		});
 		expect(calls).toHaveLength(MAX_TOOL_ROUNDS);
 		expect(res.audit.toolCalls).toHaveLength(MAX_TOOL_ROUNDS);
@@ -490,7 +499,7 @@ describe("ループの上限", () => {
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "時間切れなのでここまで",
+			messages: [{ content: "時間切れなのでここまで" }],
 		});
 		expect(calls).toHaveLength(1);
 		expect(fake.stepRequests[0]?.timeoutMs).toBe(TOOL_LOOP_TIMEOUT_MS);

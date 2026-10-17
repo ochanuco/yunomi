@@ -45,7 +45,7 @@ const auditRows = (partnerId: string) =>
 		.then((r) => r.results);
 
 const turnJson = (utterance: string, policy = "reply") => ({
-	utterance,
+	messages: utterance === "" ? [] : [utterance],
 	reply_policy: policy,
 	decision_summary: "テスト",
 	emotion_delta: { mood: 0, energy: 0 },

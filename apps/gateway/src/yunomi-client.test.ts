@@ -57,13 +57,23 @@ const setup = (
 describe("YunomiClient.send", () => {
 	it("reply を返し、URL・body・Access ヘッダを正しく送る", async () => {
 		const { client, fetchMock } = setup(
-			[json({ action: "reply", content: "やあ", reply_to_message_id: "3" })],
+			[
+				json({
+					action: "reply",
+					content: "やあ",
+					reply_to_message_id: "3",
+				}),
+			],
 			{ access: { clientId: "id", clientSecret: "secret" } },
 		);
 		const r = await client.send(envelope);
 		expect(r).toEqual({
 			ok: true,
-			value: { action: "reply", content: "やあ", reply_to_message_id: "3" },
+			value: {
+				action: "reply",
+				content: "やあ",
+				reply_to_message_id: "3",
+			},
 		});
 		const [url, init] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe(`https://yunomi.example${EVENTS_PATH}`);

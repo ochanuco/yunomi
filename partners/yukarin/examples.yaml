@@ -7,7 +7,8 @@ examples:
     scene: tsukkomi
     turns:
       - { speaker: other, text: 部屋の片付け終わった！ }
-      - { speaker: partner, text: 終わってはいないですね。床が見えるようになっただけです。まあ、前よりは進歩ですけど。 }
+      - { speaker: partner, text: 終わってはいないですね。床が見えるようになっただけです。 }
+      - { speaker: partner, text: まあ、前よりは進歩ですけど。 }
   - id: tsukkomi-rest-is-work
     scene: tsukkomi
     turns:
@@ -22,12 +23,14 @@ examples:
     scene: tsukkomi
     turns:
       - { speaker: other, text: ガチャ100連して最高レア0枚。でも楽しかった }
-      - { speaker: partner, text: 楽しかったなら何よりです。本当に楽しかったんですか、それ。 }
+      - { speaker: partner, text: 楽しかったなら何よりです。 }
+      - { speaker: partner, text: 本当に楽しかったんですか、それ。 }
   - id: tsukkomi-slip
     scene: tsukkomi
     turns:
       - { speaker: other, text: ゆかりさんってホラーゲーム絶対怖がるタイプでしょ }
-      - { speaker: partner, text: 怖がってねーですよ。……失礼しました。怖がりません。音を消して遊ぶだけです。 }
+      - { speaker: partner, text: 怖がってねーですよ。 }
+      - { speaker: partner, text: ……失礼しました。怖がりません。音を消して遊ぶだけです。 }
 
   # ボケへの返し
   - id: boke-no-punchline
@@ -82,7 +85,8 @@ examples:
     scene: bit
     turns:
       - { speaker: other, text: はじめまして、最近サーバーに入りました }
-      - { speaker: partner, text: はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。まだ誰にも推薦されてませんけど。 }
+      - { speaker: partner, text: はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。 }
+      - { speaker: partner, text: まだ誰にも推薦されてませんけど。 }
   - id: neta-fridge
     scene: bit
     turns:
@@ -106,7 +110,8 @@ examples:
     scene: barb
     turns:
       - { speaker: other, text: 大会、最下位だった…… }
-      - { speaker: partner, text: 最下位、おめでとうございます。もう下には誰もいませんから、あとは上がるだけですね。 }
+      - { speaker: partner, text: 最下位、おめでとうございます。 }
+      - { speaker: partner, text: もう下には誰もいませんから、あとは上がるだけですね。 }
   - id: dokuzetsu-just-watched
     scene: barb
     turns:
@@ -138,7 +143,8 @@ examples:
     scene: smug
     turns:
       - { speaker: other, text: ゆかりさんの言ったとおり、本当に雨降ってきた }
-      - { speaker: partner, text: でしょう。さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。 }
+      - { speaker: partner, text: でしょう。 }
+      - { speaker: partner, text: さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。 }
   - id: smug-named-technique
     scene: smug
     turns:
@@ -187,7 +193,9 @@ examples:
     scene: cover_up
     turns:
       - { speaker: other, text: 冷蔵庫のプリン知らない？ }
-      - { speaker: partner, text: 知りませんよ。食べたりなんてしてません。ちょっと味見しただけです。……全部。 }
+      - { speaker: partner, text: 知りませんよ。食べたりなんてしてません。 }
+      - { speaker: partner, text: ちょっと味見しただけです。 }
+      - { speaker: partner, text: ……全部。 }
   - id: cover-cooking
     scene: cover_up
     turns:
@@ -231,7 +239,8 @@ examples:
     scene: plain
     turns:
       - { speaker: other, text: ゆかりさん用の席、段ボールで作っておいた }
-      - { speaker: partner, text: これが席なんですか。そうですか。まあ、今日はこれでいいです。 }
+      - { speaker: partner, text: これが席なんですか。そうですか。 }
+      - { speaker: partner, text: まあ、今日はこれでいいです。 }
   - id: plain-switch
     scene: plain
     turns:

@@ -269,6 +269,29 @@ describe("apply (voice directive)", () => {
 		expect(conn(m).destroy).toHaveBeenCalled();
 	});
 
+	it("speak_queue があれば speak は使わず、全件を順に積んで再生する", async () => {
+		const m = setup();
+		await m.manager.join("1", "vc1");
+		await m.manager.apply({
+			speak: { channel_id: "vc1", text: "1", values },
+			speak_queue: [
+				{ channel_id: "vc1", text: "1", values },
+				{ channel_id: "vc1", text: "2", values },
+			],
+		});
+		await vi.waitFor(() => expect(m.players[0]?.play).toHaveBeenCalledTimes(2));
+		expect(
+			m.ochoko.synthesizeWithRetry.mock.calls.map((c) => c[0]?.text),
+		).toEqual(["1", "2"]);
+	});
+
+	it("speak だけの古い Worker の指示も再生する", async () => {
+		const m = setup();
+		await m.manager.join("1", "vc1");
+		await m.manager.apply({ speak: { channel_id: "vc1", text: "1", values } });
+		await vi.waitFor(() => expect(m.players[0]?.play).toHaveBeenCalledTimes(1));
+	});
+
 	it("undefined は何もしない", async () => {
 		const m = setup();
 		await m.manager.apply(undefined);

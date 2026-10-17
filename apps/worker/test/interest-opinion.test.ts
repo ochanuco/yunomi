@@ -319,7 +319,7 @@ describe("保存しないターンと失敗", () => {
 			llmOk(
 				turn({
 					reply_policy: "ignore",
-					utterance: "",
+					messages: [],
 					interest_signals: [up()],
 					opinion_signals: [weaken()],
 				}),

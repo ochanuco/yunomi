@@ -108,14 +108,29 @@ describe("gatewayResponseSchema", () => {
 		expect(ok({ action: "ack" })).toBe(true);
 		expect(ok({ action: "reply", content: "やあ" })).toBe(true);
 		expect(
-			ok({ action: "reply", content: "やあ", reply_to_message_id: "3" }),
+			ok({
+				action: "reply",
+				content: "やあ\n元気ですか",
+				messages: [{ content: "やあ" }, { content: "元気ですか" }],
+				reply_to_message_id: "3",
+			}),
 		).toBe(true);
 		expect(ok({ action: "ignore" })).toBe(true);
 	});
-	it("空・2000 文字超・未知の action を拒否する", () => {
+	it("空・2000 文字超・0 件・11 件・未知の action を拒否する", () => {
+		const reply = (...contents: string[]) => ({
+			action: "reply",
+			content: "a",
+			messages: contents.map((content) => ({ content })),
+		});
 		expect(ok({ action: "reply", content: "" })).toBe(false);
 		expect(ok({ action: "reply", content: "a".repeat(2001) })).toBe(false);
-		expect(ok({ action: "reply", content: "a".repeat(2000) })).toBe(true);
+		expect(ok(reply(""))).toBe(false);
+		expect(ok(reply("a".repeat(2001)))).toBe(false);
+		expect(ok(reply("a".repeat(2000)))).toBe(true);
+		expect(ok(reply())).toBe(false);
+		expect(ok(reply(...Array<string>(10).fill("a")))).toBe(true);
+		expect(ok(reply(...Array<string>(11).fill("a")))).toBe(false);
 		expect(ok({ action: "dm" })).toBe(false);
 	});
 });
@@ -151,7 +166,7 @@ describe("gatewayResponseSchema partner_message_id", () => {
 		const r = v.safeParse(gatewayResponseSchema, {
 			action: "reply",
 			content: "やあ",
-			partner_message_id: "partner:abc",
+			messages: [{ content: "やあ", partner_message_id: "partner:abc" }],
 		});
 		expect(r.success).toBe(true);
 	});
@@ -160,7 +175,7 @@ describe("gatewayResponseSchema partner_message_id", () => {
 		const r = v.safeParse(gatewayResponseSchema, {
 			action: "reply",
 			content: "やあ",
-			partner_message_id: "",
+			messages: [{ content: "やあ", partner_message_id: "" }],
 		});
 		expect(r.success).toBe(false);
 	});
@@ -216,12 +231,17 @@ describe("gatewayResponseSchema voice", () => {
 			join: { guild_id: "1", channel_id: "7" },
 			leave: { guild_id: "1" },
 			speak: { channel_id: "7", text: "やあ", values },
+			speak_queue: [
+				{ channel_id: "7", text: "やあ", values },
+				{ channel_id: "7", text: "元気ですか", values },
+			],
 		};
 		expect(ok({ action: "ack", voice })).toBe(true);
 		expect(ok({ action: "reply", content: "やあ", voice })).toBe(true);
 		expect(ok({ action: "ack", voice: {} })).toBe(true);
 	});
-	it("speak の text が空、values が欠けると拒否する", () => {
+	it("speak_queue が空配列、text が空、values が欠けると拒否する", () => {
+		expect(ok({ action: "ack", voice: { speak_queue: [] } })).toBe(false);
 		expect(
 			ok({
 				action: "ack",
@@ -231,7 +251,7 @@ describe("gatewayResponseSchema voice", () => {
 		expect(
 			ok({
 				action: "ack",
-				voice: { speak: { channel_id: "7", text: "やあ" } },
+				voice: { speak_queue: [{ channel_id: "7", text: "やあ" }] },
 			}),
 		).toBe(false);
 	});

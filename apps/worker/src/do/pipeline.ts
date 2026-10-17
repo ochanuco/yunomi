@@ -1,6 +1,7 @@
 import type { BodyIntent, BodyState } from "@yunomi/core";
 import type { GatewayResponse, InboundMessage } from "@yunomi/protocol";
 import type { DecisionReason, TurnAuditData } from "../audit.ts";
+import type { RecentMessage } from "./store.ts";
 
 export type TurnOutcome = {
 	response: GatewayResponse;
@@ -11,6 +12,8 @@ export type TurnOutcome = {
 	voiceChannel?: "join" | "leave" | "stay";
 	/** この返事を考えたときの身体の状態。 */
 	bodyState?: BodyState;
+	/** 返事の各メッセージを recent messages に積むときの行。response の messages と同じ順。送れた分だけ積む。 */
+	partnerMessages?: RecentMessage[];
 };
 
 /** onEngaged は、返事に進むと決まった時点で一度だけ呼ばれる。入力中の表示はここから始める。 */

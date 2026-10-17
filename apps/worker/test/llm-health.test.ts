@@ -10,7 +10,7 @@ const BOT = env.PARTNER_DISCORD_USER_ID;
 const T0 = new Date("2026-10-11T03:00:00Z");
 
 const response: TurnResponse = {
-	utterance: "はい",
+	messages: ["はい"],
 	reply_policy: "reply",
 	decision_summary: "返事する",
 	emotion_delta: { mood: 0, energy: 0 },

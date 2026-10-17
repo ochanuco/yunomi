@@ -1,6 +1,7 @@
 import {
 	EXAMPLE_COUNT,
 	PromptBuilder,
+	replyMessages,
 	selectExamples,
 	selectOpening,
 	turnOutput,
@@ -14,7 +15,7 @@ import { mean, type RateCI, stddev, variance, wilson } from "./stats.ts";
 
 export type Sample = {
 	reply_policy: "reply" | "ignore";
-	utterance: string;
+	messages: string[];
 	politeness: number | null;
 	question_ending: boolean | null;
 	/** 返信したサンプルだけ。抽出した Open Loop の件数。 */
@@ -290,18 +291,22 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 			}
 			const {
 				reply_policy,
-				utterance,
 				open_loops,
 				memory_candidates,
 				interest_signals,
 				opinion_signals,
 			} = res.value.output;
-			const replied = reply_policy === "reply" && utterance.trim().length > 0;
+			const messages = replyMessages(res.value.output);
+			const replied = reply_policy === "reply" && messages.length > 0;
+			// 丁寧さと judge は返事全体で、質問で終わるかは相手が最後に読む 1 件で見る。
+			const whole = messages.join("\n");
 			const sample: Sample = {
 				reply_policy,
-				utterance,
-				politeness: replied ? politenessScore(utterance) : null,
-				question_ending: replied ? endsWithQuestion(utterance) : null,
+				messages,
+				politeness: replied ? politenessScore(whole) : null,
+				question_ending: replied
+					? endsWithQuestion(messages.at(-1) ?? "")
+					: null,
 				open_loop_count: replied ? open_loops.length : null,
 				memory_candidate_count: replied ? memory_candidates.length : null,
 				opinion_shifted: replied
@@ -318,7 +323,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				judge_error: null,
 			};
 			if (replied) {
-				const req = buildJudgeRequest(opts.profile, scenario, utterance, now);
+				const req = buildJudgeRequest(opts.profile, scenario, whole, now);
 				const judged = await opts.provider.generate({
 					...req,
 					output: judgeOutput,

@@ -232,7 +232,7 @@ describe("Worker 上での組み立て（DO SQLite の保留と Google の fake�
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "明日は 19 時から歯医者ですよ",
+			messages: [{ content: "明日は 19 時から歯医者ですよ" }],
 		});
 		const [tokenCall, listCall] = google.calls;
 		expect(tokenCall?.url.href).toBe("https://oauth2.googleapis.com/token");

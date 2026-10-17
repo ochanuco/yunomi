@@ -20,7 +20,8 @@ export type PerformanceIR = {
 
 /** 脳から身体へ渡す意図。 */
 export type BodyIntent = {
-	text: string;
+	/** Discord のメッセージ 1 件ずつの本文。声もこの単位で読む。 */
+	messages: string[];
 	performance: PerformanceIR;
 	speakAloud: boolean;
 };
@@ -66,6 +67,8 @@ export interface CommunicationPort {
 		channelId: string;
 		text: string;
 		replyToMessageId?: string;
+		/** 同じ値の再送を Discord が 1 件にまとめる。25 文字以内。 */
+		nonce?: string;
 	}): Promise<Result<SentMessage, DomainError>>;
 	sendTyping(input: { channelId: string }): Promise<Result<void, DomainError>>;
 	sendAttachment(input: {

@@ -26,7 +26,7 @@ const T0 = new Date("2026-10-11T03:00:00Z");
 const plus = (ms: number) => new Date(T0.getTime() + ms);
 
 const turnResponse = (over: Partial<TurnResponse> = {}): TurnResponse => ({
-	utterance: "こんにちは",
+	messages: ["こんにちは"],
 	reply_policy: "reply",
 	decision_summary: "挨拶されたので返す",
 	emotion_delta: { mood: 0, energy: 0 },
@@ -95,14 +95,14 @@ const mention = (over = {}) =>
 describe("reply / ignore の判定", () => {
 	it("メンションあり -> LLM -> reply（reply_to はトリガー発言）", async () => {
 		const { stub, fake } = await setup("mention", {
-			script: [llmOk(turnResponse({ utterance: "おはようございます" }))],
+			script: [llmOk(turnResponse({ messages: ["おはようございます"] }))],
 		});
 		const msg = mention();
 		const res = await stub.handleDiscordMessage(msg);
 
 		expect(res).toMatchObject({
 			action: "reply",
-			content: "おはようございます",
+			messages: [{ content: "おはようございます" }],
 			reply_to_message_id: msg.messageId,
 		});
 		expect(res.audit).toMatchObject({
@@ -161,7 +161,7 @@ describe("reply / ignore の判定", () => {
 		const { stub, fake, clock } = await setup("window", {
 			script: [
 				llmOk(turnResponse()),
-				llmOk(turnResponse({ utterance: "そうですね" })),
+				llmOk(turnResponse({ messages: ["そうですね"] })),
 				gateOk(false),
 			],
 		});
@@ -227,7 +227,7 @@ describe("reply / ignore の判定", () => {
 
 	it("LLM が ignore を選んだら ignore（返事の時刻は更新しない）", async () => {
 		const { stub } = await setup("llm-ignore", {
-			script: [llmOk(turnResponse({ reply_policy: "ignore", utterance: "" }))],
+			script: [llmOk(turnResponse({ reply_policy: "ignore", messages: [""] }))],
 		});
 		const res = await stub.handleDiscordMessage(mention());
 		expect(res.action).toBe("ignore");
@@ -344,11 +344,14 @@ describe("宛先のない発言への割り込み", () => {
 		const { stub, fake } = await setup("join", {
 			script: [
 				gateOk(true, "ゲームの話題"),
-				llmOk(turnResponse({ utterance: "面白そうですね" })),
+				llmOk(turnResponse({ messages: ["面白そうですね"] })),
 			],
 		});
 		const res = await stub.handleDiscordMessage(free());
-		expect(res).toMatchObject({ action: "reply", content: "面白そうですね" });
+		expect(res).toMatchObject({
+			action: "reply",
+			messages: [{ content: "面白そうですね" }],
+		});
 		expect(fake.requests.map((r) => r.model)).toEqual([HAIKU, SONNET]);
 		expect(fake.requests[0]?.timeoutMs).toBe(GATE_TIMEOUT_MS);
 		expect(fake.requests[1]?.timeoutMs).toBeUndefined();
@@ -411,7 +414,7 @@ describe("宛先のない発言への割り込み", () => {
 		const { stub } = await setup("join-ignore", {
 			script: [
 				gateOk(true),
-				llmOk(turnResponse({ reply_policy: "ignore", utterance: "" })),
+				llmOk(turnResponse({ reply_policy: "ignore", messages: [""] })),
 			],
 		});
 		const res = await stub.handleDiscordMessage(free());
@@ -500,7 +503,7 @@ describe("宛先のない発言への割り込み", () => {
 describe("HTTP 経由", () => {
 	it("gateway のリクエストに reply を返す", async () => {
 		await setup(PARTNER_ID, {
-			script: [llmOk(turnResponse({ utterance: "はい" }))],
+			script: [llmOk(turnResponse({ messages: ["はい"] }))],
 		});
 		const msg = mention();
 		const res = await exports.default.fetch(
@@ -517,8 +520,14 @@ describe("HTTP 経由", () => {
 		expect(await res.json()).toEqual({
 			action: "reply",
 			content: "はい",
-			reply_to_message_id: msg.messageId,
 			partner_message_id: expect.stringMatching(/^partner:/),
+			messages: [
+				{
+					content: "はい",
+					partner_message_id: expect.stringMatching(/^partner:/),
+				},
+			],
+			reply_to_message_id: msg.messageId,
 		});
 	});
 });

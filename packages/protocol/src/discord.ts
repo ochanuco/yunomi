@@ -79,30 +79,49 @@ const aivoiceValuesSchema = v.object({
 	}),
 });
 
+const speakSchema = v.object({
+	channel_id: snowflake,
+	text: v.pipe(v.string(), v.minLength(1)),
+	values: aivoiceValuesSchema,
+});
+
+export type SpeakDirective = v.InferOutput<typeof speakSchema>;
+
 /** Worker が Gateway に頼む VC の操作。古い Gateway は無視する。 */
 export const voiceDirectiveSchema = v.object({
 	join: v.optional(v.object({ guild_id: snowflake, channel_id: snowflake })),
 	leave: v.optional(v.object({ guild_id: snowflake })),
-	// Gateway が values で合成して channel_id の VC で再生する。テキストは Worker が送り済み
-	speak: v.optional(
-		v.object({
-			channel_id: snowflake,
-			text: v.pipe(v.string(), v.minLength(1)),
-			values: aivoiceValuesSchema,
-		}),
-	),
+	// Gateway が values で合成して channel_id の VC で再生する。テキストは Worker が送り済み。
+	// Worker と Gateway は別々に反映されるので、古い Gateway が読む speak（1 件目）を残し、
+	// 全件は speak_queue に入れる。新しい Gateway は speak_queue があればそちらを順に再生する
+	speak: v.optional(speakSchema),
+	speak_queue: v.optional(v.pipe(v.array(speakSchema), v.minLength(1))),
 });
 
 export type VoiceDirective = v.InferOutput<typeof voiceDirectiveSchema>;
 
-/** Yunomi → Gateway のレスポンス。content は Discord の 2000 文字制限に合わせる。 */
+/** Yunomi → Gateway のレスポンス。各 content は Discord の 2000 文字制限に合わせる。 */
 export const gatewayResponseSchema = v.variant("action", [
 	v.object({
 		action: v.literal("reply"),
+		// messages が無い古い Worker と、messages を知らない古い Gateway のために残す 1 通ぶんの欄
 		content: v.pipe(v.string(), v.minLength(1), v.maxLength(2000)),
 		reply_to_message_id: v.optional(snowflake),
 		// DO が recent messages に積んだ自分の発言の id。送信後の sent 通知で Discord id と結び付ける
 		partner_message_id: v.optional(v.pipe(v.string(), v.nonEmpty())),
+		// 順に送るメッセージ。あれば content の代わりに使う。reply_to_message_id は 1 件目にだけ使う
+		messages: v.optional(
+			v.pipe(
+				v.array(
+					v.object({
+						content: v.pipe(v.string(), v.minLength(1), v.maxLength(2000)),
+						partner_message_id: v.optional(v.pipe(v.string(), v.nonEmpty())),
+					}),
+				),
+				v.minLength(1),
+				v.maxLength(10),
+			),
+		),
 		voice: v.optional(voiceDirectiveSchema),
 	}),
 	v.object({ action: v.literal("ignore") }),
@@ -114,6 +133,63 @@ export const gatewayResponseSchema = v.variant("action", [
 ]);
 
 export type GatewayResponse = v.InferOutput<typeof gatewayResponseSchema>;
+
+type ReplyResponse = Extract<GatewayResponse, { action: "reply" }>;
+export type ReplyMessage = NonNullable<ReplyResponse["messages"]>[number];
+
+/** reply で送るメッセージ。古い Worker の応答は content の 1 通として読む。 */
+export const replyMessagesOf = (reply: ReplyResponse): ReplyMessage[] =>
+	reply.messages ?? [
+		{
+			content: reply.content,
+			...(reply.partner_message_id
+				? { partner_message_id: reply.partner_message_id }
+				: {}),
+		},
+	];
+
+/** VC で読み上げる発話。古い Worker の応答は speak の 1 件として読む。 */
+export const speakQueueOf = (
+	directive: VoiceDirective | undefined,
+): SpeakDirective[] =>
+	directive?.speak_queue ?? (directive?.speak ? [directive.speak] : []);
+
+const DISCORD_MAX_LENGTH = 2000;
+
+/**
+ * 複数件の返事を、古い Gateway でも送れる reply にする。
+ * content は全件を改行でつなぎ、Discord の上限を超えるときは 1 件目だけにする。
+ */
+export const toReplyResponse = (input: {
+	messages: readonly ReplyMessage[];
+	replyToMessageId?: string;
+}): ReplyResponse | null => {
+	const [first] = input.messages;
+	if (!first) return null;
+	const joined = input.messages.map((m) => m.content).join("\n");
+	return {
+		action: "reply",
+		content: joined.length <= DISCORD_MAX_LENGTH ? joined : first.content,
+		...(first.partner_message_id
+			? { partner_message_id: first.partner_message_id }
+			: {}),
+		...(input.replyToMessageId
+			? { reply_to_message_id: input.replyToMessageId }
+			: {}),
+		messages: [...input.messages],
+	};
+};
+
+/** 読み上げる発話を、古い Gateway が読む speak（1 件目）と全件の speak_queue に入れる。 */
+export const withSpeakQueue = (
+	directive: Omit<VoiceDirective, "speak" | "speak_queue">,
+	queue: readonly SpeakDirective[],
+): VoiceDirective => {
+	const [first] = queue;
+	return first
+		? { ...directive, speak: first, speak_queue: [...queue] }
+		: { ...directive };
+};
 
 export const discordSentPathFor = (partnerId: string): string =>
 	`/v1/partners/${encodeURIComponent(partnerId)}/discord/sent`;

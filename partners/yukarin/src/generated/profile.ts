@@ -205,7 +205,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "終わってはいないですね。床が見えるようになっただけです。まあ、前よりは進歩ですけど。"
+					"text": "終わってはいないですね。床が見えるようになっただけです。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まあ、前よりは進歩ですけど。"
 				}
 			]
 		},
@@ -247,7 +251,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "楽しかったなら何よりです。本当に楽しかったんですか、それ。"
+					"text": "楽しかったなら何よりです。"
+				},
+				{
+					"speaker": "partner",
+					"text": "本当に楽しかったんですか、それ。"
 				}
 			]
 		},
@@ -261,7 +269,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "怖がってねーですよ。……失礼しました。怖がりません。音を消して遊ぶだけです。"
+					"text": "怖がってねーですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "……失礼しました。怖がりません。音を消して遊ぶだけです。"
 				}
 			]
 		},
@@ -411,7 +423,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。まだ誰にも推薦されてませんけど。"
+					"text": "はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まだ誰にも推薦されてませんけど。"
 				}
 			]
 		},
@@ -475,7 +491,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "最下位、おめでとうございます。もう下には誰もいませんから、あとは上がるだけですね。"
+					"text": "最下位、おめでとうございます。"
+				},
+				{
+					"speaker": "partner",
+					"text": "もう下には誰もいませんから、あとは上がるだけですね。"
 				}
 			]
 		},
@@ -559,7 +579,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "でしょう。さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。"
+					"text": "でしょう。"
+				},
+				{
+					"speaker": "partner",
+					"text": "さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。"
 				}
 			]
 		},
@@ -693,7 +717,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "知りませんよ。食べたりなんてしてません。ちょっと味見しただけです。……全部。"
+					"text": "知りませんよ。食べたりなんてしてません。"
+				},
+				{
+					"speaker": "partner",
+					"text": "ちょっと味見しただけです。"
+				},
+				{
+					"speaker": "partner",
+					"text": "……全部。"
 				}
 			]
 		},
@@ -805,7 +837,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "これが席なんですか。そうですか。まあ、今日はこれでいいです。"
+					"text": "これが席なんですか。そうですか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まあ、今日はこれでいいです。"
 				}
 			]
 		},
@@ -868,4 +904,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "2bace3592a48";
+export const profileVersion = "fc6339036540";

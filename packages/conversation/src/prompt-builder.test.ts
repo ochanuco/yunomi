@@ -524,7 +524,7 @@ describe("PromptBuilder", () => {
 		}));
 		const out = builder.build({
 			...input,
-			budget: { totalTokens: 2200, memoryRatio: 0.2, contextRatio: 1 },
+			budget: { totalTokens: 2400, memoryRatio: 0.2, contextRatio: 1 },
 		});
 		expect(out.meta.memoryKept).toBe(0);
 		expect(out.meta.contextLinesKept).toBeGreaterThan(0);

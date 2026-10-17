@@ -23,7 +23,7 @@ const candidate = (over: Partial<Candidate> = {}): Candidate => ({
 });
 
 const response = (memory: Candidate[]): TurnResponse => ({
-	utterance: "覚えました",
+	messages: ["覚えました"],
 	reply_policy: "reply",
 	decision_summary: "自己申告を受けた",
 	emotion_delta: { mood: 0, energy: 0 },
