@@ -27,6 +27,10 @@ official core
 
 Fanon must not overwrite official facts or lived relationship/history.
 
+## Conversation examples
+
+`partners/<id>/examples.yaml` holds short dialogue examples grouped by scene, written with reference to speech patterns common across fan works. Each turn picks a few examples from distinct scenes, seeded by the incoming message ID, so a retry sees the same examples while consecutive turns see different ones. The examples show the shape of a reply, not phrases or topics to reuse.
+
 ## Official core
 
 Use official Yuzuki Yukari character settings as the identity foundation.

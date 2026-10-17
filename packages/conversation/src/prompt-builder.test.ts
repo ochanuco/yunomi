@@ -12,6 +12,29 @@ import { baseInput } from "./test-fixtures.ts";
 const builder = new PromptBuilder();
 
 describe("PromptBuilder", () => {
+	it("会話例は cache しないブロックとして rules の直後、日時の前に入る", () => {
+		const input = baseInput();
+		input.examples = [
+			{
+				id: "e1",
+				scene: "tsukkomi",
+				turns: [
+					{ speaker: "other", text: "完璧です" },
+					{ speaker: "partner", text: "穴だらけですよ" },
+				],
+			},
+		];
+		const { system } = builder.build(input);
+		const idx = system.findIndex((b) => b.text.startsWith("## 会話例"));
+		expect(idx).toBe(2);
+		expect(system[idx]?.cache).toBe(false);
+		expect(system[idx]?.text).toContain(
+			"相手: 完璧です\nテスト: 穴だらけですよ",
+		);
+		expect(system[idx + 1]?.text).toContain("## 現在日時");
+		expect(system.length).toBe(builder.build(baseInput()).system.length + 1);
+	});
+
 	it("身体の状態をプロンプトに入れ、未指定は声を出せない扱いにする", () => {
 		const body = (state?: BodyState) => {
 			const input = baseInput();

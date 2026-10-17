@@ -28,6 +28,7 @@ export const loadProfile = (): PartnerProfile => {
 			fanon: read("identity/fanon.md"),
 			yunomi: read("identity/yunomi.md"),
 		},
+		examples: (parse(read("examples.yaml")) as { examples: unknown }).examples,
 	});
 };
 

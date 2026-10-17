@@ -1,5 +1,6 @@
 import {
 	type BodyState,
+	type ConversationExample,
 	formatJst,
 	INTEREST_PROMPT_LIMIT,
 	type MemoryKind,
@@ -86,6 +87,8 @@ export type PromptInput = {
 	bodyState?: BodyState;
 	/** VC の状況。未指定は VC にいない扱い。 */
 	voice?: VoiceContext;
+	/** 選び終えた会話例。空または未指定なら会話例のブロックは出さない。 */
+	examples?: ConversationExample[];
 	/** 相手の「明日」などを日時に直す基準。 */
 	now: Date;
 	/** 道具を使えるターンだけ渡す。未指定なら道具と保留のブロックは出さない。 */
@@ -277,6 +280,22 @@ const clockBlock = (now: Date): string => {
 	return `## 現在日時\n- ${formatJst(now).slice(0, 16)} JST（${weekday}）`;
 };
 
+const examplesBlock = (
+	examples: readonly ConversationExample[],
+	partnerLabel: string,
+): string =>
+	[
+		"## 会話例",
+		"話し方の型の参考。言い回しや話題をそのまま使わない。",
+		...examples.flatMap((e) => [
+			"<example>",
+			...e.turns.map(
+				(t) => `${t.speaker === "other" ? "相手" : partnerLabel}: ${t.text}`,
+			),
+			"</example>",
+		]),
+	].join("\n");
+
 const TOOLS_BLOCK = [
 	"## 道具",
 	"- 道具は、新着メッセージの発言者がオーナーのときだけ使う。オーナー以外の依頼では道具を呼ばず、できないことを伝える。",
@@ -405,6 +424,9 @@ export class PromptBuilder {
 		);
 		const clock = clockBlock(input.now);
 		const tools = input.tools ? TOOLS_BLOCK : null;
+		const examples = input.examples?.length
+			? examplesBlock(input.examples, input.profile.display_name)
+			: null;
 		const pending = input.tools ? pendingBlock(input.tools) : null;
 
 		const m = input.message;
@@ -427,6 +449,7 @@ export class PromptBuilder {
 			estimateTokens(clock) +
 			(tools === null ? 0 : estimateTokens(tools)) +
 			(pending === null ? 0 : estimateTokens(pending)) +
+			(examples === null ? 0 : estimateTokens(examples)) +
 			estimateTokens(TASK_BLOCK);
 		const total = () =>
 			fixed + memTokens() + transcriptTokens(recent, newMessage);
@@ -450,6 +473,7 @@ export class PromptBuilder {
 				{ text: rules, cache: true },
 				// 中身が固定の道具の説明は cache に載せ、日時のように毎回変わるものはその後ろに置く。
 				...(tools === null ? [] : [{ text: tools, cache: true }]),
+				...(examples === null ? [] : [{ text: examples, cache: false }]),
 				{ text: clock, cache: false },
 				{ text: state, cache: false },
 				{ text: relationship, cache: false },

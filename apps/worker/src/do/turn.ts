@@ -5,10 +5,12 @@ import {
 } from "@yunomi/capabilities";
 import {
 	buildGatePrompt,
+	EXAMPLE_COUNT,
 	GATE_RECENT_LIMIT,
 	type GateDecision,
 	gateOutput,
 	PromptBuilder,
+	selectExamples,
 	type TurnResponse,
 	toBodyIntent,
 	toPromptMessage,
@@ -291,6 +293,10 @@ export const runTurn = async (
 
 	const prompt = new PromptBuilder().build({
 		profile,
+		examples: selectExamples(profile.examples, {
+			seed: msg.messageId,
+			count: EXAMPLE_COUNT,
+		}),
 		bodyState,
 		state: state0,
 		relationship: {

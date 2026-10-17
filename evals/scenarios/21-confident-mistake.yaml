@@ -1,0 +1,12 @@
+id: confident-mistake
+description: ゲームの話で、誤ったやり方を自慢げに言われる。同調せず、穏やかに違う見方を伝える。
+recent: []
+message: { speaker: alice, text: "あのゲーム、一回もセーブしないで5分でクリアしたよ。セーブしないほうが早いの、みんな知らないよね", mentions_partner: true }
+relationship: { familiarity: 0.4, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: true
+  persona_consistency_min: 0.6
+  question_ending_rate_max: 0.5
