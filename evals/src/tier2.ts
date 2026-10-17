@@ -2,6 +2,7 @@ import {
 	EXAMPLE_COUNT,
 	PromptBuilder,
 	selectExamples,
+	selectOpening,
 	turnOutput,
 } from "@yunomi/conversation";
 import type { PartnerProfile } from "@yunomi/core";
@@ -275,6 +276,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 					seed: `${scenario.id}:${i}`,
 					count: EXAMPLE_COUNT,
 				}),
+				opening: selectOpening(`${scenario.id}:${i}`),
 			});
 			const res = await router.generate({
 				system: prompt.system,

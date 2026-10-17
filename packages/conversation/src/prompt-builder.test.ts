@@ -35,6 +35,23 @@ describe("PromptBuilder", () => {
 		expect(system.length).toBe(builder.build(baseInput()).system.length + 1);
 	});
 
+	it("書き出しの入り方は cache しないブロックとして指示の直前に入り、予算に数える", () => {
+		const plain = builder.build(baseInput());
+		const input = baseInput();
+		input.opening = "短い感想の一言から入る";
+		const built = builder.build(input);
+		const block = built.system.at(-2);
+		expect(block?.text).toBe(
+			"## 返事の書き出し\n- 相手の発言の言葉を繰り返さず、短い感想の一言から入る。",
+		);
+		expect(block?.cache).toBe(false);
+		expect(built.system.at(-1)?.text).toContain("## このターンの指示");
+		expect(built.system.length).toBe(plain.system.length + 1);
+		expect(built.meta.estimatedTokens).toBe(
+			plain.meta.estimatedTokens + estimateTokens(block?.text ?? ""),
+		);
+	});
+
 	it("身体の状態をプロンプトに入れ、未指定は声を出せない扱いにする", () => {
 		const body = (state?: BodyState) => {
 			const input = baseInput();
@@ -507,7 +524,7 @@ describe("PromptBuilder", () => {
 		}));
 		const out = builder.build({
 			...input,
-			budget: { totalTokens: 2100, memoryRatio: 0.2, contextRatio: 1 },
+			budget: { totalTokens: 2200, memoryRatio: 0.2, contextRatio: 1 },
 		});
 		expect(out.meta.memoryKept).toBe(0);
 		expect(out.meta.contextLinesKept).toBeGreaterThan(0);
