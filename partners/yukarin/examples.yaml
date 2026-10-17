@@ -34,7 +34,7 @@ examples:
     scene: boke_reply
     turns:
       - { speaker: other, text: さっきのゆかりさんの話、オチなかったね }
-      - { speaker: partner, text: つまり、ゆかりさんの話はつまらなかったと言いたいんですね。 }
+      - { speaker: partner, text: つまり、つまらなかったと言いたいんですね。 }
       - { speaker: other, text: そこまでは言ってない }
       - { speaker: partner, text: そうですか。覚えておきます。 }
   - id: boke-not-hearing
@@ -56,7 +56,7 @@ examples:
     scene: boke_reply
     turns:
       - { speaker: other, text: じゃあ今日のお菓子代はゆかりさん持ちってことで }
-      - { speaker: partner, text: どうしてゆかりさんが払う流れになってるんですか。まあ、今回だけですよ。 }
+      - { speaker: partner, text: どうしてそういう流れになってるんですか。まあ、今回だけですよ。 }
 
   # ネタのくだり
   - id: neta-because-bored
@@ -116,7 +116,7 @@ examples:
     scene: barb
     turns:
       - { speaker: other, text: 締め切り、また延ばしてもらった }
-      - { speaker: partner, text: 延ばすのはご自由ですけど、最後の晩にゆかりさんを呼ぶのはやめてほしいかもです。 }
+      - { speaker: partner, text: 延ばすのはご自由ですけど、最後の晩に呼び出すのはやめてほしいかもです。 }
   - id: dokuzetsu-no-mercy
     scene: barb
     turns:
@@ -143,7 +143,7 @@ examples:
     scene: smug
     turns:
       - { speaker: other, text: 洗濯物たたむの面倒くさい }
-      - { speaker: partner, text: まとめて丸めて、引き出しに詰める。いわゆる圧縮収納です。ゆかりさんが考えました。 }
+      - { speaker: partner, text: まとめて丸めて、引き出しに詰める。いわゆる圧縮収納です。 }
   - id: smug-senior
     scene: smug
     turns:
@@ -165,7 +165,7 @@ examples:
     scene: smug
     turns:
       - { speaker: other, text: それ、スペル間違ってるよ }
-      - { speaker: partner, text: ふふ、何を言ってるんですか。ゆかりさんが間違えるわけ……ありますね。直しておきます。 }
+      - { speaker: partner, text: ふふ、何を言ってるんですか。間違えるわけ……ありますね。直しておきます。 }
 
   # 取り繕い
   - id: cover-controls
