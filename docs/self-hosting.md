@@ -110,6 +110,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 | `ANTHROPIC_API_KEY` | 必須。ないと応答を生成できない |
 | `DISCORD_BOT_TOKEN` | `discordSendFromWorker` が `"1"` のとき必須 |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー）を使うときだけ。production の Worker だけが使い、5 つとも揃ったときに限って有効になる。development では置かない |
 
 ```sh
 cd apps/worker

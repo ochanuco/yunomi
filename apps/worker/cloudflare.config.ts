@@ -61,6 +61,17 @@ export default defineConfig(({ mode }) => {
 				CF_ACCESS_CLIENT_ID: bindings.secret(),
 				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
 				AIVOICE_TOKEN: bindings.secret(),
+				// 道具（Google カレンダー）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
+				// 値を置かない dev で宣言すると deploy が通らない。
+				...(production
+					? {
+							GOOGLE_CLIENT_ID: bindings.secret(),
+							GOOGLE_CLIENT_SECRET: bindings.secret(),
+							GOOGLE_REFRESH_TOKEN: bindings.secret(),
+							GOOGLE_CALENDAR_ID: bindings.secret(),
+							OWNER_DISCORD_USER_ID: bindings.secret(),
+						}
+					: {}),
 				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。
 				SNAPSHOTS: bindings.r2({ name: r.snapshotBucket }),
 				DB: bindings.d1({

@@ -23,7 +23,7 @@
 
 ## Partner DO
 
-`PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline` と `now` はテストが `runInDurableObject` で差し替える seam。
+`PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline`・`now`・`capabilities` などはテストが `runInDurableObject` で差し替える seam。
 
 入口（`runTurn`）は、bot の発言を捨てたあと、メンション・リプライ・3 分の継続枠・本文のプロファイルの呼び名（`aliases`）のどれかがあれば Sonnet の判定に回す。どれもない発言は、自分以外へのメンションかリプライなら `addressed_to_other`、同じチャンネルで 30 分以内に割り込んでいれば `interjection_cooldown` で捨て、そうでなければ Haiku が「入る / 入らない」を判定する（`@yunomi/conversation` の `buildGatePrompt`）。判定には直近ログと新着に加えて、場の人数（ゆかりと bot を除く作者の数。ログでは bot の発言に（bot）と付ける）、ゆかりの state（mood・energy・presence。未作成なら初期値で、書き込まない）、発言者との関係（familiarity・trust の平均から 初対面 / 顔見知り / 親しい / とても親しい の段階を付け、数値を添える。既に entity があるときだけ読み、無ければ初めての相手として渡す。判定のために entity は作らない）を user メッセージで渡す。入らなければ `gate_rejected`（Haiku の理由は `decisionSummary`）、Haiku の失敗は `gate_failed` で黙り、`llm_health` には数えない。入る場合は Sonnet の通常判定に回り、reply したときだけ `channel_state.last_interjection_at` を記録する。
 
@@ -197,6 +197,20 @@ restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `in
 #### seed の運用
 
 dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot・別 Worker・別 Access）で担保する。手順は `apps/cli/README.md`。
+
+## 道具（Google カレンダー）
+
+オーナーのメインカレンダーの確認と、了承を挟んだ予定の登録を、ターンの道具として持たせる。次の 5 つがすべて揃っているときだけ `src/capabilities.ts` の `defaultCapabilities` が道具を組み立て、どれか欠けていれば（dev を含め）今までどおり道具なしで返事を作る。dev の Worker には Google の認証情報を置かない。
+
+| 設定 | 種類 | 値 |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` | secret | Google の OAuth クライアントと、`calendar.events` の refresh token |
+| `GOOGLE_CALENDAR_ID` | secret | 予定を読み書きするカレンダー。prod はオーナーのメインカレンダー（`primary`） |
+| `OWNER_DISCORD_USER_ID` | secret | 道具を使えるオーナーの Discord user id。それ以外の発言者の呼び出しは gate が拒否する |
+
+- 5 つの secret は production mode だけが `cloudflare.config.ts` で宣言する。宣言した secret は deploy が必須として検査するため、値を置かない dev で宣言すると deploy が通らない。参照は `.github/deploy/production.env.op` だけに置き、`scripts/deploy.sh` が `--secrets-file` で反映する。
+- 保留中の操作（確認待ちの登録）は DO の SQLite の `pending_operations` に持つ（`src/do/pending-store.ts`）。提案から 10 分で期限が切れ、ターンの頭で保留を読むときに期限切れのものを `expired` にして保存する。解決した行は消さない。
+- 道具の呼び出しは、ターンの Audit の `toolCalls` に残る。`audit_events.kind` は増やさない。
 
 ## Admin Web の配信
 
