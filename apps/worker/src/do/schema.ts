@@ -75,6 +75,23 @@ const MIGRATIONS: string[][] = [
 			voice_updated_at TEXT NOT NULL
 		)`,
 	],
+	[
+		// オーナーの了承を待つ道具の操作。解決した行も残し、同じ保留への二度目の了承を実行せずに状態遷移の拒否で返せるようにする
+		`CREATE TABLE IF NOT EXISTS pending_operations (
+			id TEXT PRIMARY KEY,
+			partner_id TEXT NOT NULL,
+			channel_id TEXT NOT NULL,
+			tool TEXT NOT NULL,
+			input_json TEXT NOT NULL,
+			requested_by TEXT NOT NULL,
+			source_message_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			status TEXT NOT NULL,
+			resolved_at TEXT
+		)`,
+		"CREATE INDEX IF NOT EXISTS pending_operations_open ON pending_operations (partner_id, channel_id, status)",
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {
