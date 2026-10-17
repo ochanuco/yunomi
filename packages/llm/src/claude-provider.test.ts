@@ -2,7 +2,13 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 import { ClaudeProvider } from "./claude-provider.ts";
 import { defineOutput } from "./json-schema.ts";
-import { HAIKU, type LLMRequest, SONNET } from "./types.ts";
+import {
+	HAIKU,
+	type LLMRequest,
+	SONNET,
+	type StepRequest,
+	type ToolSpec,
+} from "./types.ts";
 
 const output = defineOutput(
 	"reply",
@@ -234,5 +240,197 @@ describe("ClaudeProvider", () => {
 		const r = await provider.generate(req());
 		expect(r.ok && r.value.output.text).toBe("ok");
 		expect(r.ok && r.value.model).toBe("claude-haiku-5-5");
+	});
+});
+
+const calendarTool = {
+	name: "calendar_list",
+	description: "予定を一覧する",
+	inputSchema: {
+		type: "object",
+		properties: { from: { type: "string" } },
+		required: ["from"],
+		additionalProperties: false,
+	},
+} satisfies ToolSpec;
+
+const stepReq = (
+	over: Partial<StepRequest<{ text: string; note: string | null }>> = {},
+): StepRequest<{ text: string; note: string | null }> => ({
+	...req(),
+	tools: [calendarTool],
+	...over,
+});
+
+const thinking = { type: "thinking", thinking: "考え中", signature: "sig" };
+const toolUse = (id: string, input: unknown = { from: "2026-10-17" }) => ({
+	type: "tool_use",
+	id,
+	name: "calendar_list",
+	input,
+});
+
+const toolUseMessage = (content: unknown[]): Response =>
+	message("", { stop_reason: "tool_use", content });
+
+describe("ClaudeProvider.step", () => {
+	it("道具を strict: true で載せ、tool_choice は指定せず、Sonnet の beta と structured output も残す", async () => {
+		const { provider, calls } = harness(() =>
+			message(JSON.stringify({ text: "a", note: null })),
+		);
+		await provider.step(stepReq());
+		const c = calls[0];
+		expect(c?.headers.get("anthropic-beta")).toContain(
+			"server-side-fallback-2026-07-01",
+		);
+		const b = c?.body as Record<string, unknown>;
+		expect(b.fallbacks).toBe("default");
+		expect(b.tools).toEqual([
+			{
+				name: "calendar_list",
+				description: "予定を一覧する",
+				input_schema: calendarTool.inputSchema,
+				strict: true,
+			},
+		]);
+		expect(b).not.toHaveProperty("tool_choice");
+		const oc = b.output_config as { format: { type: string } };
+		expect(oc.format.type).toBe("json_schema");
+	});
+
+	it("Haiku へは fallback beta を付けず、道具は載せる", async () => {
+		const { provider, calls } = harness(() =>
+			message(JSON.stringify({ text: "a", note: null })),
+		);
+		await provider.step(stepReq({ model: HAIKU }));
+		expect(calls[0]?.headers.get("anthropic-beta")).toBeNull();
+		expect(calls[0]?.body).not.toHaveProperty("fallbacks");
+		expect(calls[0]?.body.tools).toHaveLength(1);
+	});
+
+	it("tool_use 応答は toolCalls と、thinking を含む content 全体の continuation を返す", async () => {
+		const content = [thinking, toolUse("toolu_1"), toolUse("toolu_2", {})];
+		const { provider } = harness(() => toolUseMessage(content));
+		const r = await provider.step(stepReq());
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.value.kind).toBe("tool_use");
+		if (r.value.kind !== "tool_use") return;
+		expect(r.value.toolCalls).toEqual([
+			{ id: "toolu_1", name: "calendar_list", input: { from: "2026-10-17" } },
+			{ id: "toolu_2", name: "calendar_list", input: {} },
+		]);
+		expect(r.value.stopReason).toBe("tool_use");
+		expect(r.value.model).toBe("claude-sonnet-5-5");
+		expect(r.value.usage.inputTokens).toBe(100);
+	});
+
+	it("continuation は assistant の content にそのまま、tool_results は 1 つの user メッセージの tool_result ブロックになる", async () => {
+		const content = [thinking, toolUse("toolu_1"), toolUse("toolu_2")];
+		const replies = [
+			toolUseMessage(content),
+			message(JSON.stringify({ text: "a", note: null })),
+		];
+		const { provider, calls } = harness(() => replies.shift() as Response);
+
+		const first = await provider.step(stepReq());
+		if (!first.ok || first.value.kind !== "tool_use") {
+			throw new Error("tool_use を期待");
+		}
+		const second = await provider.step(
+			stepReq({
+				messages: [
+					{ role: "user", content: "明日の予定は？" },
+					{ role: "assistant", continuation: first.value.continuation },
+					{
+						role: "tool_results",
+						results: [
+							{ toolCallId: "toolu_1", content: "[]", isError: false },
+							{ toolCallId: "toolu_2", content: "接続できない", isError: true },
+						],
+					},
+				],
+			}),
+		);
+
+		expect(calls[1]?.body.messages).toEqual([
+			{ role: "user", content: "明日の予定は？" },
+			{ role: "assistant", content },
+			{
+				role: "user",
+				content: [
+					{
+						type: "tool_result",
+						tool_use_id: "toolu_1",
+						content: "[]",
+						is_error: false,
+					},
+					{
+						type: "tool_result",
+						tool_use_id: "toolu_2",
+						content: "接続できない",
+						is_error: true,
+					},
+				],
+			},
+		]);
+		expect(second.ok && second.value.kind).toBe("final");
+	});
+
+	it("最終応答は thinking を読み飛ばして検証済みの output を返す", async () => {
+		const { provider } = harness(() =>
+			message("", {
+				content: [
+					thinking,
+					{ type: "text", text: JSON.stringify({ text: "やあ", note: null }) },
+				],
+			}),
+		);
+		const r = await provider.step(stepReq());
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.value).toMatchObject({
+			kind: "final",
+			output: { text: "やあ", note: null },
+			stopReason: "end_turn",
+		});
+	});
+
+	it("最終応答がスキーマ不一致・非 JSON なら ValidationFailed", async () => {
+		const tooLong = harness(() =>
+			message(JSON.stringify({ text: "x".repeat(11), note: null })),
+		);
+		const r1 = await tooLong.provider.step(stepReq());
+		expect(!r1.ok && r1.error.type).toBe("ValidationFailed");
+		const notJson = harness(() => message("すみません"));
+		const r2 = await notJson.provider.step(stepReq());
+		expect(!r2.ok && r2.error.type).toBe("ValidationFailed");
+	});
+
+	it("stop_reason が tool_use でも tool_use ブロックが無ければ ValidationFailed", async () => {
+		const { provider } = harness(() => toolUseMessage([thinking]));
+		const r = await provider.step(stepReq());
+		expect(!r.ok && r.error.type).toBe("ValidationFailed");
+	});
+
+	it("refusal は retryable ではない ExternalServiceUnavailable", async () => {
+		const { provider } = harness(() =>
+			message("", { stop_reason: "refusal", content: [] }),
+		);
+		const r = await provider.step(stepReq());
+		expect(!r.ok && r.error).toMatchObject({
+			type: "ExternalServiceUnavailable",
+			service: "anthropic:refusal",
+			retryable: false,
+		});
+	});
+
+	it("529 は retryable な ExternalServiceUnavailable", async () => {
+		const { provider } = harness(() => apiError(529, "overloaded_error"));
+		const r = await provider.step(stepReq());
+		expect(!r.ok && r.error).toMatchObject({
+			type: "ExternalServiceUnavailable",
+			retryable: true,
+		});
 	});
 });
