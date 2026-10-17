@@ -222,6 +222,58 @@ export type KpiDay = {
 /** 新しい日が先。当日（進行中）は含まない。 */
 export type KpisResponse = { items: KpiDay[] };
 
+/** `GET .../state-history?days=N` の既定と上限。 */
+export const STATE_HISTORY_DEFAULT_DAYS = 7;
+export const STATE_HISTORY_MAX_DAYS = 90;
+/** 1 応答あたりの各配列の上限。超えたら新しい側を残し truncated を立てる。 */
+export const STATE_HISTORY_MAX_ROWS = 5000;
+
+export type StateValues = {
+	mood: number;
+	energy: number;
+	presence: string;
+	system_stress: number;
+	degraded_mode: boolean;
+};
+
+export type StateTransitionView = {
+	id: string;
+	occurred_at: string;
+	/** `turn_delta` / `llm_consecutive_failures` / `llm_recovered`。 */
+	reason: string;
+	source_event_id: string;
+	before: StateValues;
+	after: StateValues;
+};
+
+export type RelationshipChangeView = {
+	id: string;
+	entity_id: string;
+	display_name: string | null;
+	occurred_at: string;
+	reason: string;
+	summary: string;
+	familiarity_delta: number;
+	trust_delta: number;
+	/** 適用後の値。D1 は差分しか持たないため、現在値から差分を遡って求める。 */
+	familiarity: number;
+	trust: number;
+};
+
+/** 配列はどちらも古い順。 */
+export type StateHistoryResponse = {
+	/** 期間の開始時刻。 */
+	since: string;
+	/**
+	 * 期間の開始時点の値。期間内に遷移があれば最古の遷移の before、
+	 * 無ければ現在値。初回ターン前は null。
+	 */
+	state_at_start: StateValues | null;
+	transitions: StateTransitionView[];
+	relationships: RelationshipChangeView[];
+	truncated: boolean;
+};
+
 export type ApiError = { error: string };
 
 const nullable = <T extends v.GenericSchema>(s: T) => v.nullable(s);
@@ -420,6 +472,47 @@ export const KpiDaySchema: v.GenericSchema<KpiDay> = v.object({
 export const KpisResponseSchema: v.GenericSchema<KpisResponse> = v.object({
 	items: v.array(KpiDaySchema),
 });
+
+export const StateValuesSchema: v.GenericSchema<StateValues> = v.object({
+	mood: num,
+	energy: num,
+	presence: str,
+	system_stress: num,
+	degraded_mode: bool,
+});
+
+export const StateTransitionViewSchema: v.GenericSchema<StateTransitionView> =
+	v.object({
+		id: str,
+		occurred_at: str,
+		reason: str,
+		source_event_id: str,
+		before: StateValuesSchema,
+		after: StateValuesSchema,
+	});
+
+export const RelationshipChangeViewSchema: v.GenericSchema<RelationshipChangeView> =
+	v.object({
+		id: str,
+		entity_id: str,
+		display_name: nullable(str),
+		occurred_at: str,
+		reason: str,
+		summary: str,
+		familiarity_delta: num,
+		trust_delta: num,
+		familiarity: num,
+		trust: num,
+	});
+
+export const StateHistoryResponseSchema: v.GenericSchema<StateHistoryResponse> =
+	v.object({
+		since: str,
+		state_at_start: nullable(StateValuesSchema),
+		transitions: v.array(StateTransitionViewSchema),
+		relationships: v.array(RelationshipChangeViewSchema),
+		truncated: bool,
+	});
 
 export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
 	error: str,
