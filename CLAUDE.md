@@ -14,6 +14,7 @@
 
 - `apps/worker`: Cloudflare Worker（`cf` CLI + `cloudflare.config.ts`、Wrangler を委譲先に使う。Vite は使わない）
 - `packages/core`: `@yunomi/core`。ID、ドメインエラー、Envelope、EventBus。Workers 型に依存しない
+- `packages/capabilities`: `@yunomi/capabilities`。道具の契約、道具の定義、policy の判定、adapter。Workers 型に依存せず、`packages/llm` とは互いに import しない
 - `packages/admin-contract`: `@yunomi/admin-contract`。Admin 読み取り API（`/admin/api/...`）の応答型と Valibot スキーマ。Worker・`ykm`・Admin Web が共有する
 - `apps/cli`: `@yunomi/cli`（bin `ykm`）。Admin API を読む CLI。ビルドせず Node 24 の type stripping で `src/bin.ts` を実行する
 - `apps/admin`: `@yunomi/admin`。Admin Web（Vite + plain DOM）。ビルド成果物は `apps/worker/scripts/embed-admin.ts` で Worker に埋め込み、`/admin/` で配信する
