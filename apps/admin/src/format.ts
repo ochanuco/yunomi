@@ -13,7 +13,12 @@ export const jst = (iso: string | null): string => {
 
 export const jstTime = (d: Date): string => jst(d.toISOString()).slice(11);
 
-export const num = (n: number): string => n.toFixed(2);
+/** 値は 0..1（mood は -1..1）。人が読むときは割合で出す。 */
+export const pct = (n: number): string => `${Math.round(n * 100)}%`;
+
+/** 差分は 1 ターンで数 % 程度なので、小数 1 桁まで出さないと 0% に潰れる。 */
+export const signedPct = (n: number): string =>
+	`${n > 0 ? "+" : ""}${+(n * 100).toFixed(1)}%`;
 
 export const shortModel = (m: string | null): string =>
 	m ? m.replace(/^claude-/, "") : "-";

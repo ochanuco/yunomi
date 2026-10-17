@@ -1,4 +1,4 @@
-import { jst } from "./format.ts";
+import { jst, pct } from "./format.ts";
 import type { Point, Span } from "./history.ts";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -88,7 +88,7 @@ export const renderChart = (spec: ChartSpec): HTMLElement => {
 					y: y(v) + 4,
 					"text-anchor": "end",
 				},
-				String(+v.toFixed(2)),
+				pct(v),
 			),
 		);
 	}
@@ -122,7 +122,7 @@ export const renderChart = (spec: ChartSpec): HTMLElement => {
 					svg(
 						"title",
 						{},
-						`${s.label} ${p.v.toFixed(2)} (${jst(new Date(p.t).toISOString())} JST)`,
+						`${s.label} ${pct(p.v)} (${jst(new Date(p.t).toISOString())} JST)`,
 					),
 				),
 			);

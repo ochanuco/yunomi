@@ -22,7 +22,7 @@ describe("renderStatus", () => {
 	it("State と件数と relationship を JST で出す", () => {
 		const el = renderStatus(status, [relationship]);
 		const text = el.textContent ?? "";
-		expect(text).toContain("0.30");
+		expect(text).toContain("30%");
 		expect(text).toContain("2026-10-11 12:00:00");
 		expect(text).toContain("alice");
 		expect(text).toContain("pending candidates");
@@ -148,8 +148,8 @@ describe("renderStatus の推移", () => {
 		const neg = [...el.querySelectorAll(".delta-neg")].map(
 			(e) => e.textContent,
 		);
-		expect(pos).toContain("+0.02");
-		expect(neg).toContain("-0.01");
+		expect(pos).toContain("+2%");
+		expect(neg).toContain("-1%");
 		expect(el.querySelector('.range a[aria-current="page"]')?.textContent).toBe(
 			"7d",
 		);
