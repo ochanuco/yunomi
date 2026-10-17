@@ -22,6 +22,7 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API_BASE = "https://www.googleapis.com/calendar/v3";
 const TOKEN_REUSE_MARGIN_MS = 60_000;
 const MAX_RESULTS = 50;
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 // Google Calendar の予定 ID は base32hex の文字（0-9 と a-v）で 5〜1024 文字。
 const EVENT_ID_PREFIX = "c0";
@@ -36,6 +37,8 @@ export type GoogleCalendarDeps = {
 	};
 	calendarId: string;
 	now?: () => Date;
+	/** token endpoint と Calendar API への fetch ごとの待ち時間の上限（ms）。既定は 10 秒。 */
+	timeoutMs?: number;
 };
 
 type AccessToken = { readonly value: string; readonly expiresAt: number };
@@ -47,6 +50,16 @@ const TokenResponse = v.object({
 
 const OAuthErrorBody = v.object({
 	error: v.pipe(v.string(), v.regex(/^[a-z_]{1,40}$/)),
+});
+
+const ApiErrorReason = v.object({ reason: v.optional(v.string()) });
+
+const ApiErrorBody = v.object({
+	error: v.object({
+		status: v.optional(v.string()),
+		errors: v.optional(v.array(ApiErrorReason)),
+		details: v.optional(v.array(ApiErrorReason)),
+	}),
 });
 
 const EventTime = v.union([
@@ -78,6 +91,25 @@ const CreateResponse = v.object({
 const unavailable = (detail: string, retryable = true): DomainError => {
 	const base = externalServiceUnavailable({ service: SERVICE });
 	return { ...base, retryable, message: `${base.message}: ${detail}` };
+};
+
+// Calendar API はクォータ超過を 429 ではなく 403 で返すことがある。reason は errors では rateLimitExceeded、
+// details の ErrorInfo では RATE_LIMIT_EXCEEDED と表記が違うので、大文字小文字と _ を無視して比べる。
+const QUOTA_REASONS = new Set(["ratelimitexceeded", "userratelimitexceeded"]);
+
+const isQuotaExceeded = (body: unknown): boolean => {
+	const parsed = v.safeParse(ApiErrorBody, body);
+	if (!parsed.success) return false;
+	const { status, errors = [], details = [] } = parsed.output.error;
+	return [
+		status,
+		...errors.map((e) => e.reason),
+		...details.map((d) => d.reason),
+	].some(
+		(reason) =>
+			reason !== undefined &&
+			QUOTA_REASONS.has(reason.replaceAll("_", "").toLowerCase()),
+	);
 };
 
 const parseRetryAfter = (
@@ -112,11 +144,33 @@ export const createGoogleCalendarAdapter = (
 	// Workers の fetch は this が globalThis でないと Illegal invocation になるため、プロパティ越しに呼ばない。
 	const doFetch = deps.fetch;
 	const now = deps.now ?? (() => new Date());
+	const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const eventsUrl = `${API_BASE}/calendars/${encodeURIComponent(deps.calendarId)}/events`;
 	let cached: AccessToken | null = null;
 
 	const retryAfterMs = (res: Response): number | null =>
 		parseRetryAfter(res.headers.get("retry-after"), now().getTime());
+
+	const request = async (
+		what: string,
+		url: string,
+		init: RequestInit,
+	): Promise<Result<Response, DomainError>> => {
+		try {
+			return ok(
+				await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
+			);
+		} catch (e) {
+			const timedOut = e instanceof Error && e.name === "TimeoutError";
+			return err(
+				unavailable(
+					timedOut
+						? `${what} の応答がタイムアウトした`
+						: `${what} に接続できない`,
+				),
+			);
+		}
+	};
 
 	// 4xx は 429 を除いて、リクエストを直すまで通らない。invalid_grant（失効・取り消された refresh token）もここ。
 	const tokenFailure = async (res: Response): Promise<DomainError> => {
@@ -136,21 +190,18 @@ export const createGoogleCalendarAdapter = (
 
 	const requestToken = async (): Promise<Result<AccessToken, DomainError>> => {
 		const { clientId, clientSecret, refreshToken } = deps.credentials;
-		let res: Response;
-		try {
-			res = await doFetch(TOKEN_URL, {
-				method: "POST",
-				headers: { "content-type": "application/x-www-form-urlencoded" },
-				body: new URLSearchParams({
-					client_id: clientId,
-					client_secret: clientSecret,
-					refresh_token: refreshToken,
-					grant_type: "refresh_token",
-				}).toString(),
-			});
-		} catch {
-			return err(unavailable("token endpoint に接続できない"));
-		}
+		const sent = await request("token endpoint", TOKEN_URL, {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				client_id: clientId,
+				client_secret: clientSecret,
+				refresh_token: refreshToken,
+				grant_type: "refresh_token",
+			}).toString(),
+		});
+		if (!sent.ok) return sent;
+		const res = sent.value;
 		if (!res.ok) return err(await tokenFailure(res));
 		const body = await readJson(res, TokenResponse, "token");
 		if (!body.ok) return body;
@@ -184,21 +235,15 @@ export const createGoogleCalendarAdapter = (
 	): Promise<Result<Response, DomainError>> => {
 		const token = await accessToken(forceRefresh);
 		if (!token.ok) return token;
-		try {
-			return ok(
-				await doFetch(url, {
-					...init,
-					headers: {
-						authorization: `Bearer ${token.value}`,
-						...(init.body === undefined
-							? {}
-							: { "content-type": "application/json" }),
-					},
-				}),
-			);
-		} catch {
-			return err(unavailable("Calendar API に接続できない"));
-		}
+		return request("Calendar API", url, {
+			...init,
+			headers: {
+				authorization: `Bearer ${token.value}`,
+				...(init.body === undefined
+					? {}
+					: { "content-type": "application/json" }),
+			},
+		});
 	};
 
 	// 401 は access token の失効。取り直して 1 回だけ再試行し、それでも 401 なら呼び出し側に返す。
@@ -211,9 +256,13 @@ export const createGoogleCalendarAdapter = (
 		return callOnce(url, init, true);
 	};
 
-	// 403 は権限、404 はカレンダーが無い、401 は取り直しても通らなかった。設定を直すまで直らない。
-	const apiFailure = (res: Response): DomainError => {
-		if (res.status === 429) {
+	// クォータ超過でない 403 は権限、404 はカレンダーが無い、401 は取り直しても通らなかった。設定を直すまで直らない。
+	const apiFailure = async (res: Response): Promise<DomainError> => {
+		if (
+			res.status === 429 ||
+			(res.status === 403 &&
+				isQuotaExceeded(await res.json().catch(() => null)))
+		) {
 			return rateLimited({ retryAfterMs: retryAfterMs(res) });
 		}
 		const detail =
@@ -235,7 +284,7 @@ export const createGoogleCalendarAdapter = (
 		});
 		const res = await send(`${eventsUrl}?${query}`, { method: "GET" });
 		if (!res.ok) return res;
-		if (!res.value.ok) return err(apiFailure(res.value));
+		if (!res.value.ok) return err(await apiFailure(res.value));
 		const body = await readJson(res.value, ListResponse, "予定の一覧");
 		if (!body.ok) return body;
 
@@ -291,7 +340,7 @@ export const createGoogleCalendarAdapter = (
 				summary: `予定は登録済みだった（${period}）`,
 			});
 		}
-		if (!res.value.ok) return err(apiFailure(res.value));
+		if (!res.value.ok) return err(await apiFailure(res.value));
 		const body = await readJson(res.value, CreateResponse, "予定の作成");
 		if (!body.ok) return body;
 		return ok({

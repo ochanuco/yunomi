@@ -1,5 +1,5 @@
 import type { DomainError, Result } from "@yunomi/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CallContext, CapabilityResponse } from "../contract.ts";
 import {
 	calendarCreateEvent,
@@ -8,7 +8,8 @@ import {
 import { createGoogleCalendarAdapter } from "./google-calendar.ts";
 
 type Call = { url: URL; init: RequestInit };
-type Step = Response | Error;
+// "hang" は応答を返さず、渡された signal が中断されたときに失敗する。
+type Step = Response | Error | "hang";
 
 const credentials = {
 	clientId: "client-id",
@@ -35,7 +36,11 @@ const empty = (status: number, headers: HeaderMap = {}) =>
 	new Response(null, { status, headers });
 
 // 並べた応答を順に返す fetch。想定より多く呼ばれたら失敗させる。
-const setup = (steps: Step[], calendarId = "owner@example.com") => {
+const setup = (
+	steps: Step[],
+	calendarId = "owner@example.com",
+	timeoutMs?: number,
+) => {
 	const calls: Call[] = [];
 	let nowMs = START;
 	const fetchFn = (async (
@@ -46,6 +51,12 @@ const setup = (steps: Step[], calendarId = "owner@example.com") => {
 		const step = steps.shift();
 		if (step === undefined) throw new Error("想定外の fetch");
 		if (step instanceof Error) throw step;
+		if (step === "hang") {
+			const signal = init?.signal;
+			return new Promise<Response>((_, reject) => {
+				signal?.addEventListener("abort", () => reject(signal.reason));
+			});
+		}
 		return step;
 	}) as typeof fetch;
 	const adapter = createGoogleCalendarAdapter({
@@ -53,6 +64,7 @@ const setup = (steps: Step[], calendarId = "owner@example.com") => {
 		credentials,
 		calendarId,
 		now: () => new Date(nowMs),
+		...(timeoutMs === undefined ? {} : { timeoutMs }),
 	});
 	return {
 		adapter,
@@ -619,6 +631,181 @@ describe.each([
 			service: "google_calendar",
 			retryable: true,
 		});
+	});
+
+	it("Calendar API が時間内に応答しなければ retryable な externalServiceUnavailable", async () => {
+		const { adapter } = setup([token(), "hang"], undefined, 20);
+		const error = errorOf(await run(adapter));
+		expect(error).toMatchObject({
+			type: "ExternalServiceUnavailable",
+			service: "google_calendar",
+			retryable: true,
+		});
+		expect(error.message).toContain("Calendar API");
+		expect(error.message).toContain("タイムアウト");
+	});
+
+	describe("403 のクォータ超過", () => {
+		const quotaBodies = [
+			[
+				"errors の rateLimitExceeded",
+				{
+					error: {
+						code: 403,
+						message: "Rate Limit Exceeded",
+						errors: [{ domain: "usageLimits", reason: "rateLimitExceeded" }],
+						status: "PERMISSION_DENIED",
+					},
+				},
+			],
+			[
+				"errors の userRateLimitExceeded",
+				{
+					error: {
+						code: 403,
+						errors: [
+							{ domain: "usageLimits", reason: "userRateLimitExceeded" },
+						],
+					},
+				},
+			],
+			[
+				"details の RATE_LIMIT_EXCEEDED",
+				{
+					error: {
+						code: 403,
+						status: "PERMISSION_DENIED",
+						details: [
+							{
+								"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+								reason: "RATE_LIMIT_EXCEEDED",
+							},
+						],
+					},
+				},
+			],
+			[
+				"status の RATE_LIMIT_EXCEEDED",
+				{ error: { code: 403, status: "RATE_LIMIT_EXCEEDED" } },
+			],
+		] as const;
+
+		it.each(quotaBodies)("%s は rateLimited にする", async (_, body) => {
+			const { adapter } = setup([token(), json(body, 403)]);
+			expect(errorOf(await run(adapter))).toMatchObject({
+				type: "RateLimited",
+				retryable: true,
+				retryAfterMs: null,
+			});
+		});
+
+		it("Retry-After があれば ms にする", async () => {
+			const { adapter } = setup([
+				token(),
+				json(quotaBodies[0][1], 403, { "retry-after": "20" }),
+			]);
+			expect(errorOf(await run(adapter))).toMatchObject({
+				type: "RateLimited",
+				retryAfterMs: 20_000,
+			});
+		});
+
+		it.each([
+			[
+				"クォータ以外の reason",
+				json(
+					{
+						error: {
+							code: 403,
+							errors: [{ reason: "insufficientPermissions" }],
+							status: "PERMISSION_DENIED",
+							details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }],
+						},
+					},
+					403,
+				),
+			],
+			["JSON でない本文", new Response("<html>", { status: 403 })],
+			["空の本文", empty(403)],
+			["error が object でない本文", json({ error: "forbidden" }, 403)],
+			["errors が配列でない本文", json({ error: { errors: "x" } }, 403)],
+		])(
+			"%s は従来どおり retryable でない externalServiceUnavailable にする",
+			async (_, response) => {
+				const { adapter } = setup([token(), response]);
+				expect(errorOf(await run(adapter))).toMatchObject({
+					type: "ExternalServiceUnavailable",
+					service: "google_calendar",
+					retryable: false,
+				});
+			},
+		);
+
+		it("403 以外の status は本文にクォータ超過の reason があっても rateLimited にしない", async () => {
+			const { adapter } = setup([token(), json(quotaBodies[0][1], 404)]);
+			expect(errorOf(await run(adapter)).type).toBe(
+				"ExternalServiceUnavailable",
+			);
+		});
+	});
+});
+
+describe("タイムアウト", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("token endpoint が時間内に応答しなければ retryable な externalServiceUnavailable", async () => {
+		const { adapter, calls } = setup(["hang"], undefined, 20);
+		const error = errorOf(await list(adapter));
+		expect(error).toMatchObject({
+			type: "ExternalServiceUnavailable",
+			service: "google_calendar",
+			retryable: true,
+		});
+		expect(error.message).toContain("token endpoint");
+		expect(error.message).toContain("タイムアウト");
+		expect(calls).toHaveLength(1);
+	});
+
+	it("タイムアウトした token は覚えず、次の呼び出しでまた取りにいく", async () => {
+		const { adapter, calls } = setup(
+			["hang", token(), json({ items: [] })],
+			undefined,
+			20,
+		);
+		errorOf(await list(adapter));
+		successOf(await list(adapter));
+		expect(calls).toHaveLength(3);
+	});
+
+	it("token endpoint と Calendar API の fetch に、既定 10 秒の signal を付ける", async () => {
+		const timeout = vi.spyOn(AbortSignal, "timeout");
+		const { adapter, calls } = setup([token(), json({ items: [] })]);
+		successOf(await list(adapter));
+		expect(timeout.mock.calls).toEqual([[10_000], [10_000]]);
+		for (const call of calls) {
+			expect(call.init.signal).toBeInstanceOf(AbortSignal);
+		}
+	});
+
+	it("deps の timeoutMs で秒数を上書きできる", async () => {
+		const timeout = vi.spyOn(AbortSignal, "timeout");
+		const { adapter } = setup([token(), json({ items: [] })], undefined, 5000);
+		successOf(await list(adapter));
+		expect(timeout.mock.calls).toEqual([[5000], [5000]]);
+	});
+
+	it("401 の取り直しの fetch にも signal を付ける", async () => {
+		const timeout = vi.spyOn(AbortSignal, "timeout");
+		const { adapter } = setup([
+			token(),
+			empty(401),
+			token("tok-2"),
+			json({ items: [] }),
+		]);
+		successOf(await list(adapter));
+		expect(timeout).toHaveBeenCalledTimes(4);
 	});
 });
 
