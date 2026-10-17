@@ -80,8 +80,8 @@
 | C07 | CE3 | Worker の組み立てと保存、Audit | C05, C06 | - | #138 |
 | C08 | CE4 | Google の OAuth と secret の登録、prod での通しの確認 | なし（通しの確認は C07） | C01〜C06 と並行 | #137 |
 | G01 | CE5 | Gmail を読めるようにする（後続） | C07 | - | #139 |
-| P01 | CE6 | 場所の検索の道具と Google Places の adapter、組み立ての分離 | C07 | P02 と並行 | |
-| P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | |
+| P01 | CE6 | 場所の検索の道具と Google Places の adapter、組み立ての分離 | C07 | P02 と並行 | #160 |
+| P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | #161 |
 
 C08 と P02 の Google Cloud の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
