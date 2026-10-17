@@ -129,3 +129,5 @@ voice:
 capability_defaults:
   web_search: confirm
   file_write: deny
+  calendar_read: auto
+  calendar_write: confirm

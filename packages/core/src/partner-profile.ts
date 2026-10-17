@@ -7,6 +7,8 @@ const clock = v.pipe(v.string(), v.regex(/^\d{1,2}:\d{2}$/));
 
 export const capabilityModeSchema = v.picklist(["auto", "confirm", "deny"]);
 
+export type CapabilityMode = v.InferOutput<typeof capabilityModeSchema>;
+
 export const partnerProfileSchema = v.object({
 	schema_version: v.pipe(v.number(), v.integer(), v.minValue(1)),
 	partner_id: v.pipe(v.string(), v.nonEmpty()),
