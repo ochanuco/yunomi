@@ -30,7 +30,7 @@ import {
 /** ターンに道具を持たせるための部品。組み立ては Worker の入口で行う。 */
 export type TurnCapabilities = {
 	gate: CapabilityGate;
-	pending: Pick<PendingStore, "listOpen">;
+	pending: Pick<PendingStore, "listOpen" | "save">;
 	isOwner(speakerId: string): boolean;
 };
 

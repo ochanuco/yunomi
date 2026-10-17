@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # 使い方: scripts/deploy.sh <development|production>
 # CLOUDFLARE_API_TOKEN は呼び出し側が環境変数で渡す。
-# ANTHROPIC_API_KEY・DISCORD_BOT_TOKEN・AIVOICE_TOKEN・CF_ACCESS_CLIENT_ID・CF_ACCESS_CLIENT_SECRET は、設定されていれば Worker secret として一緒に反映する。
+# ANTHROPIC_API_KEY・DISCORD_BOT_TOKEN・AIVOICE_TOKEN・CF_ACCESS_CLIENT_ID・CF_ACCESS_CLIENT_SECRET と、
+# 道具（Google カレンダー）の GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・GOOGLE_REFRESH_TOKEN・GOOGLE_CALENDAR_ID・OWNER_DISCORD_USER_ID は、
+# 設定されていれば Worker secret として一緒に反映する。
 set -euo pipefail
 
 mode=${1:?usage: deploy.sh <development|production>}
@@ -69,7 +71,7 @@ secrets_file=$(mktemp)
 trap 'rm -f "$secrets_file"' EXIT
 chmod 600 "$secrets_file"
 # secret を argv に載せないため、deploy の --secrets-file（.env 形式）で渡す
-for name in ANTHROPIC_API_KEY DISCORD_BOT_TOKEN AIVOICE_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
+for name in ANTHROPIC_API_KEY DISCORD_BOT_TOKEN AIVOICE_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REFRESH_TOKEN GOOGLE_CALENDAR_ID OWNER_DISCORD_USER_ID; do
   if [ -n "${!name:-}" ]; then
     printf '%s=%s\n' "$name" "${!name}" >> "$secrets_file"
   fi
