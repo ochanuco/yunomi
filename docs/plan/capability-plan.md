@@ -10,7 +10,7 @@
 
 デモ手順:
 
-1. dev サーバーでオーナーが「明日の予定ある？」と聞く → Yukarin が dev 用のテストカレンダーを読み、そのターンのうちに答える。
+1. オーナーが「明日の予定ある？」と聞く → Yukarin がオーナーのメインカレンダーを読み、そのターンのうちに答える。
 2. 「明日19時に歯医者入れて」と頼む → Yukarin が「18日 19:00 から歯医者、で入れていい？」と聞き返す。この時点ではカレンダーに何も書かれていない。
 3. 「うん」と返す → 予定が登録され、Yukarin が登録したことを伝える。
 4. 「やっぱりやめて」と返したときや、10 分以内に返事がないときは、保留が取り消され、何も登録されない。
@@ -23,7 +23,7 @@
 | CE1 | 道具の契約、policy の判定、保留中の操作の状態遷移が、Workers に依存しない形で揃う | なし |
 | CE2 | brain が LLM の tool use で道具を呼び、結果を受けてから TurnResponse を返せる | CE1 |
 | CE3 | カレンダーの確認と登録が、Worker の中で gate と adapter を通って動く | CE1, CE2, CE4 |
-| CE4 | Google の OAuth が通り、dev で通しの確認が取れる | なし |
+| CE4 | Google の OAuth が通り、prod で通しの確認が取れる | なし |
 | CE5 | （後続）Gmail の検索・本文の要約・下書き | CE3 |
 
 ### CE1. 道具の契約と gate
@@ -42,13 +42,13 @@
 
 - 技術範囲: `packages/capabilities` に Google Calendar の adapter（予定の一覧と作成、refresh token からの access token の取得、`fetch` のみ）。予定の ID は Discord のメッセージ ID から決め、同じ依頼の二重登録を防ぐ。`apps/worker` に組み立て（オーナーの Discord user id、カレンダー ID、Google の secret）、保留中の操作の DO SQLite テーブル、Audit の kind への道具の実行の追加、secret の一覧と README の更新。eval の `08-cannot-do` の期待値を見直す。
 - 非ゴール: 予定の変更・削除、カレンダーの内部ミラー、Discord のボタンでの確認。
-- Done: fake の adapter で組み立てたテストで、CE2 の経路が Worker 上で再現する。CE4 が揃ったら、dev のテストカレンダーで確認と登録の通しが取れる。
+- Done: fake の adapter で組み立てたテストで、CE2 の経路が Worker 上で再現する。CE4 が揃ったら、prod で確認と登録の通しが取れる。
 
 ### CE4. Google の OAuth と通しの確認
 
-- 技術範囲: Google Cloud のプロジェクトと OAuth クライアント、同意画面の公開ステータス（本番）、scope `calendar.events`、refresh token を取得する手順、1Password への保存、dev と prod の Worker secret の登録、dev 用のテストカレンダー。
-- 非ゴール: prod での通しの確認、Gmail の scope。
-- Done: dev の Worker から Google Calendar API を呼べる。refresh token が 7 日で失効しない状態になっている。
+- 技術範囲: Google Cloud のプロジェクトと OAuth クライアント、同意画面の公開ステータス（本番）、scope `calendar.events`、refresh token を取得する手順、1Password への保存、prod の Worker secret の登録。
+- 非ゴール: dev の Worker への Google の認証情報、Gmail の scope。
+- Done: prod の Worker から Google Calendar API を呼べる。refresh token が 7 日で失効しない状態になっている。
 
 ### CE5. Gmail（後続）
 
@@ -69,10 +69,10 @@
 | C05 | CE2 | turn.ts の道具ループとプロンプト | C01, C02, C04 | C06 と並行 | #135 |
 | C06 | CE3 | Google Calendar の adapter | C01 | C02, C04, C05 と並行 | #136 |
 | C07 | CE3 | Worker の組み立てと保存、Audit | C05, C06 | - | #138 |
-| C08 | CE4 | Google の OAuth と secret の登録、dev での通しの確認 | なし（通しの確認は C07） | C01〜C06 と並行 | #137 |
+| C08 | CE4 | Google の OAuth と secret の登録、prod での通しの確認 | なし（通しの確認は C07） | C01〜C06 と並行 | #137 |
 | G01 | CE5 | Gmail を読めるようにする（後続） | C07 | - | #139 |
 
-C08 の Google Cloud と OAuth の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と dev での通しの確認を Done とする。
+C08 の Google Cloud と OAuth の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
 ## 依存グラフ
 
@@ -121,7 +121,7 @@ C01 → C02 → C05 → C07 と、C03 → C04 → C05 → C07 の 2 本。C05 �
 
 要判断: 保留の期限。この計画では 10 分とし、同じチャンネルで新しい提案が来たら古い保留は取り消す。
 
-要判断: dev の書き込み先。`security.md` の dev safety に従い、dev は専用のテストカレンダーにだけ書き込む。カレンダー ID は環境ごとの binding で持つ。
+要判断: dev での扱い。dev の Worker には Google の認証情報を置かず、カレンダーの道具は prod だけで有効にする（認証情報が揃わなければ道具を無効にする組み立てなので、dev では今までどおり道具なしで動く）。prod はオーナーのメインカレンダー（`primary`）を使う。dev での確認は fake の adapter を使ったテストで行い、通しの確認は prod で行う。
 
 要判断: `tool_intents` の扱い。この計画では TurnResponse から外し、Audit に実際の道具の呼び出しを残す。Admin の表示も合わせて変える。
 
@@ -129,6 +129,6 @@ C01 → C02 → C05 → C07 と、C03 → C04 → C05 → C07 の 2 本。C05 �
 
 1. C01 packages/capabilities の契約、道具の定義、policy の判定
 2. C03 tools と構造化出力の併用を確かめる
-3. C08 Google の OAuth と secret の登録、dev での通しの確認
+3. C08 Google の OAuth と secret の登録、prod での通しの確認
 
 C01 で契約を固め、C03 で LLM 側の前提を確かめると、C02・C04・C06 が並行に進められる。C08 はオーナーの作業なので最初から走らせる。
