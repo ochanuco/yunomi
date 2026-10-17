@@ -185,7 +185,7 @@ export type AuditItem = {
 	latency_ms: number;
 	/** 受信本文。保持期間（30 日）を過ぎると行ごと消える。 */
 	inbound_content: string;
-	/** state / relationship / memory / openLoops / interestOpinion / tool_intents など。形は Worker 側の実装に従う。 */
+	/** state / relationship / memory / openLoops / interestOpinion / toolCalls など。形は Worker 側の実装に従う。 */
 	detail: Record<string, unknown>;
 	occurred_at: string;
 	created_at: string;

@@ -14,6 +14,7 @@
 	},
 	"dependencies": {
 		"@yunomi/admin-contract": "workspace:*",
+		"@yunomi/capabilities": "workspace:*",
 		"@yunomi/conversation": "workspace:*",
 		"@yunomi/core": "workspace:*",
 		"@yunomi/llm": "workspace:*",

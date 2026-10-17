@@ -38,7 +38,6 @@ export const turn = (over: Partial<TurnResponse> = {}): TurnResponse => ({
 	},
 	speak_aloud: false,
 	voice_channel: "stay",
-	tool_intents: [],
 	needs_review: false,
 	...over,
 });

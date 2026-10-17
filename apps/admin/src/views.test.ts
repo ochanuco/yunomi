@@ -119,7 +119,7 @@ describe("audit", () => {
 		const text = el.textContent ?? "";
 		expect(text).toContain("挨拶された");
 		expect(text).toContain("in 100 / out 20");
-		expect(text).toContain('"toolIntents": []');
+		expect(text).toContain('"toolCalls": []');
 		el.querySelector("button")?.click();
 		expect(onClose).toHaveBeenCalled();
 	});

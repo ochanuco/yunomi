@@ -49,7 +49,7 @@ export const ignoreOutcome = (
 		usage: null,
 		latencyMs: null,
 		errorType: null,
-		toolIntents: [],
+		toolCalls: [],
 		state: null,
 		relationship: null,
 		memory: null,

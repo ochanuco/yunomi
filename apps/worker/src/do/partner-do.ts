@@ -39,6 +39,7 @@ import { createHistoryWriter, type HistoryWriter } from "./history.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
+import type { TurnCapabilities } from "./tool-loop.ts";
 import { runTurn } from "./turn.ts";
 import { VoiceBody, wakeIfAsleep } from "./voice.ts";
 
@@ -77,7 +78,7 @@ export class PartnerDO extends DurableObject<Env> {
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	// 以下 4 つはテストが runInDurableObject で差し替える seam。
+	// 以下 5 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
 	/** 既定は ANTHROPIC_API_KEY の ClaudeProvider。テストは FakeLLMProvider を包んだ router を返す。 */
 	createRouter: (env: Env) => ModelRouter = defaultRouter;
@@ -86,6 +87,8 @@ export class PartnerDO extends DurableObject<Env> {
 		defaultCommunication;
 	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
 	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
+	/** 道具の部品。未設定ならターンは道具なしで返事を作る。 */
+	capabilities: TurnCapabilities | undefined = undefined;
 	pipeline: Pipeline = (msg, onEngaged) =>
 		runTurn(
 			{
@@ -103,6 +106,7 @@ export class PartnerDO extends DurableObject<Env> {
 				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
 				onEngaged,
+				capabilities: this.capabilities,
 			},
 			msg,
 		);
