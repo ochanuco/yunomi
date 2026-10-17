@@ -38,6 +38,15 @@ describe("politenessScore", () => {
 		expect(politenessScore("よい一日になりますように。")).toBe(1);
 	});
 
+	it("敬語の言い回しで言いさす文末も丁寧に数える", () => {
+		expect(
+			politenessScore("話せる範囲で構いませんので、あなたのペースでどうぞ。"),
+		).toBe(1);
+		expect(politenessScore("帰り道、お気をつけて。")).toBe(1);
+		expect(politenessScore("夜更かしにはご注意を。")).toBe(1);
+		expect(politenessScore("最近の話を聞かせていただければ。")).toBe(1);
+	});
+
 	it("短い応諾は分母に入れない", () => {
 		expect(politenessScore("ぜひ。きれいに見えるといいですね。")).toBe(1);
 	});

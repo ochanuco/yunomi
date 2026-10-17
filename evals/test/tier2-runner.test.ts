@@ -125,6 +125,9 @@ describe("Tier 2 runner（Fake provider）", () => {
 		expect(turnReq?.output.name).toBe("turn_response");
 		expect(judgeReq?.model).toBe(SONNET);
 		expect(judgeReq?.output.name).toBe("persona_judge");
+		expect(judgeReq?.messages[0]?.content).toContain(
+			"<current_time>\n2026-01-01 09:00 JST（木）\n</current_time>",
+		);
 
 		const [greeting, cannot] = report.scenarios;
 		expect(greeting?.metrics.reply_rate.rate).toBe(0);

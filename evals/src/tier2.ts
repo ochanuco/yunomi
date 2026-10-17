@@ -253,9 +253,9 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	const opinionTopics = new Set(opts.profile.opinions.map((o) => o.topic));
 
 	for (const scenario of opts.scenarios) {
-		const prompt = builder.build(
-			toPromptInput(scenario, opts.profile, opts.now?.()),
-		);
+		// judge にも同じ時刻を渡す。渡さないと、返事が触れた正しい時刻を作り話と判定する。
+		const now = opts.now?.() ?? new Date();
+		const prompt = builder.build(toPromptInput(scenario, opts.profile, now));
 		const samples: Sample[] = [];
 		const errors: string[] = [];
 
@@ -300,7 +300,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				judge_error: null,
 			};
 			if (replied) {
-				const req = buildJudgeRequest(opts.profile, scenario, utterance);
+				const req = buildJudgeRequest(opts.profile, scenario, utterance, now);
 				const judged = await opts.provider.generate({
 					...req,
 					output: judgeOutput,
