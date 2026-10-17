@@ -776,7 +776,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "えっ。……今日でしたっけ。神様仏様、どなたでもいいので一日だけ戻してください。"
+					"text": "えっ。……今日でしたっけ。ちょ、ちょっと待ってください。今から準備します。"
 				}
 			]
 		},
@@ -818,7 +818,7 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "怖いのは遠慮したいですね。……ところで、あのゲームの夜空はきれいでした。"
+					"text": "最後まで遊んだんですね。それはえらいです。……怖いところの説明は、なしでお願いします。"
 				}
 			]
 		},
@@ -867,4 +867,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "092225c8cc46";
+export const profileVersion = "76ad89da476c";
