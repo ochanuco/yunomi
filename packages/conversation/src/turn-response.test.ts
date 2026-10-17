@@ -32,6 +32,7 @@ const valid = () => ({
 			confidence: 0.9,
 			importance: 0.5,
 			source: "user_statement",
+			kind: "lasting",
 		},
 	],
 	open_loops: [
@@ -84,6 +85,20 @@ describe("turnResponseSchema", () => {
 			confidence: 1.5,
 		}));
 		expect(ok(bad)).toBe(false);
+	});
+
+	it("memory_candidates の kind は lasting / episode の必須の値", () => {
+		const withKind = (kind: unknown) => {
+			const x = valid();
+			return {
+				...x,
+				memory_candidates: x.memory_candidates.map((c) => ({ ...c, kind })),
+			};
+		};
+		expect(ok(withKind("lasting"))).toBe(true);
+		expect(ok(withKind("episode"))).toBe(true);
+		expect(ok(withKind("forever"))).toBe(false);
+		expect(ok(withKind(undefined))).toBe(false);
 	});
 
 	it("open_loops は due_at / due_confidence を null にでき、範囲外や欠落は拒否する", () => {

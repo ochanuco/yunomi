@@ -1,17 +1,25 @@
 import {
 	CANDIDATE_TTL_MS,
 	decidePromotion,
+	type MemoryKind,
 	type MemoryObject,
 	type MemorySource,
 	newId,
 	normalizeObject,
 	normalizePredicate,
 } from "@yunomi/core";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates } from "./db/schema.ts";
 
 export const PROMPT_FACT_LIMIT = 12;
+export const PROMPT_EPISODE_LIMIT = 8;
+
+/** facts.decay_policy。lasting は standard、episode は episodic に残す。 */
+const DECAY_POLICY = {
+	lasting: "standard",
+	episode: "episodic",
+} as const satisfies Record<MemoryKind, string>;
 
 export type CandidateInput = {
 	subject: string;
@@ -20,6 +28,7 @@ export type CandidateInput = {
 	confidence: number;
 	importance: number;
 	source: MemorySource;
+	kind: MemoryKind;
 };
 
 export type MemoryWriteContext = {
@@ -38,7 +47,13 @@ export type CandidateOutcome = {
 	conflictFactId: string | null;
 };
 
-export type PromptFact = { predicate: string; object: string };
+export type PromptFact = {
+	kind: MemoryKind;
+	predicate: string;
+	object: string;
+	/** UTC の ISO 8601。 */
+	observedAt: string;
+};
 
 const SPEAKER_WORDS = new Set(["user", "speaker"]);
 
@@ -54,6 +69,7 @@ export type MemoryRepo = {
 		ctx: MemoryWriteContext,
 		candidates: CandidateInput[],
 	): Promise<CandidateOutcome[]>;
+	/** 続く事実（重要度順）のあとに出来事（新しい順）を並べて返す。 */
 	topFacts(partnerId: string, entityId: string): Promise<PromptFact[]>;
 };
 
@@ -161,7 +177,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 					await db.batch([
 						db
 							.update(facts)
-							.set({ observedAt: at })
+							.set({ observedAt: at, decayPolicy: DECAY_POLICY[c.kind] })
 							.where(eq(facts.id, decision.factId)),
 						candidateRow("promoted", null),
 					]);
@@ -187,6 +203,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 						source: c.source,
 						observedAt: at,
 						validFrom: at,
+						decayPolicy: DECAY_POLICY[c.kind],
 					}),
 					candidateRow("promoted", null),
 				]);
@@ -206,28 +223,45 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 		},
 
 		async topFacts(partnerId, entityId) {
-			const rows = await db
-				.select({
-					predicate: facts.predicate,
-					objectType: facts.objectType,
-					objectValue: facts.objectValue,
-					objectDisplay: facts.objectDisplay,
-				})
-				.from(facts)
-				.where(
-					and(
-						eq(facts.partnerId, partnerId),
-						eq(facts.subjectEntityId, entityId),
-						isNull(facts.validTo),
-						isNull(facts.supersededBy),
-					),
-				)
-				.orderBy(desc(facts.importance), desc(facts.observedAt))
-				.limit(PROMPT_FACT_LIMIT);
-			return rows.map((r) => ({
-				predicate: r.predicate,
-				object: r.objectDisplay ?? r.objectValue,
-			}));
+			const current = and(
+				eq(facts.partnerId, partnerId),
+				eq(facts.subjectEntityId, entityId),
+				isNull(facts.validTo),
+				isNull(facts.supersededBy),
+			);
+			const columns = {
+				predicate: facts.predicate,
+				objectValue: facts.objectValue,
+				objectDisplay: facts.objectDisplay,
+				observedAt: facts.observedAt,
+			};
+			// episodic 以外の値は standard として扱う。
+			const [lasting, episodes] = await db.batch([
+				db
+					.select(columns)
+					.from(facts)
+					.where(and(current, ne(facts.decayPolicy, DECAY_POLICY.episode)))
+					.orderBy(desc(facts.importance), desc(facts.observedAt))
+					.limit(PROMPT_FACT_LIMIT),
+				db
+					.select(columns)
+					.from(facts)
+					.where(and(current, eq(facts.decayPolicy, DECAY_POLICY.episode)))
+					.orderBy(desc(facts.observedAt))
+					.limit(PROMPT_EPISODE_LIMIT),
+			]);
+			const promptFact =
+				(kind: MemoryKind) =>
+				(r: (typeof lasting)[number]): PromptFact => ({
+					kind,
+					predicate: r.predicate,
+					object: r.objectDisplay ?? r.objectValue,
+					observedAt: r.observedAt,
+				});
+			return [
+				...lasting.map(promptFact("lasting")),
+				...episodes.map(promptFact("episode")),
+			];
 		},
 	};
 };

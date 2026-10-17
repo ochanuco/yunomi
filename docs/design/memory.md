@@ -144,6 +144,12 @@ Old low-importance memory:
 - may be compressed
 - may become deletion candidate if low importance and unused for long periods
 
+MVP behavior:
+- A Fact's `decay_policy` is `standard` (lasting: name, preference, residence, job) or `episodic` (a plan or one-off event).
+- Episodic Facts appear in the prompt with the date they were heard (JST).
+- Once 3 or more JST calendar days have passed, an episodic Fact moves to a section the partner does not bring up on its own.
+- Nothing is deleted.
+
 ## Compression
 
 Similar Episodes may be clustered.

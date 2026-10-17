@@ -70,7 +70,7 @@ describe("buildGatePrompt", () => {
 		for (const absent of [
 			"秘密の本文",
 			"後ろの段落",
-			"関連する記憶",
+			"覚えていること",
 			"気分",
 			"未解決の話題",
 			"意見",

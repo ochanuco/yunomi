@@ -459,6 +459,7 @@ describe("宛先のない発言への割り込み", () => {
 								confidence: 0.9,
 								importance: 0.7,
 								source: "user_statement",
+								kind: "lasting",
 							},
 						],
 					}),

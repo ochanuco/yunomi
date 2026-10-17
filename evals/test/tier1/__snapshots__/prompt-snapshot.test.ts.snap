@@ -52,7 +52,7 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
-        "## 関連する記憶",
+        "## 覚えていること",
       ],
     },
     {
@@ -141,7 +141,7 @@ exports[`PromptBuilder × シナリオ > ブロックの並びと見出しのス
     {
       "cache": false,
       "headers": [
-        "## 関連する記憶",
+        "## 覚えていること",
       ],
     },
     {

@@ -58,6 +58,7 @@ const turn = (
 				confidence: 0.8,
 				importance: 0.5,
 				source: "user_statement" as const,
+				kind: "lasting" as const,
 			}),
 		),
 		open_loops: Array.from({ length: openLoopCount }, (_, i) => ({

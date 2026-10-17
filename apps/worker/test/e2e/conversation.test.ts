@@ -187,6 +187,7 @@ describe("再起動をまたぐ永続化", () => {
 							confidence: 0.9,
 							importance: 0.8,
 							source: "user_statement",
+							kind: "lasting",
 						},
 					],
 				}),
