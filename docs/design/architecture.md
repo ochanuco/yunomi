@@ -231,7 +231,7 @@ Future providers may include local models.
 
 Normal conversational LLM calls return one structured response including:
 
-- utterance
+- messages (the reply, split into Discord messages)
 - reply policy
 - decision summary
 - emotion delta

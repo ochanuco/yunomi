@@ -3,10 +3,12 @@ import { env, exports } from "cloudflare:workers";
 import {
 	type CommunicationPort,
 	type DomainError,
+	err,
 	initialPartnerState,
 	ok,
 	type Presence,
 	type Result,
+	rateLimited,
 	type SentMessage,
 	type SpeechResult,
 } from "@yunomi/core";
@@ -368,7 +370,7 @@ describe("VC のテキストチャットへの返事", () => {
 		const s = newScenario();
 		await report(s.channelId);
 		await installFakeLlm([
-			llmOk(turn({ utterance: "おはよう", speak_aloud: false })),
+			llmOk(turn({ messages: ["おはよう"], speak_aloud: false })),
 		]);
 		const port = fakePort();
 		const o = fakeOrgans({ availability: "ready" });
@@ -377,14 +379,41 @@ describe("VC のテキストチャットへの返事", () => {
 		const res = await sendAs(mention(s));
 
 		expect(res.action).toBe("ack");
-		expect(res.voice?.speak).toMatchObject({
-			channel_id: s.channelId,
-			text: "おはよう",
-			values: { engine: "aivoice", preset: "結月 ゆかり" },
-		});
+		expect(res.voice?.speak).toMatchObject([
+			{
+				channel_id: s.channelId,
+				text: "おはよう",
+				values: { engine: "aivoice", preset: "結月 ゆかり" },
+			},
+		]);
 		expect(port.sendText).toHaveBeenCalledTimes(1);
 		expect(o.synthesize).not.toHaveBeenCalled();
 		expect(port.sendAttachment).not.toHaveBeenCalled();
+	});
+
+	it("複数件の返事は、送れたメッセージごとに speak を並べる", async () => {
+		const s = newScenario();
+		await report(s.channelId);
+		await installFakeLlm([
+			llmOk(turn({ messages: ["えっ", "本当に", "すごい"] })),
+		]);
+		const port = fakePort();
+		port.sendText
+			.mockImplementationOnce(async () => ok({ messageId: "d-1" }))
+			.mockImplementationOnce(async () => ok({ messageId: "d-2" }))
+			.mockImplementationOnce(async () =>
+				err(rateLimited({ retryAfterMs: 9000 })),
+			);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const o = fakeOrgans({ availability: "ready" });
+		await install(port, o.organs);
+		await runInDurableObject(partnerStub(PARTNER_ID), (d) => {
+			d.sleep = async () => {};
+		});
+
+		const res = await sendAs(mention(s));
+
+		expect(res.voice?.speak?.map((x) => x.text)).toEqual(["えっ", "本当に"]);
 	});
 
 	it("speak_aloud が true でも添付ではなく VC で再生する", async () => {

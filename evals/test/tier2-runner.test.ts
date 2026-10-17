@@ -26,7 +26,7 @@ const result = (output: unknown) =>
 
 const turn = (
 	reply_policy: "reply" | "ignore",
-	utterance: string,
+	utterance: string | string[],
 	openLoopCount = 0,
 	signals: {
 		memoryCandidateCount?: number;
@@ -35,7 +35,12 @@ const turn = (
 	} = {},
 ) =>
 	result({
-		utterance,
+		messages:
+			typeof utterance === "string"
+				? utterance === ""
+					? []
+					: [utterance]
+				: utterance,
 		reply_policy,
 		decision_summary: "テスト。",
 		emotion_delta: { mood: 0, energy: 0 },
@@ -378,6 +383,28 @@ describe("Tier 2 runner（Fake provider）", () => {
 		expect(all.violations.map((x) => `${x.scenario}:${x.metric}`)).toEqual([
 			"first-person-question:meta_talk_rate",
 		]);
+	});
+
+	it("複数件の返事は、質問で終わるかを最後の 1 件で、judge を全文で見る", async () => {
+		const fake = new FakeLLMProvider([
+			turn("reply", ["どうしたんですか？", "まあ、いいですけど。"]),
+			verdict(),
+			turn("reply", ["なるほど。", "それで、どうなりました？"]),
+			verdict(),
+		]);
+		const report = await runTier2({
+			provider: fake,
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["greeting-mention"]),
+			samples: 2,
+		});
+		const samples = report.scenarios[0]?.samples ?? [];
+		expect(samples.map((s) => s.question_ending)).toEqual([false, true]);
+		expect(fake.requests[1]?.messages[0]?.content).toContain(
+			"どうしたんですか？\nまあ、いいですけど。",
+		);
 	});
 
 	it("黙ったサンプルは Open Loop の率の分母に入らない", async () => {

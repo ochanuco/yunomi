@@ -19,7 +19,7 @@ export const BOT = env.PARTNER_DISCORD_USER_ID;
 export const T0 = new Date("2026-10-11T03:00:00Z");
 
 export const turn = (over: Partial<TurnResponse> = {}): TurnResponse => ({
-	utterance: "こんにちは",
+	messages: ["こんにちは"],
 	reply_policy: "reply",
 	decision_summary: "挨拶されたので返す",
 	emotion_delta: { mood: 0, energy: 0 },
@@ -113,9 +113,8 @@ export const send = async (msg: InboundMessage) => {
 	await partnerStub(PARTNER_ID).flushBackground();
 	return res.json<{
 		action: "reply" | "ignore";
-		content?: string;
+		messages: { content: string; partner_message_id?: string }[];
 		reply_to_message_id?: string;
-		partner_message_id?: string;
 	}>();
 };
 

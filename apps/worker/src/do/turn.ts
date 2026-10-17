@@ -10,6 +10,7 @@ import {
 	type GateDecision,
 	gateOutput,
 	PromptBuilder,
+	replyMessages,
 	selectExamples,
 	selectOpening,
 	type TurnResponse,
@@ -479,8 +480,8 @@ export const runTurn = async (
 		};
 	}
 
-	const utterance = output.utterance.trim();
-	const replying = output.reply_policy === "reply" && utterance !== "";
+	const messages = replyMessages(output);
+	const replying = output.reply_policy === "reply" && messages.length > 0;
 
 	// ignore のターンは会話に加わっていないので、Open Loop は追加も解決もしない。
 	// 次のターンの prompt と audit に結果を載せるため、memory と同じく応答前に書き終える。
@@ -575,28 +576,30 @@ export const runTurn = async (
 
 	deps.store.setLastPartnerReplyAt(msg.channelId, at);
 	if (interjection) deps.store.setLastInterjectionAt(msg.channelId, at);
-	// 実際の Discord message id は Gateway が送信するまで分からないため、仮の ID で文脈に残し、
-	// 送信後の sent 通知で結び付ける。
-	const partnerMessageId = `partner:${newId()}`;
-	deps.store.appendRecent({
+	// 実際の Discord message id は送るまで分からないため、仮の ID で文脈に残し、送信後に結び付ける。
+	const replyId = newId();
+	const partnerMessages = messages.map((content, i) => ({
 		channelId: msg.channelId,
-		messageId: partnerMessageId,
+		messageId: `partner:${replyId}:${i}`,
 		authorId: deps.partnerUserId,
 		authorName: profile.display_name,
 		isBot: false,
 		isPartner: true,
-		content: utterance,
+		content,
 		occurredAt: at.toISOString(),
-	});
+	}));
 	return {
 		intent: toBodyIntent(output, bodyState),
 		voiceChannel: output.voice_channel,
 		bodyState,
+		partnerMessages,
 		response: {
 			action: "reply",
-			content: utterance,
+			messages: partnerMessages.map((m) => ({
+				content: m.content,
+				partner_message_id: m.messageId,
+			})),
 			reply_to_message_id: msg.messageId,
-			partner_message_id: partnerMessageId,
 		},
 		audit: {
 			inbound: inboundSummary(msg),

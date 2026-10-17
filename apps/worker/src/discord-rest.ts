@@ -150,6 +150,8 @@ export const createDiscordRest = (deps: DiscordRestDeps): CommunicationPort => {
 						...(input.replyToMessageId
 							? reference(input.replyToMessageId)
 							: {}),
+						// 再送で同じ nonce が来たら、Discord は新しく作らず先に作ったメッセージを返す。
+						...(input.nonce ? { nonce: input.nonce, enforce_nonce: true } : {}),
 					}),
 				}),
 			);

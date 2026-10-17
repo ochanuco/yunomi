@@ -46,7 +46,7 @@ describe("reply と ignore", () => {
 	it("メンションされたら返信し、トリガー発言への reply として返す", async () => {
 		const s = newScenario();
 		const fake = await installFakeLlm([
-			llmOk(turn({ utterance: "おはようございます" })),
+			llmOk(turn({ messages: ["おはようございます"] })),
 		]);
 		const msg = mention(s);
 
@@ -54,9 +54,13 @@ describe("reply と ignore", () => {
 
 		expect(res).toEqual({
 			action: "reply",
-			content: "おはようございます",
+			messages: [
+				{
+					content: "おはようございます",
+					partner_message_id: expect.stringMatching(/^partner:/),
+				},
+			],
 			reply_to_message_id: msg.messageId,
-			partner_message_id: expect.stringMatching(/^partner:/),
 		});
 		expect(fake.requests).toHaveLength(1);
 	});
@@ -64,7 +68,7 @@ describe("reply と ignore", () => {
 	it("LLM が ignore を選んだら返信しない", async () => {
 		const s = newScenario();
 		const fake = await installFakeLlm([
-			llmOk(turn({ utterance: "", reply_policy: "ignore" })),
+			llmOk(turn({ messages: [], reply_policy: "ignore" })),
 		]);
 		const msg = mention(s);
 
@@ -101,19 +105,19 @@ describe("Discord に送った発言への返信", () => {
 
 	it("sent 通知のあと、メンションなしの返信が reply-to-partner で reply になる", async () => {
 		const s = newScenario();
-		await installFakeLlm([llmOk(turn({ utterance: "おはよう" }))]);
+		await installFakeLlm([llmOk(turn({ messages: ["おはよう"] }))]);
 		const first = await send(mention(s));
 		const discordId = `d-${s.channelId}`;
 
 		const res = await notifySent({
-			partner_message_id: first.partner_message_id,
+			partner_message_id: first.messages[0]?.partner_message_id,
 			channel_id: s.channelId,
 			discord_message_id: discordId,
 		});
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ bound: true });
 
-		const fake = await installFakeLlm([llmOk(turn({ utterance: "うん" }))], {
+		const fake = await installFakeLlm([llmOk(turn({ messages: ["うん"] }))], {
 			now: new Date(T0.getTime() + HOUR),
 		});
 		const reply = inbound({
@@ -124,7 +128,7 @@ describe("Discord に送った発言への返信", () => {
 		});
 		expect(await send(reply)).toMatchObject({
 			action: "reply",
-			content: "うん",
+			messages: [{ content: "うん" }],
 			reply_to_message_id: reply.messageId,
 		});
 		expect(fake.requests).toHaveLength(1);
@@ -165,7 +169,7 @@ describe("Discord に送った発言への返信", () => {
 		await installFakeLlm([llmOk(turn())]);
 		const first = await send(mention(s));
 		const res = await notifySent({
-			partner_message_id: first.partner_message_id,
+			partner_message_id: first.messages[0]?.partner_message_id,
 			channel_id: "other-channel",
 			discord_message_id: "d-y",
 		});
@@ -263,14 +267,17 @@ describe("失敗時の振る舞い", () => {
 	it("Sonnet が一時的に失敗したら Haiku に切り替えて返信し、audit に残す", async () => {
 		const s = newScenario();
 		const fake = await installFakeLlm(
-			[transientFailure(), llmOk(turn({ utterance: "お待たせ" }), HAIKU)],
+			[transientFailure(), llmOk(turn({ messages: ["お待たせ"] }), HAIKU)],
 			{ production: true },
 		);
 		const msg = mention(s);
 
 		const res = await send(msg);
 
-		expect(res).toMatchObject({ action: "reply", content: "お待たせ" });
+		expect(res).toMatchObject({
+			action: "reply",
+			messages: [{ content: "お待たせ" }],
+		});
 		expect(fake.requests.map((r) => r.model)).toEqual([SONNET, HAIKU]);
 		const [row] = await auditFor(msg.eventId);
 		expect(row).toMatchObject({ fallback_used: 1, model: HAIKU, degraded: 0 });
@@ -298,7 +305,7 @@ describe("audit", () => {
 		const s = newScenario();
 		await installFakeLlm([
 			llmOk(turn()),
-			llmOk(turn({ utterance: "", reply_policy: "ignore" })),
+			llmOk(turn({ messages: [], reply_policy: "ignore" })),
 			permanentFailure(),
 		]);
 		const msgs = [

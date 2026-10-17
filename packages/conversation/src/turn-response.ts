@@ -32,7 +32,11 @@ const performanceSchema = v.object({
  * delta は LLM の生の提案値で、clamp は適用側で行う。
  */
 export const turnResponseSchema = v.object({
-	utterance: v.pipe(v.string(), v.maxLength(2000)),
+	/** 順に送る Discord のメッセージ。ignore のときは空配列。1 件は Discord の 2000 文字制限に合わせる。 */
+	messages: v.pipe(
+		v.array(v.pipe(v.string(), v.maxLength(2000))),
+		v.maxLength(10),
+	),
 	reply_policy: v.picklist(["reply", "ignore"]),
 	decision_summary: v.pipe(v.string(), v.maxLength(200)),
 	emotion_delta: v.object({ mood: v.number(), energy: v.number() }),
@@ -79,7 +83,7 @@ export const turnResponseSchema = v.object({
 	),
 	/** prompt に示した open の Open Loop のうち、この発言で片づいたものの id。 */
 	resolved_open_loop_ids: v.array(v.string()),
-	/** utterance の演技。ignore のときも埋めるが使われない。 */
+	/** 返事全体の演技。ignore のときも埋めるが使われない。 */
 	performance: performanceSchema,
 	/** 声で返すか。false ならテキストだけで返す。 */
 	speak_aloud: v.boolean(),
@@ -92,6 +96,10 @@ export type TurnResponse = v.InferOutput<typeof turnResponseSchema>;
 
 export const turnOutput = defineOutput("turn_response", turnResponseSchema);
 
+/** 送るメッセージ。空のメッセージは送れないので落とす。 */
+export const replyMessages = (response: TurnResponse): string[] =>
+	response.messages.map((m) => m.trim()).filter((m) => m !== "");
+
 /**
  * 応答を身体への意図にする。黙る応答と空の発言は意図にしない。
  * 身体が使えないときは、モデルが声を選んでいても声にしない。
@@ -100,11 +108,12 @@ export const toBodyIntent = (
 	response: TurnResponse,
 	bodyState: BodyState,
 ): BodyIntent | undefined => {
-	if (response.reply_policy === "ignore" || response.utterance === "") {
+	const messages = replyMessages(response);
+	if (response.reply_policy === "ignore" || messages.length === 0) {
 		return undefined;
 	}
 	return {
-		text: response.utterance,
+		messages,
 		performance: response.performance,
 		speakAloud: response.speak_aloud && bodyState !== "unavailable",
 	};

@@ -10,7 +10,7 @@ import { externalServiceUnavailable } from "./errors.ts";
 import { err, ok } from "./result.ts";
 
 const intent: BodyIntent = {
-	text: "おはようございます",
+	messages: ["おはようございます"],
 	performance: {
 		emotion: "joy",
 		energy: 0.6,
@@ -43,9 +43,10 @@ describe("口の型の使い方", () => {
 			},
 		};
 
-		const text = await comm.sendText({ channelId: "c", text: intent.text });
+		const [first = ""] = intent.messages;
+		const text = await comm.sendText({ channelId: "c", text: first });
 		const voice = await speech.synthesize({
-			text: intent.text,
+			text: first,
 			values: {
 				engine: "aivoice",
 				preset: "結月 ゆかり",

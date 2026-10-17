@@ -246,7 +246,7 @@ describe("Open Loop の抽出と保存", () => {
 			llmOk(
 				turn({
 					reply_policy: "ignore",
-					utterance: "",
+					messages: [],
 					open_loops: [loop({ summary: "別の話題" })],
 				}),
 			),
@@ -274,7 +274,7 @@ describe("Open Loop の抽出と保存", () => {
 			llmOk(
 				turn({
 					reply_policy: "ignore",
-					utterance: "",
+					messages: [],
 					resolved_open_loop_ids: [existing?.id ?? ""],
 				}),
 			),

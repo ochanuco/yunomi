@@ -83,26 +83,40 @@ const aivoiceValuesSchema = v.object({
 export const voiceDirectiveSchema = v.object({
 	join: v.optional(v.object({ guild_id: snowflake, channel_id: snowflake })),
 	leave: v.optional(v.object({ guild_id: snowflake })),
-	// Gateway が values で合成して channel_id の VC で再生する。テキストは Worker が送り済み
+	// Gateway が values で合成して channel_id の VC で順に再生する。テキストは Worker が送り済み
 	speak: v.optional(
-		v.object({
-			channel_id: snowflake,
-			text: v.pipe(v.string(), v.minLength(1)),
-			values: aivoiceValuesSchema,
-		}),
+		v.pipe(
+			v.array(
+				v.object({
+					channel_id: snowflake,
+					text: v.pipe(v.string(), v.minLength(1)),
+					values: aivoiceValuesSchema,
+				}),
+			),
+			v.minLength(1),
+		),
 	),
 });
 
 export type VoiceDirective = v.InferOutput<typeof voiceDirectiveSchema>;
 
-/** Yunomi → Gateway のレスポンス。content は Discord の 2000 文字制限に合わせる。 */
+/** Yunomi → Gateway のレスポンス。各 content は Discord の 2000 文字制限に合わせる。 */
 export const gatewayResponseSchema = v.variant("action", [
 	v.object({
 		action: v.literal("reply"),
-		content: v.pipe(v.string(), v.minLength(1), v.maxLength(2000)),
+		// 順に送る。reply_to_message_id は 1 件目にだけ使う
+		messages: v.pipe(
+			v.array(
+				v.object({
+					content: v.pipe(v.string(), v.minLength(1), v.maxLength(2000)),
+					// DO が recent messages に積んだ自分の発言の id。送信後の sent 通知で Discord id と結び付ける
+					partner_message_id: v.optional(v.pipe(v.string(), v.nonEmpty())),
+				}),
+			),
+			v.minLength(1),
+			v.maxLength(10),
+		),
 		reply_to_message_id: v.optional(snowflake),
-		// DO が recent messages に積んだ自分の発言の id。送信後の sent 通知で Discord id と結び付ける
-		partner_message_id: v.optional(v.pipe(v.string(), v.nonEmpty())),
 		voice: v.optional(voiceDirectiveSchema),
 	}),
 	v.object({ action: v.literal("ignore") }),

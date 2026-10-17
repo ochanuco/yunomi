@@ -7,7 +7,7 @@ import {
 } from "@yunomi/llm";
 
 export const turnResponse = (utterance: string): TurnResponse => ({
-	utterance,
+	messages: [utterance],
 	reply_policy: "reply",
 	decision_summary: "道具の結果を受けて返す",
 	emotion_delta: { mood: 0, energy: 0 },

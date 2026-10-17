@@ -90,7 +90,7 @@ afterEach(async () => {
 });
 
 const speakAloud = (over = {}) =>
-	turn({ utterance: "おはよう", speak_aloud: true, ...over });
+	turn({ messages: ["おはよう"], speak_aloud: true, ...over });
 
 describe("声の添付", () => {
 	it("テキストの返事に続けて、その返信として WAV を添付する", async () => {
@@ -110,6 +110,53 @@ describe("声の添付", () => {
 			contentType: "audio/wav",
 			data: new Uint8Array([1, 2, 3]),
 		});
+	});
+
+	it("複数件の返事は、メッセージごとに順に合成して、それぞれに添付する", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(speakAloud({ messages: ["えっ", "本当に"] }))]);
+		const port = fakePort();
+		let n = 0;
+		port.sendText.mockImplementation(async () => ok({ messageId: `d-${++n}` }));
+		const o = fakeOrgans({ availability: "ready" });
+		await install(port, o.organs);
+		await runInDurableObject(partnerStub(PARTNER_ID), (d) => {
+			d.sleep = async () => {};
+		});
+
+		await send(mention(s));
+
+		const texts = o.synthesize.mock.calls.map(
+			(c) => (c as unknown as [{ text: string }])[0].text,
+		);
+		expect(texts).toEqual(["えっ", "本当に"]);
+		expect(port.sendAttachment).toHaveBeenCalledTimes(2);
+	});
+
+	it("器官が眠っていれば、メッセージごとに別のジョブとして待つ", async () => {
+		const s = newScenario();
+		await installFakeLlm([llmOk(speakAloud({ messages: ["えっ", "本当に"] }))]);
+		const port = fakePort();
+		let n = 0;
+		port.sendText.mockImplementation(async () => ok({ messageId: `d-${++n}` }));
+		const o = fakeOrgans({ availability: "asleep" });
+		await install(port, o.organs);
+		await runInDurableObject(partnerStub(PARTNER_ID), (d) => {
+			d.sleep = async () => {};
+		});
+
+		await send(mention(s));
+
+		const keys = await runInDurableObject(
+			partnerStub(PARTNER_ID),
+			async (_d, st) => [
+				...(await st.storage.list({ prefix: "voice:" })).keys(),
+			],
+		);
+		expect(
+			keys.filter((k) => k.endsWith("d-1") || k.endsWith("d-2")),
+		).toHaveLength(2);
+		expect(o.synthesize).not.toHaveBeenCalled();
 	});
 
 	it("IR からプロファイルの preset と Styles を作って合成に渡す", async () => {

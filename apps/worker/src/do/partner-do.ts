@@ -40,6 +40,7 @@ import { createHistoryWriter, type HistoryWriter } from "./history.ts";
 import { createPendingStore } from "./pending-store.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
+import { messageNonce, sendMessages } from "./send-messages.ts";
 import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
 import type { TurnCapabilities } from "./tool-loop.ts";
 import { runTurn } from "./turn.ts";
@@ -80,8 +81,11 @@ export class PartnerDO extends DurableObject<Env> {
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	// 以下 5 つはテストが runInDurableObject で差し替える seam。
+	// 以下 6 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
+	/** 返事のメッセージの間を待つ。 */
+	sleep: (ms: number) => Promise<void> = (ms) =>
+		new Promise((resolve) => setTimeout(resolve, ms));
 	/** 既定は ANTHROPIC_API_KEY の ClaudeProvider。テストは FakeLLMProvider を包んだ router を返す。 */
 	createRouter: (env: Env) => ModelRouter = defaultRouter;
 	/** 返事を Discord へ送る口。null のときは Gateway が送る。 */
@@ -221,22 +225,28 @@ export class PartnerDO extends DurableObject<Env> {
 		}
 		if (outcome.response.action !== "reply") return toResult(outcome);
 		if (port) {
-			const sent = await this.#send(port, inbound, outcome.response);
+			const sent = await this.#send(port, inbound, outcome);
 			const voice = this.#voiceDirective(
 				inbound,
 				outcome,
-				sent.messageId !== undefined,
+				sent.map((m) => m.text),
 			);
 			// VC の発言への返事は VC で再生する。WAV 添付とは重ねない。
-			if (sent.messageId && outcome.intent && !voice?.speak) {
-				this.#speakAloud(outcome.intent, inbound.channelId, sent.messageId);
+			if (outcome.intent && !voice?.speak) {
+				this.#speakAloud(outcome.intent, inbound.channelId, sent);
 			}
 			return toResult({
 				...outcome,
-				response: withVoice(sent.response, voice),
+				response: withVoice({ action: "ack" }, voice),
 			});
 		}
-		const voice = this.#voiceDirective(inbound, outcome, true);
+		// Gateway が送る。送れたかは sent 通知でしか分からないので、先に全件を文脈に積む。
+		for (const m of outcome.partnerMessages ?? []) this.#store.appendRecent(m);
+		const voice = this.#voiceDirective(
+			inbound,
+			outcome,
+			outcome.response.messages.map((m) => m.content),
+		);
 		return toResult({
 			...outcome,
 			response: withVoice(outcome.response, voice),
@@ -271,14 +281,27 @@ export class PartnerDO extends DurableObject<Env> {
 		return voice ? toAivoiceValues(intent.performance, voice, selected) : null;
 	}
 
-	// 返事の送信を待たせないよう、声は応答の外で段取りする。
-	#speakAloud(intent: BodyIntent, channelId: string, messageId: string): void {
-		if (!intent.speakAloud) return;
+	// 返事の送信を待たせないよう、声は応答の外で段取りする。添付の順を保つため 1 件ずつ進める。
+	#speakAloud(
+		intent: BodyIntent,
+		channelId: string,
+		messages: readonly { text: string; messageId: string }[],
+	): void {
+		if (!intent.speakAloud || messages.length === 0) return;
 		const values = this.#aivoiceValues(intent);
 		const body = this.#voice();
 		if (!values || !body) return;
 		this.#background(
-			body.speak({ messageId, channelId, text: intent.text, values }),
+			(async () => {
+				for (const m of messages) {
+					await body.speak({
+						messageId: m.messageId,
+						channelId,
+						text: m.text,
+						values,
+					});
+				}
+			})(),
 		);
 	}
 
@@ -289,10 +312,11 @@ export class PartnerDO extends DurableObject<Env> {
 	}
 
 	// 返事のあとに Gateway へ頼む VC の操作。join は著者が VC にいて、まだ別の VC にいないときだけ。
+	// 読み上げるのは送れたメッセージ（delivered）だけ。
 	#voiceDirective(
 		inbound: InboundMessage,
 		outcome: TurnOutcome,
-		delivered: boolean,
+		delivered: readonly string[],
 	): VoiceDirective | undefined {
 		const connected = this.#store.getVoiceConnection()?.channelId ?? null;
 		const directive: VoiceDirective = {};
@@ -307,7 +331,7 @@ export class PartnerDO extends DurableObject<Env> {
 			directive.leave = { guild_id: inbound.guildId };
 		}
 		if (
-			delivered &&
+			delivered.length > 0 &&
 			connected !== null &&
 			connected === inbound.channelId &&
 			wants !== "leave" &&
@@ -317,11 +341,11 @@ export class PartnerDO extends DurableObject<Env> {
 		) {
 			const values = this.#aivoiceValues(outcome.intent);
 			if (values) {
-				directive.speak = {
+				directive.speak = delivered.map((text) => ({
 					channel_id: connected,
-					text: outcome.intent.text,
+					text,
 					values,
-				};
+				}));
 				if (outcome.bodyState === "asleep") this.#wakeVoiceOrgan();
 			}
 		}
@@ -447,30 +471,50 @@ export class PartnerDO extends DurableObject<Env> {
 	async #send(
 		port: CommunicationPort,
 		inbound: InboundMessage,
-		reply: Extract<GatewayResponse, { action: "reply" }>,
-	): Promise<{ response: GatewayResponse; messageId?: string }> {
-		const target = reply.reply_to_message_id ?? inbound.messageId;
-		// 1 対 1 の流れでは普通のメッセージで送り、間に他の発言があるときだけ返信形式にする。
-		const sent = await port.sendText({
-			channelId: inbound.channelId,
-			text: reply.content,
-			...(this.#store.hasMessagesAfter(inbound.channelId, target)
-				? { replyToMessageId: target }
-				: {}),
-		});
-		if (!sent.ok) {
-			console.error("discord send failed", sent.error.type, sent.error.message);
-		} else if (reply.partner_message_id) {
-			this.#store.bindDiscordMessageId(
-				reply.partner_message_id,
-				inbound.channelId,
-				sent.value.messageId,
-			);
+		outcome: TurnOutcome,
+	): Promise<{ text: string; messageId: string }[]> {
+		const rows = outcome.partnerMessages ?? [];
+		const reply = outcome.response;
+		const target =
+			(reply.action === "reply" ? reply.reply_to_message_id : undefined) ??
+			inbound.messageId;
+		// 1 対 1 の流れでは普通のメッセージで送り、間に他の発言があるときだけ 1 件目を返信形式にする。
+		const replyTo = this.#store.hasMessagesAfter(inbound.channelId, target)
+			? target
+			: undefined;
+		const result = await sendMessages(
+			{
+				port,
+				channelId: inbound.channelId,
+				sleep: (ms) => this.sleep(ms),
+				onSent: (i, messageId) => {
+					const row = rows[i];
+					if (!row) return;
+					this.#store.appendRecent(row);
+					this.#store.bindDiscordMessageId(
+						row.messageId,
+						inbound.channelId,
+						messageId,
+					);
+				},
+			},
+			rows.map((row, i) => ({
+				text: row.content,
+				nonce: messageNonce(inbound.messageId, i),
+				...(i === 0 && replyTo ? { replyToMessageId: replyTo } : {}),
+			})),
+		);
+		if (result.end.type === "failed") {
+			const { at, error } = result.end;
+			console.error("discord send failed", error.type, error.message, {
+				index: at,
+				unsent: rows.length - at,
+			});
 		}
-		return {
-			response: { action: "ack" },
-			...(sent.ok ? { messageId: sent.value.messageId } : {}),
-		};
+		return result.sentIds.map((messageId, i) => ({
+			text: rows[i]?.content ?? "",
+			messageId,
+		}));
 	}
 
 	async #process(inbound: InboundMessage, key: string): Promise<HandleResult> {

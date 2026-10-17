@@ -103,7 +103,7 @@ export class VoiceManager {
 		if (directive.join) {
 			await this.join(directive.join.guild_id, directive.join.channel_id);
 		}
-		if (directive.speak) this.speak(directive.speak);
+		for (const speak of directive.speak ?? []) this.speak(speak);
 		if (directive.leave) this.leave(directive.leave.guild_id);
 	}
 
@@ -161,7 +161,7 @@ export class VoiceManager {
 		}
 	}
 
-	speak(speak: NonNullable<VoiceDirective["speak"]>): void {
+	speak(speak: NonNullable<VoiceDirective["speak"]>[number]): void {
 		if (!this.#deps.ochoko) {
 			if (!this.#warnedNoOchoko) {
 				this.#warnedNoOchoko = true;

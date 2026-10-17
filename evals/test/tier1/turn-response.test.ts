@@ -3,7 +3,7 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
 const sample = (over: Record<string, unknown> = {}) => ({
-	utterance: "おはようございます。今日もゆっくり参りましょう。",
+	messages: ["おはようございます。", "今日もゆっくり参りましょう。"],
 	reply_policy: "reply",
 	decision_summary: "メンション付きの挨拶に返答する。",
 	emotion_delta: { mood: 0.05, energy: 0 },
@@ -32,7 +32,7 @@ describe("ターン応答スキーマ（eval が期待する形）", () => {
 		expect(
 			v.safeParse(
 				turnResponseSchema,
-				sample({ reply_policy: "ignore", utterance: "" }),
+				sample({ reply_policy: "ignore", messages: [] }),
 			).success,
 		).toBe(true);
 	});
@@ -42,7 +42,7 @@ describe("ターン応答スキーマ（eval が期待する形）", () => {
 			v.safeParse(turnResponseSchema, sample({ reply_policy: "maybe" }))
 				.success,
 		).toBe(false);
-		const { utterance: _, ...rest } = sample();
+		const { messages: _, ...rest } = sample();
 		expect(v.safeParse(turnResponseSchema, rest).success).toBe(false);
 	});
 });

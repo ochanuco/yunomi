@@ -8,7 +8,7 @@ import {
 } from "./turn-response.ts";
 
 const valid = () => ({
-	utterance: "こんにちは",
+	messages: ["こんにちは"],
 	reply_policy: "reply",
 	decision_summary: "挨拶に返答する。",
 	emotion_delta: { mood: 0.1, energy: 0 },
@@ -63,15 +63,15 @@ describe("turnResponseSchema", () => {
 		expect(ok(valid())).toBe(true);
 	});
 
-	it("ignore のとき utterance は空でよい", () => {
-		expect(ok({ ...valid(), reply_policy: "ignore", utterance: "" })).toBe(
-			true,
-		);
+	it("ignore のとき messages は空でよい", () => {
+		expect(ok({ ...valid(), reply_policy: "ignore", messages: [] })).toBe(true);
 	});
 
-	it("utterance 2000 / decision_summary 200 文字の上限", () => {
-		expect(ok({ ...valid(), utterance: "a".repeat(2000) })).toBe(true);
-		expect(ok({ ...valid(), utterance: "a".repeat(2001) })).toBe(false);
+	it("messages は 10 件、1 件 2000 文字、decision_summary は 200 文字が上限", () => {
+		expect(ok({ ...valid(), messages: Array(10).fill("a") })).toBe(true);
+		expect(ok({ ...valid(), messages: Array(11).fill("a") })).toBe(false);
+		expect(ok({ ...valid(), messages: ["a".repeat(2000)] })).toBe(true);
+		expect(ok({ ...valid(), messages: ["a".repeat(2001)] })).toBe(false);
 		expect(ok({ ...valid(), decision_summary: "a".repeat(201) })).toBe(false);
 	});
 
@@ -210,7 +210,7 @@ describe("toBodyIntent", () => {
 
 	it("声で返す応答は speakAloud: true の意図になる", () => {
 		expect(toBodyIntent(res(), "can_speak")).toEqual({
-			text: "こんにちは",
+			messages: ["こんにちは"],
 			performance: valid().performance,
 			speakAloud: true,
 		});
@@ -220,7 +220,7 @@ describe("toBodyIntent", () => {
 
 	it("声で返さない応答は speakAloud: false の意図になる", () => {
 		expect(toBodyIntent(res({ speak_aloud: false }), "can_speak")).toEqual({
-			text: "こんにちは",
+			messages: ["こんにちは"],
 			performance: valid().performance,
 			speakAloud: false,
 		});
@@ -232,8 +232,17 @@ describe("toBodyIntent", () => {
 
 	it("ignore と空の発言は意図にしない", () => {
 		expect(
-			toBodyIntent(res({ reply_policy: "ignore", utterance: "" }), "can_speak"),
+			toBodyIntent(res({ reply_policy: "ignore", messages: [] }), "can_speak"),
 		).toBeUndefined();
-		expect(toBodyIntent(res({ utterance: "" }), "can_speak")).toBeUndefined();
+		expect(
+			toBodyIntent(res({ messages: ["", " "] }), "can_speak"),
+		).toBeUndefined();
+	});
+
+	it("複数件の返事は空のメッセージを落として順に並べる", () => {
+		expect(
+			toBodyIntent(res({ messages: [" 一つ目 ", "", "二つ目"] }), "can_speak")
+				?.messages,
+		).toEqual(["一つ目", "二つ目"]);
 	});
 });
