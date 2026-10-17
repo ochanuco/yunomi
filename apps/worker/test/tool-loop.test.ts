@@ -11,13 +11,10 @@ import {
 	type PendingOperation,
 	type PendingStore,
 } from "@yunomi/capabilities";
-import type { TurnResponse } from "@yunomi/conversation";
 import { ok, validationFailed } from "@yunomi/core";
 import {
-	anthropicContinuation,
 	FakeLLMProvider,
 	HAIKU,
-	type LLMResultMeta,
 	ModelRouter,
 	SONNET,
 	type StepMessage,
@@ -26,66 +23,12 @@ import {
 import { describe, expect, it } from "vitest";
 import { MAX_TOOL_ROUNDS, TOOL_LOOP_TIMEOUT_MS } from "../src/do/tool-loop.ts";
 import { inbound, partnerStub } from "./helpers.ts";
+import { final, meta, toolUse, turnResponse } from "./llm-fixtures.ts";
 
 const BOT = env.PARTNER_DISCORD_USER_ID;
 const OWNER = "u1";
 const GUEST = "u2";
 const T0 = new Date("2026-10-11T03:00:00Z");
-
-const turnResponse = (utterance: string): TurnResponse => ({
-	utterance,
-	reply_policy: "reply",
-	decision_summary: "道具の結果を受けて返す",
-	emotion_delta: { mood: 0, energy: 0 },
-	relationship_delta: { familiarity: 0, trust: 0 },
-	interest_signals: [],
-	opinion_signals: [],
-	memory_candidates: [],
-	open_loops: [],
-	resolved_open_loop_ids: [],
-	performance: {
-		emotion: "neutral",
-		energy: 0.5,
-		pace: "normal",
-		warmth: 0.5,
-		pause_before_ms: 0,
-	},
-	speak_aloud: false,
-	voice_channel: "stay",
-	needs_review: false,
-});
-
-const meta = (model: string): LLMResultMeta => ({
-	model,
-	usage: {
-		inputTokens: 100,
-		outputTokens: 20,
-		cacheReadTokens: 0,
-		cacheWriteTokens: 0,
-	},
-	latencyMs: 12,
-	stopReason: "end_turn",
-});
-
-type StepScript = Parameters<FakeLLMProvider["enqueueStep"]>[number];
-
-const final = (utterance: string, model: string = HAIKU): StepScript => ({
-	ok: true,
-	value: { kind: "final", output: turnResponse(utterance), ...meta(model) },
-});
-
-const toolUse = (
-	calls: { name: string; input: unknown }[],
-	model: string = HAIKU,
-): StepScript => ({
-	ok: true,
-	value: {
-		kind: "tool_use",
-		toolCalls: calls.map((c, i) => ({ id: `tu_${i}`, ...c })),
-		continuation: anthropicContinuation([]),
-		...meta(model),
-	},
-});
 
 const listInput = {
 	from: "2026-10-12T00:00:00+09:00",
@@ -432,7 +375,7 @@ describe("登録の提案・了承・取り消し", () => {
 		});
 	});
 
-	it("期限が切れた保留はプロンプトに載らず、了承されても実行されない", async () => {
+	it("期限が切れた保留はプロンプトに載らず、ターンの頭で expired になり、了承されても実行されない", async () => {
 		const { stub, fake, calls, ops, clock } = await propose("expired");
 		const [op] = [...ops.values()];
 		if (!op) throw new Error("保留があるはず");
@@ -447,8 +390,16 @@ describe("登録の提案・了承・取り消し", () => {
 		);
 		expect(systemText(fake.stepRequests[2])).not.toContain(op.id);
 		expect(calls).toHaveLength(0);
-		expect(ops.get(op.id)?.status).toBe("expired");
-		expect(res.audit.toolCalls[0]).toMatchObject({ outcome: "expired" });
+		expect(ops.get(op.id)).toMatchObject({
+			status: "expired",
+			resolvedAt: clock.now.toISOString(),
+		});
+		// 状態遷移を拒否するのは、すでに expired にされているから。
+		expect(res.audit.toolCalls[0]).toMatchObject({
+			decision: "pending_confirm",
+			outcome: "error",
+			summary: "InvalidStateTransition",
+		});
 		expect(lastToolResults(fake.stepRequests[3])[0]).toMatchObject({
 			isError: true,
 		});

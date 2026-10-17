@@ -613,7 +613,7 @@ const degraded = (
 		toolCalls,
 	});
 
-// 取得に失敗したら保留なしとして続ける。期限切れの保留は了承できないので載せない。
+// 取得に失敗したら保留なしとして続ける。期限切れの保留は了承できないので載せず、expired にして残す。
 const pendingLines = async (
 	capabilities: TurnCapabilities,
 	partnerId: string,
@@ -626,7 +626,15 @@ const pendingLines = async (
 	} catch {
 		open = [];
 	}
-	const due = new Set(expireDue(open, now).map((op) => op.id));
+	const expired = expireDue(open, now);
+	if (expired.length > 0) {
+		try {
+			await capabilities.pending.save(expired);
+		} catch {
+			// 保存に失敗しても、次のターンでまた expired にできる。
+		}
+	}
+	const due = new Set(expired.map((op) => op.id));
 	return open
 		.filter((op) => !due.has(op.id))
 		.map((op) => ({

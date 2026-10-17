@@ -25,6 +25,7 @@ import {
 } from "@yunomi/protocol";
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
+import { defaultCapabilities } from "../capabilities.ts";
 import { createDiscordRest } from "../discord-rest.ts";
 import {
 	createInterestOpinionRepo,
@@ -36,6 +37,7 @@ import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
+import { createPendingStore } from "./pending-store.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
@@ -87,8 +89,8 @@ export class PartnerDO extends DurableObject<Env> {
 		defaultCommunication;
 	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
 	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
-	/** 道具の部品。未設定ならターンは道具なしで返事を作る。 */
-	capabilities: TurnCapabilities | undefined = undefined;
+	/** 道具の部品。undefined（prod で secret が揃っていない、dev を含む）ならターンは道具なしで返事を作る。 */
+	capabilities: TurnCapabilities | undefined;
 	pipeline: Pipeline = (msg, onEngaged) =>
 		runTurn(
 			{
@@ -121,6 +123,12 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
+		this.capabilities =
+			defaultCapabilities(env, {
+				pending: createPendingStore(ctx.storage.sql),
+				policy: yukarinProfile.capability_defaults,
+				now: () => this.now(),
+			}) ?? undefined;
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
 	}
 
