@@ -1,5 +1,6 @@
 export * from "./contract.ts";
 export * from "./definitions/calendar.ts";
 export * from "./input.ts";
+export * from "./pending.ts";
 export * from "./policy.ts";
 export * from "./registry.ts";
