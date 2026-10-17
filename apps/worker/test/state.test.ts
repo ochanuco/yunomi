@@ -138,6 +138,49 @@ describe("State / Relationship の更新", () => {
 		});
 	});
 
+	it("長く空いた後のターンは減衰後の値を prompt と保存に使い、time_decay を残す", async () => {
+		const { stub } = await setup("state-decay", [
+			response({ emotion_delta: { mood: 0.1, energy: 0 } }),
+			response(),
+		]);
+		const author = { id: "u-decay", displayName: "dee", isBot: false };
+		await stub.handleDiscordMessage(mention({ author }));
+		await stub.flushBackground();
+		expect((await doState(stub)).mood).toBeCloseTo(0.3);
+
+		const fake = new FakeLLMProvider([ok(response())]);
+		await runInDurableObject(stub, (o) => {
+			o.now = () => new Date(T0.getTime() + 12 * 3_600_000);
+			o.createRouter = () => new ModelRouter({ provider: fake });
+		});
+		const msg = mention({ author });
+		await stub.handleDiscordMessage(msg);
+		await stub.flushBackground();
+
+		const system = fake.requests[0]?.system.map((b) => b.text).join("\n") ?? "";
+		expect(system).toContain("気分: 0.25");
+		const s = await doState(stub);
+		expect(s.mood).toBeCloseTo(0.25);
+		expect(s.version).toBe(3);
+
+		const rows = await env.DB.prepare(
+			"SELECT reason, before_json, after_json, delta_json FROM state_transitions WHERE source_event_id = ?",
+		)
+			.bind(msg.eventId)
+			.all<{
+				reason: string;
+				before_json: string;
+				after_json: string;
+				delta_json: string;
+			}>();
+		expect(rows.results).toHaveLength(1);
+		const row = rows.results[0];
+		expect(row?.reason).toBe("time_decay");
+		expect(JSON.parse(row?.before_json ?? "{}").mood).toBeCloseTo(0.3);
+		expect(JSON.parse(row?.after_json ?? "{}").mood).toBeCloseTo(0.25);
+		expect(JSON.parse(row?.delta_json ?? "{}").mood).toBeCloseTo(-0.05);
+	});
+
 	it("delta が 0 なら D1 に履歴を書かない", async () => {
 		const { stub } = await setup("state-zero", [response()]);
 		await stub.handleDiscordMessage(
