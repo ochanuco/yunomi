@@ -434,4 +434,26 @@ describe("topFacts", () => {
 			observedAt: "2026-10-03T00:00:00.000Z",
 		});
 	});
+
+	it("datetime の値は JST にして渡す", async () => {
+		const entityId = crypto.randomUUID();
+		await env.DB.prepare(
+			"INSERT INTO entities (id, kind, display_name, created_at) VALUES (?, 'person', 'top-facts-dt', '2026-10-01T00:00:00Z')",
+		)
+			.bind(entityId)
+			.run();
+		await env.DB.prepare(
+			`INSERT INTO facts (id, partner_id, subject_entity_id, predicate, object_type, object_value, object_display, confidence, importance, source, observed_at, valid_from, valid_to, decay_policy, superseded_by)
+			VALUES (?, 'p-top-facts-dt', ?, 'has_haircut_appointment', 'datetime', '2026-10-18T03:00:00.000Z', NULL, 0.9, 0.4, 'user_statement', '2026-10-17T12:00:00.000Z', '2026-10-17T12:00:00.000Z', NULL, 'episodic', NULL)`,
+		)
+			.bind(crypto.randomUUID(), entityId)
+			.run();
+
+		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
+			"p-top-facts-dt",
+			entityId,
+		);
+
+		expect(facts.map((f) => f.object)).toEqual(["2026-10-18 12:00 JST"]);
+	});
 });

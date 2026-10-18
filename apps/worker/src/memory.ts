@@ -1,6 +1,7 @@
 import {
 	CANDIDATE_TTL_MS,
 	decidePromotion,
+	formatJst,
 	type MemoryKind,
 	type MemoryObject,
 	type MemorySource,
@@ -54,6 +55,15 @@ export type PromptFact = {
 	/** UTC の ISO 8601。 */
 	observedAt: string;
 };
+
+// datetime は UTC の ISO で保存している。そのまま渡すとモデルが UTC の時刻を JST と取り違える。
+const promptObjectValue = (r: {
+	objectType: string;
+	objectValue: string;
+}): string =>
+	r.objectType === "datetime"
+		? `${formatJst(new Date(r.objectValue)).slice(0, 16)} JST`
+		: r.objectValue;
 
 const SPEAKER_WORDS = new Set(["user", "speaker"]);
 
@@ -231,6 +241,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 			);
 			const columns = {
 				predicate: facts.predicate,
+				objectType: facts.objectType,
 				objectValue: facts.objectValue,
 				objectDisplay: facts.objectDisplay,
 				observedAt: facts.observedAt,
@@ -255,7 +266,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 				(r: (typeof lasting)[number]): PromptFact => ({
 					kind,
 					predicate: r.predicate,
-					object: r.objectDisplay ?? r.objectValue,
+					object: r.objectDisplay ?? promptObjectValue(r),
 					observedAt: r.observedAt,
 				});
 			return [
