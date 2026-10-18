@@ -27,7 +27,9 @@ const empty = (text: string) => h("p", { class: "empty" }, text);
 /** 説明のある項目名は、ホバーで説明が出る要素にする。 */
 const term = (label: string): string | HTMLElement => {
 	const text = explain(label);
-	return text ? h("span", { class: "term", title: text }, label) : label;
+	return text
+		? h("span", { class: "term", "data-tip": text, tabindex: "0" }, label)
+		: label;
 };
 
 const table = (

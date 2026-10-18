@@ -138,7 +138,8 @@ export const renderChart = (spec: ChartSpec): HTMLElement => {
 		key.textContent = s.label;
 		const text = explain(s.label);
 		if (text) {
-			key.title = text;
+			key.dataset.tip = text;
+			key.tabIndex = 0;
 			key.classList.add("term");
 		}
 		legend.append(key);
