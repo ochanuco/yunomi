@@ -14,6 +14,7 @@ import type {
 	CapabilityRequest,
 	CapabilityResponse,
 	ToolDefinition,
+	ToolImage,
 } from "./contract.ts";
 import { parseToolInput } from "./input.ts";
 import {
@@ -64,6 +65,8 @@ export type ToolCallRecord = {
 export type GateResult = {
 	/** brain に返す JSON 文字列。 */
 	content: string;
+	/** 結果に添える画像。道具が返したときだけある。 */
+	images?: readonly ToolImage[];
 	isError: boolean;
 	record: ToolCallRecord;
 };
@@ -117,6 +120,7 @@ type Handled = {
 	outcome: ToolCallRecord["outcome"];
 	summary: string;
 	pendingId?: string;
+	images?: readonly ToolImage[];
 };
 
 const failureBody = (error: DomainError) => ({
@@ -253,6 +257,7 @@ export const createCapabilityGate = (deps: {
 				decision: "auto",
 				outcome: "ok",
 				summary: result.value.summary,
+				...(result.value.images?.length ? { images: result.value.images } : {}),
 			};
 		}
 
@@ -432,6 +437,7 @@ export const createCapabilityGate = (deps: {
 			const started = Date.now();
 			const finish = (handled: Handled): GateResult => ({
 				content: toModelJson(handled.body),
+				...(handled.images ? { images: handled.images } : {}),
 				isError: handled.isError,
 				record: {
 					tool: call.name,

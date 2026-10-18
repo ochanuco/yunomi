@@ -18,6 +18,8 @@ export type CallContext = {
 	readonly isOwner: boolean;
 	readonly channelId: string;
 	readonly sourceMessageId: string;
+	/** sourceMessageId の返信先。返信でなければ null か省略。 */
+	readonly replyToMessageId?: string | null;
 	readonly now: Date;
 };
 
@@ -29,9 +31,17 @@ export type CapabilityRequest<TInput = unknown> = {
 	readonly context: CallContext;
 };
 
+/** 道具の結果に添える画像。data は base64。 */
+export type ToolImage = {
+	readonly mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+	readonly data: string;
+};
+
 export type CapabilityResponse = {
 	/** brain に返す結果。JSON にできる値。 */
 	readonly data: unknown;
+	/** brain に画像として見せるもの。JSON の data には入れない。 */
+	readonly images?: readonly ToolImage[];
 	/** Audit 用の短い要約。秘密やメール本文を入れない。 */
 	readonly summary: string;
 };
