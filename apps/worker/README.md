@@ -119,7 +119,7 @@ DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_
 
 純粋なドメイン関数は `@yunomi/core` の `partner-state.ts`（`applyStateDelta` / `applyRelationshipDelta`、日次上限は `lifestyleDay` の JST 05:00 境界）。現在値は DO SQLite（`partner_state`、`relationships`）、履歴は D1（`state_transitions`、`relationship_events`）。D1 の履歴書き込みは `ctx.waitUntil` に載せて応答を待たせない。テストは `PartnerDO.flushBackground()` で完了を待つ。作者の entity 解決（`entities` / `external_identities`）は LLM 判定に進んだときに行う（Haiku の判定は既存の entity を読むだけ）。
 
-`mood` と `energy` は時間経過でプロファイルの `initial_state` へ戻る（`applyTimeDecay`、半減期 12 時間の指数減衰）。ターンの開始時に `state.updatedAt` からの経過が 30 分以上なら適用し、`state_transitions.reason` は `time_decay`。Relationship と `systemStress` / `degradedMode` / `presence` は動かさない。
+`mood` と `energy` は時間経過でプロファイルの `initial_state` へ戻る（`applyTimeDecay`、指数減衰。半減期は mood が 48 時間、energy が 12 時間）。ターンの開始時に `state.updatedAt` からの経過が 30 分以上なら適用し、`state_transitions.reason` は `time_decay`。Relationship と `systemStress` / `degradedMode` / `presence` は動かさない。
 
 LLM 障害は `degradedMode` / `systemStress` に自動で反映する（`applyLlmFailure` / `applyLlmSuccess`、閾値は `partner-state.ts` の定数）。LLM を呼んで失敗したターンだけが対象で、前段ルールで決まったターンや entity 解決の失敗は数えない。成功を挟まない連続失敗が 3 回で `degradedMode=true` かつ `systemStress` +0.2、以降 `degradedMode` 中の失敗は 1 回ごとに +0.1（上限 1.0）。LLM が 1 回成功すると `degradedMode=false`、連続失敗カウンタ（DO SQLite の `llm_health`）を 0 に戻し、`systemStress` を −0.1（下限 0）する。`degradedMode` 中の応答の振る舞いは変えない。遷移は `state_transitions.reason`（`llm_consecutive_failures` / `llm_recovered`。通常のターンは `turn_delta`）付きで残り、`degradedMode` が切り替わったターンの audit `detail_json.degradedTransition` に `entered` / `recovered` が入る。
 

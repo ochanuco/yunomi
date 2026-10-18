@@ -150,7 +150,7 @@ describe("State / Relationship の更新", () => {
 
 		const fake = new FakeLLMProvider([ok(response())]);
 		await runInDurableObject(stub, (o) => {
-			o.now = () => new Date(T0.getTime() + 12 * 3_600_000);
+			o.now = () => new Date(T0.getTime() + 48 * 3_600_000);
 			o.createRouter = () => new ModelRouter({ provider: fake });
 		});
 		const msg = mention({ author });
