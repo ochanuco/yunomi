@@ -27,6 +27,7 @@ const shape = (scenarioId: string) => {
 		examples: selectExamples(yukarinProfile.examples, {
 			seed: "snapshot",
 			count: EXAMPLE_COUNT,
+			familiarity: s.relationship.familiarity,
 		}),
 	});
 	return {
@@ -44,6 +45,7 @@ describe("PromptBuilder × シナリオ", () => {
 			examples: selectExamples(yukarinProfile.examples, {
 				seed: s.id,
 				count: EXAMPLE_COUNT,
+				familiarity: s.relationship.familiarity,
 			}),
 		});
 		expect(p.system).toHaveLength(13);

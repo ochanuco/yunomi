@@ -18,11 +18,14 @@ export const EXAMPLE_SCENES = [
 	"cover_up",
 	"flustered",
 	"plain",
+	"sulk",
 ] as const;
 
 export const conversationExampleSchema = v.object({
 	id: v.pipe(v.string(), v.nonEmpty()),
 	scene: v.picklist(EXAMPLE_SCENES),
+	/** この親しさに達するまでは、会話例として使わない。 */
+	min_familiarity: v.optional(unit),
 	turns: v.pipe(
 		v.array(
 			v.object({
@@ -37,6 +40,14 @@ export const conversationExampleSchema = v.object({
 export type ConversationExample = v.InferOutput<
 	typeof conversationExampleSchema
 >;
+
+export const familiarityTierSchema = v.object({
+	min: unit,
+	label: v.pipe(v.string(), v.nonEmpty()),
+	text: v.pipe(v.string(), v.nonEmpty()),
+});
+
+export type FamiliarityTier = v.InferOutput<typeof familiarityTierSchema>;
 
 export const partnerProfileSchema = v.object({
 	schema_version: v.pipe(v.number(), v.integer(), v.minValue(1)),
@@ -87,6 +98,17 @@ export const partnerProfileSchema = v.object({
 	),
 	initial_state: v.object({ mood: signed, energy: unit }),
 	initial_relationship: v.object({ familiarity: unit, trust: unit }),
+	familiarity_tiers: v.optional(
+		v.pipe(
+			v.array(familiarityTierSchema),
+			v.minLength(1),
+			v.check((ts) => ts[0]?.min === 0, "最初の段階の min は 0 にする"),
+			v.check(
+				(ts) => ts.every((t, i) => i === 0 || t.min > (ts[i - 1]?.min ?? 0)),
+				"familiarity_tiers は min の昇順で、重複させない",
+			),
+		),
+	),
 	capability_defaults: v.record(v.string(), capabilityModeSchema),
 	voice: v.optional(voiceProfileSchema),
 	identity: v.object({

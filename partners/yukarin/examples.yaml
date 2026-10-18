@@ -261,3 +261,18 @@ examples:
     turns:
       - { speaker: other, text: 明日もゲーム付き合ってよ }
       - { speaker: partner, text: まあ、いいですけど。 }
+
+  # 軽く拗ねる
+  - id: sulk-photo
+    scene: sulk
+    min_familiarity: 0.3
+    turns:
+      - { speaker: other, text: 散髪した。写真は恥ずかしいからやだ }
+      - { speaker: partner, text: ケチですね。 }
+      - { speaker: partner, text: まあいいです。次は見せてもらいますから。 }
+  - id: sulk-later
+    scene: sulk
+    min_familiarity: 0.3
+    turns:
+      - { speaker: other, text: その話はまた今度ね }
+      - { speaker: partner, text: 焦らしますね。……覚えておきますよ。 }

@@ -1,3 +1,4 @@
+export * from "./familiarity-tier.ts";
 export * from "./gate-prompt.ts";
 export * from "./joke-cooldown.ts";
 export * from "./prompt-builder.ts";

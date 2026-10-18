@@ -72,12 +72,49 @@ describe("yukarin profile", () => {
 		).not.toBe(profileVersion);
 	});
 
-	it("会話例はどの場面にも 3 件以上ある", () => {
+	it("会話例はどの場面にも 3 件以上ある（親しさで解禁する sulk は 2 件以上）", () => {
 		for (const scene of EXAMPLE_SCENES) {
 			expect(
 				yukarinProfile.examples.filter((x) => x.scene === scene).length,
-			).toBeGreaterThanOrEqual(3);
+			).toBeGreaterThanOrEqual(scene === "sulk" ? 2 : 3);
 		}
+	});
+
+	it("親しさの段階は 0 から始まり昇順で、丁寧語を崩さない", () => {
+		const tiers = yukarinProfile.familiarity_tiers ?? [];
+		expect(tiers.map((t) => t.min)).toEqual([0, 0.3, 0.6]);
+		for (const t of tiers) expect(t.text).toContain("丁寧語は崩さない");
+	});
+
+	it("親しさの段階の不正を拒否する", () => {
+		const p = loadProfile();
+		const tier = (min: number) => ({ min, label: "x", text: "y" });
+		const ok = (familiarity_tiers: unknown) =>
+			v.safeParse(partnerProfileSchema, { ...p, familiarity_tiers }).success;
+		expect(ok([tier(0), tier(0.5)])).toBe(true);
+		expect(ok([])).toBe(false);
+		expect(ok([tier(0.1), tier(0.5)])).toBe(false);
+		expect(ok([tier(0), tier(0.5), tier(0.5)])).toBe(false);
+		expect(ok([tier(0), tier(0.6), tier(0.3)])).toBe(false);
+		expect(ok([tier(0), tier(1.2)])).toBe(false);
+		expect(ok([tier(0), { min: 0.5, label: "x", text: "" }])).toBe(false);
+	});
+
+	it("min_familiarity は 0〜1 の範囲だけ受け付ける", () => {
+		const p = loadProfile();
+		const ex = (min_familiarity: number) => ({
+			...p,
+			examples: [
+				{
+					id: "a",
+					scene: "sulk",
+					min_familiarity,
+					turns: [{ speaker: "other", text: "x" }],
+				},
+			],
+		});
+		expect(v.safeParse(partnerProfileSchema, ex(0.3)).success).toBe(true);
+		expect(v.safeParse(partnerProfileSchema, ex(1.5)).success).toBe(false);
 	});
 
 	it("範囲外の値を拒否する", () => {
