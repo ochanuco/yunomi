@@ -2,6 +2,7 @@ import { type Api, createApi } from "./api.ts";
 import { h } from "./dom.ts";
 import { auditPage, memoryPage, type PageHandle, statePage } from "./pages.ts";
 import { buildHash, PAGES, type PageName, parseRoute } from "./route.ts";
+import { installTooltips } from "./tooltip.ts";
 
 export const POLL_INTERVAL_MS = 10_000;
 
@@ -50,12 +51,14 @@ export const startApp = (
 	};
 
 	window.addEventListener("hashchange", show);
+	const removeTooltips = installTooltips();
 	const timer = setInterval(tick, intervalMs);
 	show();
 
 	return () => {
 		clearInterval(timer);
 		window.removeEventListener("hashchange", show);
+		removeTooltips();
 		current?.dispose();
 	};
 };

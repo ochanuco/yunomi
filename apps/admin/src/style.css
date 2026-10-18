@@ -280,6 +280,21 @@ pre {
 	cursor: help;
 }
 
+.tooltip {
+	position: fixed;
+	z-index: 10;
+	max-width: min(320px, calc(100vw - 16px));
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	color: var(--fg);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+	font-size: 12px;
+	line-height: 1.5;
+	pointer-events: none;
+}
+
 .chart-key {
 	margin-right: 12px;
 }

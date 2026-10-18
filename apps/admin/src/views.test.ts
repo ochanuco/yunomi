@@ -37,13 +37,13 @@ describe("renderStatus", () => {
 		const mood = [...el.querySelectorAll("dt .term")].find(
 			(e) => e.textContent === "mood",
 		);
-		expect(mood?.getAttribute("title")).toContain("48 時間");
+		expect(mood?.getAttribute("data-tip")).toContain("48 時間");
 		const trustHeader = [...el.querySelectorAll("th .term")].find(
 			(e) => e.textContent === "信頼",
 		);
-		expect(trustHeader?.getAttribute("title")).toContain("信頼");
+		expect(trustHeader?.getAttribute("data-tip")).toContain("信頼");
 		const legend = el.querySelector(".chart-key.s-energy");
-		expect(legend?.getAttribute("title")).toContain("12 時間");
+		expect(legend?.getAttribute("data-tip")).toContain("12 時間");
 		expect(
 			[...el.querySelectorAll("dt")].find((e) => e.textContent === "version")
 				?.firstElementChild?.className,
