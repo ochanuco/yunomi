@@ -143,4 +143,3 @@ capability_defaults:
   calendar_read: auto
   calendar_write: confirm
   place_read: auto
-  attachment_read: auto

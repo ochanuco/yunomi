@@ -2,7 +2,6 @@ import {
 	type CapabilityAdapter,
 	type CapabilityPolicy,
 	createCapabilityGate,
-	createDiscordAttachmentAdapter,
 	createGoogleCalendarAdapter,
 	createGooglePlacesAdapter,
 	createToolRegistry,
@@ -18,8 +17,6 @@ export type CapabilityEnv = {
 	GOOGLE_CALENDAR_ID?: string;
 	GOOGLE_PLACES_API_KEY?: string;
 	OWNER_DISCORD_USER_ID?: string;
-	/** 添付の読み取りに使う。送信と同じ bot の token。 */
-	DISCORD_BOT_TOKEN?: string;
 };
 
 export type CapabilityDeps = {
@@ -45,7 +42,6 @@ export const defaultCapabilities = (
 		GOOGLE_CALENDAR_ID: calendarId,
 		GOOGLE_PLACES_API_KEY: placesApiKey,
 		OWNER_DISCORD_USER_ID: ownerId,
-		DISCORD_BOT_TOKEN: botToken,
 	} = env;
 	// fetch を this なしで呼ぶと Workers では Illegal invocation になるため、包んで渡す。
 	const doFetch: typeof fetch =
@@ -65,10 +61,6 @@ export const defaultCapabilities = (
 		adapters.push(
 			createGooglePlacesAdapter({ fetch: doFetch, apiKey: placesApiKey }),
 		);
-	}
-	// owner がいない環境（dev）では gate がすべて拒否するので、道具の一覧にも出さない。
-	if (botToken && ownerId) {
-		adapters.push(createDiscordAttachmentAdapter({ fetch: doFetch, botToken }));
 	}
 	if (adapters.length === 0) return null;
 	const registry = createToolRegistry(adapters);

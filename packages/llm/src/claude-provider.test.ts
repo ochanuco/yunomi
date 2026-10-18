@@ -377,61 +377,6 @@ describe("ClaudeProvider.step", () => {
 		expect(second.ok && second.value.kind).toBe("final");
 	});
 
-	it("画像つきの結果は tool_result の content を text と image(base64) のブロックにする", async () => {
-		const content = [thinking, toolUse("toolu_1")];
-		const replies = [
-			toolUseMessage(content),
-			message(JSON.stringify({ text: "a", note: null })),
-		];
-		const { provider, calls } = harness(() => replies.shift() as Response);
-		const first = await provider.step(stepReq());
-		if (!first.ok || first.value.kind !== "tool_use") {
-			throw new Error("tool_use を期待");
-		}
-		await provider.step(
-			stepReq({
-				messages: [
-					{ role: "user", content: "この画像見て" },
-					{ role: "assistant", continuation: first.value.continuation },
-					{
-						role: "tool_results",
-						results: [
-							{
-								toolCallId: "toolu_1",
-								content: '{"status":"ok"}',
-								images: [{ mediaType: "image/webp", data: "QUJD" }],
-								isError: false,
-							},
-						],
-					},
-				],
-			}),
-		);
-
-		const sent = calls[1]?.body.messages as unknown[];
-		expect(sent[2]).toEqual({
-			role: "user",
-			content: [
-				{
-					type: "tool_result",
-					tool_use_id: "toolu_1",
-					content: [
-						{ type: "text", text: '{"status":"ok"}' },
-						{
-							type: "image",
-							source: {
-								type: "base64",
-								media_type: "image/webp",
-								data: "QUJD",
-							},
-						},
-					],
-					is_error: false,
-				},
-			],
-		});
-	});
-
 	it("最終応答は thinking を読み飛ばして検証済みの output を返す", async () => {
 		const { provider } = harness(() =>
 			message("", {

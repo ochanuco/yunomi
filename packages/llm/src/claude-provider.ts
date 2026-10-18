@@ -74,19 +74,7 @@ const toMessageParam = (m: StepMessage): Anthropic.MessageParam => {
 			content: m.results.map((r) => ({
 				type: "tool_result" as const,
 				tool_use_id: r.toolCallId,
-				content: r.images?.length
-					? [
-							{ type: "text" as const, text: r.content },
-							...r.images.map((img) => ({
-								type: "image" as const,
-								source: {
-									type: "base64" as const,
-									media_type: img.mediaType,
-									data: img.data,
-								},
-							})),
-						]
-					: r.content,
+				content: r.content,
 				is_error: r.isError,
 			})),
 		};
