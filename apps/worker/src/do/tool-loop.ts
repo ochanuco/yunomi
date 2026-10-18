@@ -63,7 +63,6 @@ export type ToolLoopArgs = {
 	speaker: { id: string; isOwner: boolean };
 	channelId: string;
 	messageId: string;
-	replyToMessageId?: string | null;
 };
 
 export type ToolLoopOutcome = {
@@ -177,7 +176,6 @@ export const runToolLoop = async (
 						isOwner: args.speaker.isOwner,
 						channelId: args.channelId,
 						sourceMessageId: args.messageId,
-						replyToMessageId: args.replyToMessageId ?? null,
 						now: now(),
 					},
 				);
@@ -185,7 +183,6 @@ export const runToolLoop = async (
 				results.push({
 					toolCallId: call.id,
 					content: handled.content,
-					...(handled.images ? { images: handled.images } : {}),
 					isError: handled.isError,
 				});
 			}

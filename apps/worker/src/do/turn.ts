@@ -361,7 +361,6 @@ export const runTurn = async (
 				speaker: { id: msg.author.id, isOwner: speakerIsOwner },
 				channelId: msg.channelId,
 				messageId: msg.messageId,
-				replyToMessageId: msg.replyToMessageId,
 			});
 			result = looped.result;
 			toolCalls = looped.toolCalls;
