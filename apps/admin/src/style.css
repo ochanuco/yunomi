@@ -274,6 +274,12 @@ pre {
 	font-size: 12px;
 }
 
+.term {
+	text-decoration: underline dotted var(--muted);
+	text-underline-offset: 3px;
+	cursor: help;
+}
+
 .chart-key {
 	margin-right: 12px;
 }
@@ -312,6 +318,12 @@ path.s-trust {
 
 circle.chart-dot {
 	fill: var(--c);
+}
+
+.term {
+	text-decoration: underline dotted var(--muted);
+	text-underline-offset: 3px;
+	cursor: help;
 }
 
 .chart-key {

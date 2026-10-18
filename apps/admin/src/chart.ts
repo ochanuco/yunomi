@@ -1,4 +1,5 @@
 import { jst, pct } from "./format.ts";
+import { explain } from "./glossary.ts";
 import type { Point, Span } from "./history.ts";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -135,6 +136,11 @@ export const renderChart = (spec: ChartSpec): HTMLElement => {
 		const key = document.createElement("span");
 		key.className = `chart-key ${s.cls}`;
 		key.textContent = s.label;
+		const text = explain(s.label);
+		if (text) {
+			key.title = text;
+			key.classList.add("term");
+		}
 		legend.append(key);
 	}
 	const figure = document.createElement("figure");

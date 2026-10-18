@@ -28,6 +28,28 @@ describe("renderStatus", () => {
 		expect(text).toContain("pending candidates");
 	});
 
+	it("項目名にホバーで説明を出す", () => {
+		const el = renderStatus(status, [relationship], {
+			days: 7,
+			data: stateHistory,
+			now: new Date("2026-10-11T12:00:00Z"),
+		});
+		const mood = [...el.querySelectorAll("dt .term")].find(
+			(e) => e.textContent === "mood",
+		);
+		expect(mood?.getAttribute("title")).toContain("48 時間");
+		const trustHeader = [...el.querySelectorAll("th .term")].find(
+			(e) => e.textContent === "信頼",
+		);
+		expect(trustHeader?.getAttribute("title")).toContain("信頼");
+		const legend = el.querySelector(".chart-key.s-energy");
+		expect(legend?.getAttribute("title")).toContain("12 時間");
+		expect(
+			[...el.querySelectorAll("dt")].find((e) => e.textContent === "version")
+				?.firstElementChild?.className,
+		).toBe("term");
+	});
+
 	it("State も relationship も無いとき", () => {
 		const text = renderStatus({ ...status, state: null }, []).textContent;
 		expect(text).toContain("まだ State がない");
