@@ -27,7 +27,7 @@ export type OpenLoopOutcome = {
 export type PromptOpenLoop = {
 	id: string;
 	summary: string;
-	dueAt: string | null;
+	dueAt: Date | null;
 };
 
 export type OpenLoopRepo = {
@@ -107,7 +107,7 @@ export const createOpenLoopRepo = (db: DrizzleD1Database): OpenLoopRepo => {
 		},
 
 		async topOpen(partnerId, entityId) {
-			return db
+			const rows = await db
 				.select({
 					id: openLoops.id,
 					summary: openLoops.summary,
@@ -117,6 +117,10 @@ export const createOpenLoopRepo = (db: DrizzleD1Database): OpenLoopRepo => {
 				.where(openRows(partnerId, entityId))
 				.orderBy(desc(openLoops.importance), desc(openLoops.createdAt))
 				.limit(OPEN_LOOP_PROMPT_LIMIT);
+			return rows.map((r) => ({
+				...r,
+				dueAt: r.dueAt === null ? null : new Date(r.dueAt),
+			}));
 		},
 	};
 };

@@ -2,8 +2,10 @@ import {
 	type BodyIntent,
 	type BodyState,
 	memoryKinds,
+	modelDateTime,
 	type PacePhrase,
 	performanceEmotions,
+	readModelDateTime,
 } from "@yunomi/core";
 import { defineOutput } from "@yunomi/llm";
 import * as v from "valibot";
@@ -62,22 +64,35 @@ export const turnResponseSchema = v.object({
 		v.object({
 			subject: v.string(),
 			predicate: v.string(),
-			object: v.object({
-				type: v.picklist(["string", "number", "boolean", "datetime", "entity"]),
-				value: v.string(),
-			}),
+			object: v.pipe(
+				v.object({
+					type: v.picklist([
+						"string",
+						"number",
+						"boolean",
+						"datetime",
+						"entity",
+					]),
+					value: v.string(),
+				}),
+				v.transform((o) =>
+					o.type === "datetime"
+						? { ...o, value: readModelDateTime(o.value) }
+						: o,
+				),
+			),
 			confidence: unit,
 			importance: unit,
 			source: v.picklist(["user_statement", "inferred"]),
 			kind: v.picklist(memoryKinds),
 		}),
 	),
-	/** 相手との間で未解決の話題。なければ空配列。due_at は読み取れたときだけ ISO 8601 で、なければ null。 */
+	/** 相手との間で未解決の話題。なければ空配列。due_at は読み取れたときだけ +09:00 付きの ISO 8601 で、なければ null。 */
 	open_loops: v.array(
 		v.object({
 			summary: v.string(),
 			importance: unit,
-			due_at: v.nullable(v.string()),
+			due_at: v.nullable(modelDateTime()),
 			due_confidence: v.nullable(unit),
 		}),
 	),

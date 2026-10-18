@@ -1,4 +1,4 @@
-import type { DomainError, Result } from "@yunomi/core";
+import { type DomainError, type Result, toModelJson } from "@yunomi/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CallContext, CapabilityResponse } from "../contract.ts";
 import {
@@ -333,8 +333,8 @@ describe("calendar_list_events", () => {
 			events: [
 				{
 					summary: "打ち合わせ",
-					start: "2026-10-18T10:00:00+09:00",
-					end: "2026-10-18T11:00:00+09:00",
+					start: new Date("2026-10-18T01:00:00Z"),
+					end: new Date("2026-10-18T02:00:00Z"),
 					allDay: false,
 					location: "渋谷",
 				},
@@ -347,13 +347,39 @@ describe("calendar_list_events", () => {
 				},
 				{
 					summary: null,
-					start: "2026-10-18T20:00:00+09:00",
-					end: "2026-10-18T21:00:00+09:00",
+					start: new Date("2026-10-18T11:00:00Z"),
+					end: new Date("2026-10-18T12:00:00Z"),
 					allDay: false,
 					location: null,
 				},
 			],
 			truncated: false,
+		});
+	});
+
+	it("dateTime は Date で返り、モデルへの直列化で JST の書式になる", async () => {
+		const { adapter } = setup([
+			token(),
+			json({
+				items: [
+					{
+						start: { dateTime: "2026-10-18T10:00:00-07:00" },
+						end: { dateTime: "2026-10-18T11:00:00Z" },
+					},
+				],
+			}),
+		]);
+		const value = successOf(await list(adapter));
+		expect(value.data).toMatchObject({
+			events: [
+				{
+					start: new Date("2026-10-18T17:00:00Z"),
+					end: new Date("2026-10-18T11:00:00Z"),
+				},
+			],
+		});
+		expect(JSON.parse(toModelJson(value.data))).toMatchObject({
+			events: [{ start: "2026-10-19 02:00 JST", end: "2026-10-18 20:00 JST" }],
 		});
 	});
 

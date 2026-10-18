@@ -431,11 +431,11 @@ describe("topFacts", () => {
 		]);
 		expect(facts.at(-1)).toMatchObject({
 			object: "v-episode-03",
-			observedAt: "2026-10-03T00:00:00.000Z",
+			observedAt: new Date("2026-10-03T00:00:00.000Z"),
 		});
 	});
 
-	it("datetime の値は JST にして渡す", async () => {
+	it("datetime の値は Date にして渡す", async () => {
 		const entityId = crypto.randomUUID();
 		await env.DB.prepare(
 			"INSERT INTO entities (id, kind, display_name, created_at) VALUES (?, 'person', 'top-facts-dt', '2026-10-01T00:00:00Z')",
@@ -454,6 +454,8 @@ describe("topFacts", () => {
 			entityId,
 		);
 
-		expect(facts.map((f) => f.object)).toEqual(["2026-10-18 12:00 JST"]);
+		expect(facts.map((f) => f.object)).toEqual([
+			new Date("2026-10-18T03:00:00.000Z"),
+		]);
 	});
 });

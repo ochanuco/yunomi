@@ -246,3 +246,60 @@ describe("toBodyIntent", () => {
 		).toEqual(["一つ目", "二つ目"]);
 	});
 });
+
+describe("モデルが書いた日時の codec", () => {
+	const parse = (over: Record<string, unknown>) =>
+		v.parse(turnResponseSchema, { ...valid(), ...over });
+	const loop = (due_at: string | null) => ({
+		open_loops: [
+			{ summary: "面接", importance: 0.6, due_at, due_confidence: 0.5 },
+		],
+	});
+	const datetimeFact = (value: string) => ({
+		memory_candidates: [
+			{
+				...valid().memory_candidates[0],
+				object: { type: "datetime", value },
+			},
+		],
+	});
+
+	it("due_at のオフセット無しは JST として UTC の ISO にする", () => {
+		expect(parse(loop("2026-10-18T12:00")).open_loops[0]?.due_at).toBe(
+			"2026-10-18T03:00:00.000Z",
+		);
+	});
+
+	it("due_at のオフセットはそのまま効く", () => {
+		expect(parse(loop("2026-10-18T12:00:00Z")).open_loops[0]?.due_at).toBe(
+			"2026-10-18T12:00:00.000Z",
+		);
+		expect(parse(loop(null)).open_loops[0]?.due_at).toBeNull();
+	});
+
+	it("datetime の object.value も同じ規則で UTC の ISO にする", () => {
+		expect(
+			parse(datetimeFact("2026-10-18 12:00")).memory_candidates[0]?.object,
+		).toEqual({ type: "datetime", value: "2026-10-18T03:00:00.000Z" });
+	});
+
+	it("datetime 以外の value には触れない", () => {
+		expect(
+			parse({
+				memory_candidates: [
+					{
+						...valid().memory_candidates[0],
+						object: { type: "string", value: "2026-10-18T12:00" },
+					},
+				],
+			}).memory_candidates[0]?.object.value,
+		).toBe("2026-10-18T12:00");
+	});
+
+	it("読めない日時があっても応答全体は通り、その値だけ空になる", () => {
+		const res = parse({ ...loop("いつか"), ...datetimeFact("そのうち") });
+		expect(res.open_loops[0]?.due_at).toBe("");
+		expect(res.memory_candidates[0]?.object.value).toBe("");
+		expect(res.messages).toEqual(["こんにちは"]);
+	});
+});

@@ -1,12 +1,14 @@
 import {
 	type BodyState,
 	type ConversationExample,
-	formatJst,
+	formatJstForPrompt,
 	INTEREST_PROMPT_LIMIT,
+	jstDayNumber,
 	type MemoryKind,
 	OPEN_LOOP_PROMPT_LIMIT,
 	OPINION_PROMPT_LIMIT,
 	type PartnerProfile,
+	toJstDate,
 } from "@yunomi/core";
 import type { ChatMessage, SystemBlock } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
@@ -16,17 +18,16 @@ export type JokeStatus = "available" | "cooling_down";
 export type MemoryFact = {
 	subject: string;
 	predicate: string;
-	object: string;
+	/** datetime の値は Date で渡す。prompt には JST で出す。 */
+	object: string | Date;
 	kind: MemoryKind;
-	/** UTC の ISO 8601。表示は JST にする。 */
-	observedAt: string;
+	observedAt: Date;
 };
 
 export type OpenLoopLine = {
 	id: string;
 	summary: string;
-	/** UTC の ISO 8601。表示は JST にする。 */
-	dueAt: string | null;
+	dueAt: Date | null;
 };
 
 export type InterestLine = {
@@ -51,8 +52,7 @@ export type PendingLine = {
 	tool: string;
 	/** 入力の 1 行表示（JSON）。 */
 	input: string;
-	/** UTC の ISO 8601。表示は JST にする。 */
-	expiresAt: string;
+	expiresAt: Date;
 };
 
 export type ToolsContext = {
@@ -190,28 +190,25 @@ const relationshipBlock = (r: PromptInput["relationship"]): string =>
 	`## ${r.speakerName} との関係\n- 親しさ: ${fmt(r.familiarity)}（0 〜 1）\n- 信頼: ${fmt(r.trust)}（0 〜 1）`;
 
 // 日数は JST の暦日の差で数える。24 時間の差だと、夜に聞いた話が翌朝になっても 0 日のままになる。
-const DAY_MS = 24 * 60 * 60 * 1000;
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 /** この日数以上たった出来事は、自分からは持ち出さない区画に回す。 */
 const EPISODE_STALE_DAYS = 3;
 
 const RELATIVE_DAYS = ["今日", "昨日", "一昨日"] as const;
 
-const jstDay = (at: Date): number =>
-	Math.floor((at.getTime() + JST_OFFSET_MS) / DAY_MS);
-
 /** 未来の observedAt（時計のずれ）は 0 日にする。 */
 const daysSinceHeard = (f: MemoryFact, now: Date): number =>
-	Math.max(0, jstDay(now) - jstDay(new Date(f.observedAt)));
+	Math.max(0, jstDayNumber(now) - jstDayNumber(f.observedAt));
 
 const isStaleEpisode = (f: MemoryFact, now: Date): boolean =>
 	f.kind === "episode" && daysSinceHeard(f, now) >= EPISODE_STALE_DAYS;
 
 const memoryLine = (f: MemoryFact, now: Date): string => {
-	const line = `- ${f.subject} ${f.predicate} ${f.object}`;
+	const object =
+		f.object instanceof Date ? formatJstForPrompt(f.object) : f.object;
+	const line = `- ${f.subject} ${f.predicate} ${object}`;
 	if (f.kind === "lasting") return line;
-	const heard = new Date(new Date(f.observedAt).getTime() + JST_OFFSET_MS);
+	const heard = toJstDate(f.observedAt);
 	const date = `${heard.getUTCMonth() + 1}/${heard.getUTCDate()}`;
 	const days = daysSinceHeard(f, now);
 	return `${line}（${date}、${RELATIVE_DAYS[days] ?? `${days} 日前`}）`;
@@ -240,7 +237,7 @@ const openLoopBlock = (loops: OpenLoopLine[]): string =>
 		...(loops.length
 			? loops.map(
 					(l) =>
-						`- [${l.id}] ${l.summary}${l.dueAt ? `（期限の目安: ${formatJst(new Date(l.dueAt))} JST）` : ""}`,
+						`- [${l.id}] ${l.summary}${l.dueAt ? `（期限の目安: ${formatJstForPrompt(l.dueAt)}）` : ""}`,
 				)
 			: ["（なし）"]),
 	].join("\n");
@@ -277,9 +274,8 @@ const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
 
 // 曜日は JST の日付で数える。UTC の曜日だと JST の朝 9 時前にずれる。
 const clockBlock = (now: Date): string => {
-	const weekday =
-		WEEKDAYS_JA[new Date(now.getTime() + JST_OFFSET_MS).getUTCDay()];
-	return `## 現在日時\n- ${formatJst(now).slice(0, 16)} JST（${weekday}）`;
+	const weekday = WEEKDAYS_JA[toJstDate(now).getUTCDay()];
+	return `## 現在日時\n- ${formatJstForPrompt(now)}（${weekday}）`;
 };
 
 const examplesBlock = (
@@ -317,7 +313,7 @@ const pendingBlock = (t: ToolsContext): string =>
 		...(t.pending.length
 			? t.pending.map(
 					(p) =>
-						`- [${p.id}] ${p.tool} ${p.input}（期限 ${formatJst(new Date(p.expiresAt)).slice(11, 16)} JST）`,
+						`- [${p.id}] ${p.tool} ${p.input}（期限 ${formatJstForPrompt(p.expiresAt).slice(11)}）`,
 				)
 			: ["（なし）"]),
 	].join("\n");
@@ -383,8 +379,9 @@ const TASK_BLOCK = [
 	"- opinion_signals は、「意見」の話題について、相手の話に納得できる理由があり、自分の意見が強まった（strengthen）・弱まった（weaken）・考え直しはじめた（shift）ときだけ入れる（最大 1 件、なければ空配列）。topic は「意見」にあるキーだけを書く。new_stance は shift のときだけ新しい考えを短く書き、それ以外は null。同じ主張を繰り返されただけ、押しの強さだけでは入れない。",
 	"- memory_candidates には、新着メッセージの発言者が新着メッセージの中で自分について明示的に述べた事実だけを入れる。チャンネルログの発言からは入れない。推測は source を inferred にする。",
 	"- memory_candidates の kind は、呼び名・好み・住んでいる所・仕事のように続く事実なら lasting、予定・行った所・その日の出来事のようにその時かぎりのことなら episode にする。",
+	"- memory_candidates の object の type が datetime のときは、value を ISO 8601 で、日本時間のオフセット +09:00 を付けて書く（例: 2026-10-18T12:00:00+09:00）。",
 	"- open_loops には、相手自身の予定・結果待ち・困りごとの続きなど、あとで聞き返したくなる未解決の話題だけを入れる（最大 2 件、なければ空配列）。雑談の相槌、一般論、すでに終わった話は入れない。「未解決の話題」にある内容は重複して入れない。",
-	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601（タイムゾーン付き）で書く。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
+	"- open_loops の due_at は、相手の発言と現在日時から期限が読めるときだけ ISO 8601 で、日本時間のオフセット +09:00 を付けて書く（例: 2026-10-18T12:00:00+09:00）。読めなければ null。due_confidence はその確からしさ（0 〜 1）で、due_at が null なら null。",
 	"- 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。",
 	"- performance は返事全体をどう言うかの指示で、ignore でも埋める。emotion は neutral / joy / amused / anger / sorrow / surprised から、今のあなたの気持ちと発言の内容に合うものを選ぶ。energy（0 〜 1）は声の張り、warmth（0 〜 1）は相手への温かさ。pace は slow / slightly_slow / normal / slightly_fast / fast から選ぶ。pause_before_ms は話し出す前の間（ミリ秒、0 〜 5000）で、普段は 0 のままにし、ためらいや間を置きたいときだけ増やす。声の高さや速さの数値、特定のエンジンの設定は出さない。",
 	"- speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。眠っている・起きかけているときも声は出せる。迷えば false にする。",

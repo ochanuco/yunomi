@@ -289,10 +289,14 @@ export const createGoogleCalendarAdapter = (
 		if (!body.ok) return body;
 
 		// 終日の予定の end は Google の仕様どおり翌日の日付（含まない側）のまま返す。
+		// 時刻付きの start / end は Date で返す。モデルへ渡す直列化（toModelJson）で JST の書式になる。
 		const events = body.value.items.map((item) => ({
 			summary: item.summary ?? null,
-			start: "dateTime" in item.start ? item.start.dateTime : item.start.date,
-			end: "dateTime" in item.end ? item.end.dateTime : item.end.date,
+			start:
+				"dateTime" in item.start
+					? new Date(item.start.dateTime)
+					: item.start.date,
+			end: "dateTime" in item.end ? new Date(item.end.dateTime) : item.end.date,
 			allDay: !("dateTime" in item.start),
 			location: item.location ?? null,
 		}));

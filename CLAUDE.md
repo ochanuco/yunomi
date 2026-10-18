@@ -28,5 +28,5 @@
 - ドメインエラーは `type` で判別する discriminated union。例外を投げず `Result<T, E>` で返す
 - ID は UUID v7（`newId()`）。時刻を漏らしたくない場合のみ `newOpaqueId()`
 - D1 は Drizzle。migration は `drizzle-kit generate` で作り、手書きしない
-- 時刻は内部 UTC、表示のみ JST
+- 時刻は内部 UTC、表示のみ JST。モデルに渡す時刻は `formatJstForPrompt` と `toModelJson`、モデルが書いた時刻は `modelDateTime()` を通す。境界のファイルでは `biome-plugins/` の lint が `JSON.stringify`・`formatJst`・`toISOString` を禁じる
 - コメントは日本語で、コードから読み取れない理由だけを書く

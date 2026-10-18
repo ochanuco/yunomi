@@ -4,6 +4,7 @@ import {
 	externalServiceUnavailable,
 	newId,
 	type Result,
+	toModelJson,
 	toolExecutionRejected,
 } from "@yunomi/core";
 import * as v from "valibot";
@@ -430,7 +431,7 @@ export const createCapabilityGate = (deps: {
 		async handle(call, context) {
 			const started = Date.now();
 			const finish = (handled: Handled): GateResult => ({
-				content: JSON.stringify(handled.body),
+				content: toModelJson(handled.body),
 				isError: handled.isError,
 				record: {
 					tool: call.name,

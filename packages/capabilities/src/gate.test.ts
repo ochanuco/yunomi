@@ -144,6 +144,35 @@ describe("definitions", () => {
 	});
 });
 
+describe("モデルへ返す結果の日時", () => {
+	it("結果の Date は JST の書式にし、文字列はそのまま返す", async () => {
+		const { gate } = setup({
+			behavior: async () =>
+				ok({
+					data: {
+						events: [
+							{
+								start: new Date("2026-10-18T01:00:00Z"),
+								end: "2026-10-19",
+							},
+						],
+					},
+					summary: "予定 1 件",
+				}),
+		});
+		const res = await gate.handle(
+			{ name: "calendar_list_events", input: listInput },
+			context(),
+		);
+		expect(body(res.content)).toEqual({
+			status: "ok",
+			result: {
+				events: [{ start: "2026-10-18 10:00 JST", end: "2026-10-19" }],
+			},
+		});
+	});
+});
+
 describe("registry の道具", () => {
 	it("登録簿にない名前は unknown_tool", async () => {
 		const { gate, calls } = setup();
