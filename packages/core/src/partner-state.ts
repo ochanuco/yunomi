@@ -190,8 +190,13 @@ export const applyRelationshipDelta = (
 	};
 };
 
-/** mood / energy がベースラインへ戻る指数減衰の半減期（時間）。 */
-export const STATE_DECAY_HALF_LIFE_HOURS = 12;
+/**
+ * mood がベースラインへ戻る指数減衰の半減期（時間）。睡眠や仕事で半日〜1日空くのは
+ * 普通なので、一晩では機嫌がほとんど変わらない長さにする。
+ */
+export const MOOD_DECAY_HALF_LIFE_HOURS = 48;
+/** energy の半減期（時間）。疲れは一晩で抜けるものなので mood より速く戻す。 */
+export const ENERGY_DECAY_HALF_LIFE_HOURS = 12;
 /**
  * これ未満の経過では減衰を適用しない。会話中の毎ターンに微小な減衰の遷移が
  * 履歴へ積もるのを避け、updatedAt も動かさないので経過は次のターンへ持ち越される。
@@ -216,13 +221,22 @@ export const applyTimeDecay = (
 	if (!Number.isFinite(elapsedMs) || elapsedMs < DECAY_MIN_ELAPSED_MS) {
 		return none;
 	}
-	const factor = 2 ** (-elapsedMs / 3_600_000 / STATE_DECAY_HALF_LIFE_HOURS);
-	const step = (field: "mood" | "energy", min: number, max: number) => {
+	const elapsedHours = elapsedMs / 3_600_000;
+	const step = (
+		field: "mood" | "energy",
+		halfLifeHours: number,
+		min: number,
+		max: number,
+	) => {
+		const factor = 2 ** (-elapsedHours / halfLifeHours);
 		const b = baseline[field];
 		const next = clamp(b + (state[field] - b) * factor, min, max);
 		return round(next - state[field]);
 	};
-	const applied = { mood: step("mood", -1, 1), energy: step("energy", 0, 1) };
+	const applied = {
+		mood: step("mood", MOOD_DECAY_HALF_LIFE_HOURS, -1, 1),
+		energy: step("energy", ENERGY_DECAY_HALF_LIFE_HOURS, 0, 1),
+	};
 	if (applied.mood === 0 && applied.energy === 0) return none;
 	return {
 		state: {

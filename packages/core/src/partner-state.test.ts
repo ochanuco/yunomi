@@ -8,9 +8,10 @@ import {
 	applyTimeDecay,
 	type DailyAccumulator,
 	DECAY_MIN_ELAPSED_MS,
+	ENERGY_DECAY_HALF_LIFE_HOURS,
 	initialPartnerState,
 	initialRelationship,
-	STATE_DECAY_HALF_LIFE_HOURS,
+	MOOD_DECAY_HALF_LIFE_HOURS,
 } from "./partner-state.ts";
 
 const profile = {
@@ -248,24 +249,44 @@ describe("時間減衰", () => {
 		degradedMode: true,
 	});
 
-	it("半減期ちょうどでベースラインとの差が半分になる", () => {
+	it("mood は半減期ちょうどでベースラインとの差が半分になる", () => {
 		const r = applyTimeDecay(
 			at(1, 1),
 			baseline,
-			hours(STATE_DECAY_HALF_LIFE_HOURS),
+			hours(MOOD_DECAY_HALF_LIFE_HOURS),
 		);
 		expect(r.state.mood).toBeCloseTo(0.6);
-		expect(r.state.energy).toBeCloseTo(0.8);
 		expect(r.applied.mood).toBeCloseTo(-0.4);
-		expect(r.applied.energy).toBeCloseTo(-0.2);
 		expect(r.state.version).toBe(2);
-		expect(r.state.updatedAt).toBe(hours(12).toISOString());
+		expect(r.state.updatedAt).toBe(
+			hours(MOOD_DECAY_HALF_LIFE_HOURS).toISOString(),
+		);
+	});
+
+	it("energy は mood より短い半減期で戻る", () => {
+		const r = applyTimeDecay(
+			at(1, 1),
+			baseline,
+			hours(ENERGY_DECAY_HALF_LIFE_HOURS),
+		);
+		expect(r.state.energy).toBeCloseTo(0.8);
+		expect(r.applied.energy).toBeCloseTo(-0.2);
+		expect(r.state.mood).toBeGreaterThan(0.8);
+	});
+
+	it("一晩空いても mood はほとんど動かない", () => {
+		const r = applyTimeDecay(at(1, 0.6), baseline, hours(9.5));
+		expect(r.state.mood).toBeGreaterThan(0.85);
 	});
 
 	it("ベースラインより下からも戻る", () => {
-		const r = applyTimeDecay(at(-0.6, 0.2), baseline, hours(12));
+		const r = applyTimeDecay(
+			at(-0.6, 0.2),
+			baseline,
+			hours(MOOD_DECAY_HALF_LIFE_HOURS),
+		);
 		expect(r.state.mood).toBeCloseTo(-0.2);
-		expect(r.state.energy).toBeCloseTo(0.4);
+		expect(r.state.energy).toBeCloseTo(0.575);
 	});
 
 	it("30 分未満は同一オブジェクトを返す", () => {
