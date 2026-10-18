@@ -276,6 +276,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 				examples: selectExamples(opts.profile.examples, {
 					seed: `${scenario.id}:${i}`,
 					count: EXAMPLE_COUNT,
+					familiarity: input.relationship.familiarity,
 				}),
 				opening: selectOpening(`${scenario.id}:${i}`),
 			});

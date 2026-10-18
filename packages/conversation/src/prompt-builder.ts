@@ -10,6 +10,7 @@ import {
 } from "@yunomi/core";
 import type { ChatMessage, SystemBlock } from "@yunomi/llm";
 import type { InboundMessage } from "@yunomi/protocol";
+import { selectFamiliarityTier } from "./familiarity-tier.ts";
 
 export type JokeStatus = "available" | "cooling_down";
 
@@ -186,8 +187,18 @@ const rulesBlock = (
 const stateBlock = (s: PromptInput["state"]): string =>
 	`## 現在の状態\n- 気分: ${fmt(s.mood)}（-1 〜 1）\n- 元気: ${fmt(s.energy)}（0 〜 1）`;
 
-const relationshipBlock = (r: PromptInput["relationship"]): string =>
-	`## ${r.speakerName} との関係\n- 親しさ: ${fmt(r.familiarity)}（0 〜 1）\n- 信頼: ${fmt(r.trust)}（0 〜 1）`;
+const relationshipBlock = (
+	r: PromptInput["relationship"],
+	tiers: PartnerProfile["familiarity_tiers"],
+): string => {
+	const tier = selectFamiliarityTier(tiers, r.familiarity);
+	return [
+		`## ${r.speakerName} との関係`,
+		`- 親しさ: ${fmt(r.familiarity)}（0 〜 1）`,
+		`- 信頼: ${fmt(r.trust)}（0 〜 1）`,
+		...(tier ? [`- 距離感: ${tier.label}。${tier.text}`] : []),
+	].join("\n");
+};
 
 // 日数は JST の暦日の差で数える。24 時間の差だと、夜に聞いた話が翌朝になっても 0 日のままになる。
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -423,7 +434,10 @@ export class PromptBuilder {
 		const persona = identityBlock(input.profile);
 		const rules = rulesBlock(input.profile, input.jokeStatus ?? {});
 		const state = stateBlock(input.state);
-		const relationship = relationshipBlock(input.relationship);
+		const relationship = relationshipBlock(
+			input.relationship,
+			input.profile.familiarity_tiers,
+		);
 		const channel = channelBlock(input.channel);
 		const body = bodyBlock(input.bodyState ?? "unavailable", input.voice);
 		const interest = interestBlock(

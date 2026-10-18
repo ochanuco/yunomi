@@ -299,6 +299,7 @@ export const runTurn = async (
 		examples: selectExamples(profile.examples, {
 			seed: msg.messageId,
 			count: EXAMPLE_COUNT,
+			familiarity: rel0.relationship.familiarity,
 		}),
 		opening: selectOpening(msg.messageId),
 		bodyState,

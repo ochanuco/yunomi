@@ -25,16 +25,23 @@ export const prng = (seed: string): (() => number) => {
 	};
 };
 
+/** 今の親しさに足りない会話例は候補から外す。min_familiarity がない例は常に使える。 */
+export const eligibleExamples = (
+	examples: readonly ConversationExample[],
+	familiarity: number,
+): ConversationExample[] =>
+	examples.filter((e) => (e.min_familiarity ?? 0) <= familiarity);
+
 /**
  * 会話例を場面の重ならないように count 件選ぶ。場面を無作為に選び、場面の中から 1 件選ぶ。
- * 同じ seed なら同じ結果になる。場面が count 未満なら場面ごとに 1 件。
+ * 親しさが足りない例は除く。同じ seed なら同じ結果になる。場面が count 未満なら場面ごとに 1 件。
  */
 export const selectExamples = (
 	examples: readonly ConversationExample[],
-	opts: { seed: string; count: number },
+	opts: { seed: string; count: number; familiarity: number },
 ): ConversationExample[] => {
 	const byScene = new Map<string, ConversationExample[]>();
-	for (const e of examples) {
+	for (const e of eligibleExamples(examples, opts.familiarity)) {
 		const list = byScene.get(e.scene);
 		if (list) list.push(e);
 		else byScene.set(e.scene, [e]);

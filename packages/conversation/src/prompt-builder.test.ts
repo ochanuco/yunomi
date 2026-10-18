@@ -35,6 +35,24 @@ describe("PromptBuilder", () => {
 		expect(system.length).toBe(builder.build(baseInput()).system.length + 1);
 	});
 
+	it("関係ブロックに親しさに応じた距離感が入り、段階がなければ入らない", () => {
+		const find = (input: ReturnType<typeof baseInput>) =>
+			builder.build(input).system.find((b) => b.text.includes("との関係"))
+				?.text;
+		expect(find(baseInput())).not.toContain("距離感");
+		const input = baseInput();
+		input.profile = {
+			...input.profile,
+			familiarity_tiers: [
+				{ min: 0, label: "遠い", text: "控えめに。" },
+				{ min: 0.4, label: "近い", text: "遠慮なく。" },
+			],
+		};
+		expect(find(input)).toContain("- 距離感: 近い。遠慮なく。");
+		input.relationship = { ...input.relationship, familiarity: 0.39 };
+		expect(find(input)).toContain("- 距離感: 遠い。控えめに。");
+	});
+
 	it("書き出しの入り方は cache しないブロックとして指示の直前に入り、予算に数える", () => {
 		const plain = builder.build(baseInput());
 		const input = baseInput();
