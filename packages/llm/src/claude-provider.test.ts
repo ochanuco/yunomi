@@ -274,7 +274,7 @@ const toolUseMessage = (content: unknown[]): Response =>
 	message("", { stop_reason: "tool_use", content });
 
 describe("ClaudeProvider.step", () => {
-	it("道具を strict: true で載せ、tool_choice は指定せず、Sonnet の beta と structured output も残す", async () => {
+	it("道具を strict なしで載せ、tool_choice は指定せず、Sonnet の beta と structured output も残す", async () => {
 		const { provider, calls } = harness(() =>
 			message(JSON.stringify({ text: "a", note: null })),
 		);
@@ -290,7 +290,6 @@ describe("ClaudeProvider.step", () => {
 				name: "calendar_list",
 				description: "予定を一覧する",
 				input_schema: calendarTool.inputSchema,
-				strict: true,
 			},
 		]);
 		expect(b).not.toHaveProperty("tool_choice");

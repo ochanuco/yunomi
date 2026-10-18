@@ -224,6 +224,16 @@ Gateway が送る添付のメタデータ（名前・種類・大きさ）は、
 - 画像は結果の JSON に入れず、`CapabilityResponse.images` → `GateResult.images` → `ToolResult.images` と運び、`ClaudeProvider` が `tool_result` の content に base64 の `image` ブロックとして載せる。
 - 添付の中身は保存しない。Audit には道具を使った事実とファイル名・種類・大きさだけが残る。
 
+### LLM スキーマの事前確認
+
+道具の入力スキーマは `output_config.format`（ターン出力の JSON schema）と合算されて文法にコンパイルされ、大きすぎると Anthropic が 400 `The compiled grammar is too large` を返す。そのため道具は strict なしで送り、入力は gate が Valibot で再検証する。モックでは検出できないので、道具やターン出力のスキーマを足す・変えるときは、マージ前に本番と同じ形のリクエストを実 API に送って確かめる。
+
+```sh
+ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
+```
+
+`scripts/check-llm-schema.ts` が、本番が登録しうる全道具（`defaultCapabilities` の env には依存しない）と `turnOutput` を、Sonnet（server-side fallback の beta つき）と Haiku の両方に送る。400 のときは API のエラー本文を出して終了コード 1 で終わる。API キーが要るので CI や `turbo test` には入れていない。
+
 ## Admin Web の配信
 
 `/admin/` 配下は `apps/admin` のビルド成果物を返す。`cloudflare.config.ts` の `assets` が配信ディレクトリを指定できないため、`scripts/embed-admin.ts` が `../admin/dist` を `src/generated/admin-assets.ts`（git 管理外）に埋め込み、`src/admin/static.ts` が返す。`typecheck` / `test` は未ビルドなら空で生成し、`build` は `dist` が無いと失敗する。詳細は `apps/admin/README.md`。

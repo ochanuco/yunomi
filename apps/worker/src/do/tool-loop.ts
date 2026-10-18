@@ -2,6 +2,7 @@ import type {
 	CapabilityGate,
 	PendingStore,
 	ToolCallRecord,
+	ToolDefinition,
 } from "@yunomi/capabilities";
 import { type TurnResponse, turnOutput } from "@yunomi/conversation";
 import {
@@ -73,8 +74,10 @@ export type ToolLoopOutcome = {
 	toolCalls: ToolCallRecord[];
 };
 
-const toToolSpecs = (gate: CapabilityGate): ToolSpec[] =>
-	gate.definitions.map((def) => ({
+export const toToolSpecs = (
+	definitions: readonly ToolDefinition[],
+): ToolSpec[] =>
+	definitions.map((def) => ({
 		name: def.name,
 		description: def.description,
 		inputSchema: toStructuredJsonSchema(def.input),
@@ -98,7 +101,7 @@ export const runToolLoop = async (
 	args: ToolLoopArgs,
 ): Promise<ToolLoopOutcome> => {
 	const { router, capabilities, now } = args;
-	const tools = toToolSpecs(capabilities.gate);
+	const tools = toToolSpecs(capabilities.gate.definitions);
 	const messages: StepMessage[] = [...args.messages];
 	const toolCalls: ToolCallRecord[] = [];
 	const wallStarted = Date.now();
