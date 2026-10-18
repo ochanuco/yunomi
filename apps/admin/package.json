@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@yunomi/admin-contract": "workspace:*",
+		"@yunomi/core": "workspace:*",
 		"valibot": "^1.5.0"
 	},
 	"devDependencies": {

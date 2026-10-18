@@ -9,6 +9,7 @@ import type {
 import { renderChart } from "./chart.ts";
 import { h } from "./dom.ts";
 import { jst, pct, shortModel, signedPct } from "./format.ts";
+import { explain } from "./glossary.ts";
 import {
 	changeRows,
 	degradedSpans,
@@ -23,6 +24,12 @@ export const renderError = (message: string): HTMLElement =>
 
 const empty = (text: string) => h("p", { class: "empty" }, text);
 
+/** 説明のある項目名は、ホバーで説明が出る要素にする。 */
+const term = (label: string): string | HTMLElement => {
+	const text = explain(label);
+	return text ? h("span", { class: "term", title: text }, label) : label;
+};
+
 const table = (
 	header: string[],
 	rows: HTMLElement[],
@@ -34,7 +41,7 @@ const table = (
 		h(
 			"table",
 			{ class: className },
-			h("thead", {}, h("tr", {}, ...header.map((t) => h("th", {}, t)))),
+			h("thead", {}, h("tr", {}, ...header.map((t) => h("th", {}, term(t))))),
 			h("tbody", {}, ...rows),
 		),
 	);
@@ -46,7 +53,7 @@ const kv = (pairs: [string, string][]): HTMLElement =>
 	h(
 		"dl",
 		{ class: "kv" },
-		...pairs.flatMap(([k, val]) => [h("dt", {}, k), h("dd", {}, val)]),
+		...pairs.flatMap(([k, val]) => [h("dt", {}, term(k)), h("dd", {}, val)]),
 	);
 
 export type HistoryView = {
@@ -151,7 +158,7 @@ const renderHistory = ({ days, data, now }: HistoryView): HTMLElement => {
 						tr([
 							jst(r.at),
 							r.target,
-							r.item,
+							term(r.item),
 							`${r.before} → ${r.after}`,
 							r.diff === null
 								? ""
