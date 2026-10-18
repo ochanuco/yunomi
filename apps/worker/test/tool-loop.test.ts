@@ -10,6 +10,7 @@ import {
 	PENDING_TTL_MS,
 	type PendingOperation,
 	type PendingStore,
+	readAttachment,
 } from "@yunomi/capabilities";
 import { ok, validationFailed } from "@yunomi/core";
 import {
@@ -528,5 +529,100 @@ describe("LLM の失敗", () => {
 		});
 		expect(res.audit.toolCalls).toHaveLength(1);
 		expect(calls).toHaveLength(1);
+	});
+});
+
+describe("添付の読み取り", () => {
+	const setupAttachment = async (name: string) => {
+		const stub = partnerStub(name);
+		const fake = new FakeLLMProvider();
+		const calls: CapabilityRequest[] = [];
+		const adapter: CapabilityAdapter = {
+			tools: [readAttachment],
+			execute: async (request) => {
+				calls.push(request);
+				return ok({
+					data: { outcome: "read", kind: "image", filename: "haircut.jpg" },
+					images: [{ mediaType: "image/jpeg", data: "QUJD" }],
+					summary: "画像の添付を読んだ",
+				});
+			},
+		};
+		const registry = createToolRegistry([adapter]);
+		if (!registry.ok) throw new Error("登録簿を作れない");
+		const pending: PendingStore = {
+			listOpen: async () => [],
+			get: async () => null,
+			save: async () => undefined,
+		};
+		const gate = createCapabilityGate({
+			registry: registry.value,
+			policy: { attachment_read: "auto" },
+			pending,
+			now: () => T0,
+		});
+		await runInDurableObject(stub, (o) => {
+			o.now = () => T0;
+			o.createRouter = () => new ModelRouter({ provider: fake });
+			o.capabilities = { gate, pending, isOwner: (id) => id === OWNER };
+		});
+		return { stub, fake, calls };
+	};
+
+	it("プロンプトに添付を出し、返信先の id を道具に渡し、画像を tool_results に載せる", async () => {
+		const { stub, fake, calls } = await setupAttachment("attachment");
+		fake.enqueueStep(
+			toolUse([
+				{ name: "read_attachment", input: { message: "current", index: 1 } },
+			]),
+			final("いい髪型ですね"),
+		);
+		const msg = ask("これ見て", {
+			replyToMessageId: "m-reply",
+			attachments: [
+				{ name: "haircut.jpg", contentType: "image/jpeg", size: 1_258_291 },
+			],
+		});
+		const res = await stub.handleDiscordMessage(msg);
+
+		const first = fake.stepRequests[0];
+		const userTurn = first?.messages[0];
+		expect(userTurn && "content" in userTurn ? userTurn.content : "").toContain(
+			"- 添付1: haircut.jpg（image/jpeg、1.2MB）",
+		);
+		expect(first?.tools.map((t) => t.name)).toContain("read_attachment");
+		expect(calls[0]?.context).toMatchObject({
+			sourceMessageId: msg.messageId,
+			replyToMessageId: "m-reply",
+		});
+
+		const results = lastToolResults(fake.stepRequests[1]);
+		expect(results[0]?.images).toEqual([
+			{ mediaType: "image/jpeg", data: "QUJD" },
+		]);
+		expect(results[0]?.content).not.toContain("QUJD");
+		expect(res.audit.toolCalls[0]).toMatchObject({
+			tool: "read_attachment",
+			decision: "auto",
+			outcome: "ok",
+			summary: "画像の添付を読んだ",
+		});
+	});
+
+	it("オーナー以外の依頼では adapter を呼ばない", async () => {
+		const { stub, fake, calls } = await setupAttachment("attachment-guest");
+		fake.enqueueStep(
+			toolUse([
+				{ name: "read_attachment", input: { message: "current", index: 1 } },
+			]),
+			final("すみません、読めません"),
+		);
+		await stub.handleDiscordMessage(
+			ask("これ見て", {
+				author: { id: GUEST, displayName: "bob", isBot: false },
+			}),
+		);
+		expect(calls).toHaveLength(0);
+		expect(lastToolResults(fake.stepRequests[1])[0]?.images).toBeUndefined();
 	});
 });

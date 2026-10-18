@@ -173,6 +173,40 @@ describe("モデルへ返す結果の日時", () => {
 	});
 });
 
+describe("画像を返す道具", () => {
+	const image = { mediaType: "image/png", data: "AAAA" } as const;
+
+	it("adapter の画像は JSON に入れず、images として別に返す", async () => {
+		const { gate } = setup({
+			behavior: async () =>
+				ok({
+					data: { kind: "image" },
+					images: [image],
+					summary: "画像を読んだ",
+				}),
+		});
+		const res = await gate.handle(
+			{ name: "calendar_list_events", input: listInput },
+			context(),
+		);
+		expect(res.images).toEqual([image]);
+		expect(res.content).not.toContain("AAAA");
+		expect(body(res.content)).toEqual({
+			status: "ok",
+			result: { kind: "image" },
+		});
+	});
+
+	it("画像が無ければ images を持たない", async () => {
+		const { gate } = setup();
+		const res = await gate.handle(
+			{ name: "calendar_list_events", input: listInput },
+			context(),
+		);
+		expect("images" in res).toBe(false);
+	});
+});
+
 describe("registry の道具", () => {
 	it("登録簿にない名前は unknown_tool", async () => {
 		const { gate, calls } = setup();

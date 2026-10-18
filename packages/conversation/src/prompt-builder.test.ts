@@ -174,6 +174,43 @@ describe("PromptBuilder", () => {
 		expect(text).not.toContain("tool_intents");
 	});
 
+	describe("添付", () => {
+		const withAttachments = (
+			attachments: { name: string; contentType: string | null; size: number }[],
+		) => {
+			const input = baseInput();
+			return { ...input, message: { ...input.message, attachments } };
+		};
+		const userTurn = (input: ReturnType<typeof baseInput>) =>
+			builder.build(input).messages[0]?.content ?? "";
+
+		it("添付があれば新着メッセージの後ろに番号つきで名前・種類・大きさを出す", () => {
+			const turn = userTurn(
+				withAttachments([
+					{ name: "haircut.jpg", contentType: "image/jpeg", size: 1_258_291 },
+					{ name: "memo", contentType: null, size: 512 },
+				]),
+			);
+			expect(turn).toContain(
+				"\n- 添付1: haircut.jpg（image/jpeg、1.2MB）\n- 添付2: memo（種類不明、512B）\n</new_message>",
+			);
+		});
+
+		it("添付が無ければ添付の行を出さない", () => {
+			expect(userTurn(baseInput())).not.toContain("添付");
+			expect(userTurn(withAttachments([]))).not.toContain("添付");
+		});
+
+		it("道具のブロックに、明示されたときだけ読む指示がある", () => {
+			const text = builder
+				.build({ ...baseInput(), tools: { speakerIsOwner: true, pending: [] } })
+				.system.map((b) => b.text)
+				.join("\n");
+			expect(text).toContain("read_attachment");
+			expect(text).toContain("明示したときだけ");
+		});
+	});
+
 	describe("道具", () => {
 		const withTools = (tools: ToolsContext) => ({ ...baseInput(), tools });
 		const pendingLine = {
