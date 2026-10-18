@@ -162,7 +162,7 @@ describe("PromptBuilder", () => {
 			id: "p-1",
 			tool: "calendar_create_event",
 			input: '{"summary":"歯医者"}',
-			expiresAt: "2026-10-11T03:10:00Z",
+			expiresAt: new Date("2026-10-11T03:10:00Z"),
 		};
 
 		it("tools が無ければ道具と保留のブロックは出さない", () => {
@@ -244,7 +244,11 @@ describe("PromptBuilder", () => {
 	it("Open Loop を id 付きで入れ、期限は JST で示し、件数は上限で切る", () => {
 		const input = baseInput();
 		input.openLoops = [
-			{ id: "ol-1", summary: "面接の結果", dueAt: "2026-10-11T15:30:00Z" },
+			{
+				id: "ol-1",
+				summary: "面接の結果",
+				dueAt: new Date("2026-10-11T15:30:00Z"),
+			},
 			...Array.from({ length: 6 }, (_, i) => ({
 				id: `ol-x${i}`,
 				summary: `話題${i}`,
@@ -254,7 +258,7 @@ describe("PromptBuilder", () => {
 		const text = builder.build(input).system[8]?.text ?? "";
 		expect(text).not.toContain("現在日時");
 		expect(text).toContain(
-			"- [ol-1] 面接の結果（期限の目安: 2026-10-12 00:30:00 JST）",
+			"- [ol-1] 面接の結果（期限の目安: 2026-10-12 00:30 JST）",
 		);
 		expect(text).toContain("- [ol-x3] 話題3");
 		expect(text).not.toContain("ol-x4");
@@ -289,14 +293,14 @@ describe("PromptBuilder", () => {
 			predicate,
 			object: "京都",
 			kind: "episode",
-			observedAt,
+			observedAt: new Date(observedAt),
 		});
 		const lasting: MemoryFact = {
 			subject: "alice",
 			predicate: "好きな飲み物",
 			object: "緑茶",
 			kind: "lasting",
-			observedAt: "2026-01-01T00:00:00Z",
+			observedAt: new Date("2026-01-01T00:00:00Z"),
 		};
 		const memory = (now: string, facts: MemoryFact[]) => {
 			const input = baseInput();
@@ -307,6 +311,18 @@ describe("PromptBuilder", () => {
 			return system[7]?.text ?? "";
 		};
 		const NOW = "2026-10-17T03:00:00Z";
+
+		it("datetime の値は Date で受け取り、JST で出す", () => {
+			const text = memory(NOW, [
+				{
+					...lasting,
+					predicate: "面接の日",
+					object: new Date("2026-10-18T03:00:00Z"),
+				},
+			]);
+			expect(text).toContain("- alice 面接の日 2026-10-18 12:00 JST");
+			expect(text).not.toContain("03:00:00");
+		});
 
 		it("lasting には日付を付けない", () => {
 			expect(memory(NOW, [lasting])).toBe(
@@ -495,7 +511,7 @@ describe("PromptBuilder", () => {
 			predicate: `事実${i}`,
 			object: "あ".repeat(40),
 			kind: "lasting" as const,
-			observedAt: "2026-09-01T03:00:00Z",
+			observedAt: new Date("2026-09-01T03:00:00Z"),
 		}));
 		const full = builder.build({
 			...input,

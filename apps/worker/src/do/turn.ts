@@ -657,7 +657,7 @@ const pendingLines = async (
 			id: op.id,
 			tool: op.tool,
 			input: JSON.stringify(op.input),
-			expiresAt: op.expiresAt,
+			expiresAt: new Date(op.expiresAt),
 		}));
 };
 

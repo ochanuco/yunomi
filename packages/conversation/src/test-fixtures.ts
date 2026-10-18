@@ -67,14 +67,14 @@ export const baseInput = (): PromptInput => ({
 			predicate: "好きな飲み物",
 			object: "緑茶",
 			kind: "lasting",
-			observedAt: "2026-09-01T03:00:00Z",
+			observedAt: new Date("2026-09-01T03:00:00Z"),
 		},
 		{
 			subject: "alice",
 			predicate: "職業",
 			object: "エンジニア",
 			kind: "lasting",
-			observedAt: "2026-09-01T03:00:00Z",
+			observedAt: new Date("2026-09-01T03:00:00Z"),
 		},
 	],
 	interests: [

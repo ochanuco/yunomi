@@ -133,7 +133,7 @@ describe("Open Loop の抽出と保存", () => {
 		await stub.handleDiscordMessage(say(a, "ただいま"));
 		const block = loopsBlock(fake.requests[1]);
 		expect(block).toContain(`[${rows[0]?.id}] 明日の面接の結果`);
-		expect(block).toContain("期限の目安: 2026-10-12 12:00:00 JST");
+		expect(block).toContain("期限の目安: 2026-10-12 12:00 JST");
 	});
 
 	it("audit の detail_json に追加・解決した id が残る", async () => {

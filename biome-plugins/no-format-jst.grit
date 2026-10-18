@@ -1,0 +1,5 @@
+language js
+
+`formatJst($args)` as $call where {
+	register_diagnostic(span=$call, message="LLM との境界では formatJst を使わない。モデルに見せる時刻は formatJstForPrompt（@yunomi/core）で書式をそろえる。", severity="error")
+}

@@ -1,0 +1,5 @@
+language js
+
+`$date.toISOString($args)` as $call where {
+	register_diagnostic(span=$call, message="LLM との境界では toISOString を使わない。UTC の ISO 文字列を prompt に入れると JST と取り違えられる。formatJstForPrompt か toModelJson（@yunomi/core）を使う。", severity="error")
+}

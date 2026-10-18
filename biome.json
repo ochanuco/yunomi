@@ -11,5 +11,34 @@
 		]
 	},
 	"formatter": { "indentStyle": "tab" },
-	"linter": { "enabled": true }
+	"linter": { "enabled": true },
+	"plugins": [
+		{
+			"path": "biome-plugins/no-json-stringify.grit",
+			"includes": [
+				"**/packages/conversation/src/**",
+				"**/packages/capabilities/src/gate.ts",
+				"!**/*.test.ts",
+				"!**/test-fixtures.ts"
+			]
+		},
+		{
+			"path": "biome-plugins/no-format-jst.grit",
+			"includes": [
+				"**/packages/conversation/src/**",
+				"**/packages/capabilities/src/gate.ts",
+				"!**/*.test.ts",
+				"!**/test-fixtures.ts"
+			]
+		},
+		{
+			"path": "biome-plugins/no-to-iso-string.grit",
+			"includes": [
+				"**/packages/conversation/src/**",
+				"**/packages/capabilities/src/gate.ts",
+				"!**/*.test.ts",
+				"!**/test-fixtures.ts"
+			]
+		}
+	]
 }
