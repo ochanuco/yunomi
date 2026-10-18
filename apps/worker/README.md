@@ -215,6 +215,25 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 - 保留中の操作（確認待ちの登録）は DO の SQLite の `pending_operations` に持つ（`src/do/pending-store.ts`）。提案から 10 分で期限が切れ、ターンの頭で保留を読むときに期限切れのものを `expired` にして保存する。解決した行は消さない。
 - 道具の呼び出しは、ターンの Audit の `toolCalls` に残る。`audit_events.kind` は増やさない。
 
+### 添付ファイルの読み取り
+
+Gateway が送る添付のメタデータ（名前・種類・大きさ）は、新着メッセージの後ろに `- 添付1: haircut.jpg（image/jpeg、1.2MB）` の形でプロンプトに出る。中身は自動では開かず、発言者が読む・見るよう明示したときだけ道具 `read_attachment`（category `attachment_read`、`auto`）で読む。入力は `message`（`current` = 新着メッセージ、`reply` = 返信先）と `index`（1 始まり）。
+
+- `DISCORD_BOT_TOKEN` があれば `defaultCapabilities` が登録する。`packages/capabilities` の `createDiscordAttachmentAdapter` が、呼び出しのたびに `GET /channels/{channel}/messages/{id}` でメッセージを取り直し（CDN の URL は署名つきで期限が切れる）、得た URL から取得する。bot には対象チャンネルの View Channel と Read Message History が要る。
+- 読めるのは画像（jpeg・png・gif・webp。上限 5MB）とテキスト（UTF-8。上限 200KB、返すのは先頭 20,000 文字まで）。`content_type` と拡張子の両方で種別を決め、画像は先頭バイトでも確かめる。PDF などは `unsupported_type`、上限超過は `too_large`、メッセージや番号がなければ `not_found` を結果として返し、モデルが相手に説明する。Discord や CDN への通信の失敗は `ExternalServiceUnavailable`。
+- 画像は結果の JSON に入れず、`CapabilityResponse.images` → `GateResult.images` → `ToolResult.images` と運び、`ClaudeProvider` が `tool_result` の content に base64 の `image` ブロックとして載せる。
+- 添付の中身は保存しない。Audit には道具を使った事実とファイル名・種類・大きさだけが残る。
+
+### LLM スキーマの事前確認
+
+道具の入力スキーマは `output_config.format`（ターン出力の JSON schema）と合算されて文法にコンパイルされ、大きすぎると Anthropic が 400 `The compiled grammar is too large` を返す。そのため道具は strict なしで送り、入力は gate が Valibot で再検証する。モックでは検出できないので、道具やターン出力のスキーマを足す・変えるときは、マージ前に本番と同じ形のリクエストを実 API に送って確かめる。
+
+```sh
+ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
+```
+
+`scripts/check-llm-schema.ts` が、本番が登録しうる全道具（`defaultCapabilities` の env には依存しない）と `turnOutput` を、Sonnet（server-side fallback の beta つき）と Haiku の両方に送る。400 のときは API のエラー本文を出して終了コード 1 で終わる。API キーが要るので CI や `turbo test` には入れていない。
+
 ## Admin Web の配信
 
 `/admin/` 配下は `apps/admin` のビルド成果物を返す。`cloudflare.config.ts` の `assets` が配信ディレクトリを指定できないため、`scripts/embed-admin.ts` が `../admin/dist` を `src/generated/admin-assets.ts`（git 管理外）に埋め込み、`src/admin/static.ts` が返す。`typecheck` / `test` は未ビルドなら空で生成し、`build` は `dist` が無いと失敗する。詳細は `apps/admin/README.md`。

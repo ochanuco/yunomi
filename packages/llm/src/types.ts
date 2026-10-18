@@ -28,9 +28,17 @@ export type ToolSpec = {
 
 export type ToolCall = { id: string; name: string; input: unknown };
 
+export type ToolResultImage = {
+	mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+	/** base64。 */
+	data: string;
+};
+
 export type ToolResult = {
 	toolCallId: string;
 	content: string;
+	/** content の後ろに画像として添える。省略は文字だけの結果。 */
+	images?: readonly ToolResultImage[];
 	isError: boolean;
 };
 

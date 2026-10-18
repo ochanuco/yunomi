@@ -74,7 +74,19 @@ const toMessageParam = (m: StepMessage): Anthropic.MessageParam => {
 			content: m.results.map((r) => ({
 				type: "tool_result" as const,
 				tool_use_id: r.toolCallId,
-				content: r.content,
+				content: r.images?.length
+					? [
+							{ type: "text" as const, text: r.content },
+							...r.images.map((img) => ({
+								type: "image" as const,
+								source: {
+									type: "base64" as const,
+									media_type: img.mediaType,
+									data: img.data,
+								},
+							})),
+						]
+					: r.content,
 				is_error: r.isError,
 			})),
 		};
@@ -90,11 +102,12 @@ const toMessageParam = (m: StepMessage): Anthropic.MessageParam => {
 	return { role: m.role, content: m.content };
 };
 
+// strict を付けると、output_config.format の文法と道具の文法が合算され、
+// 道具が 6 つ前後で "compiled grammar is too large" の 400 になる。入力は gate が Valibot で再検証する。
 const toToolParam = (s: ToolSpec): Anthropic.Tool => ({
 	name: s.name,
 	description: s.description,
 	input_schema: s.inputSchema as Anthropic.Tool["input_schema"],
-	strict: true,
 });
 
 const metaOf = (res: ResponseLike, started: number): LLMResultMeta => ({

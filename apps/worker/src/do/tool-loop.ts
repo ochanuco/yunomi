@@ -2,6 +2,7 @@ import type {
 	CapabilityGate,
 	PendingStore,
 	ToolCallRecord,
+	ToolDefinition,
 } from "@yunomi/capabilities";
 import { type TurnResponse, turnOutput } from "@yunomi/conversation";
 import {
@@ -63,6 +64,7 @@ export type ToolLoopArgs = {
 	speaker: { id: string; isOwner: boolean };
 	channelId: string;
 	messageId: string;
+	replyToMessageId?: string | null;
 };
 
 export type ToolLoopOutcome = {
@@ -72,8 +74,10 @@ export type ToolLoopOutcome = {
 	toolCalls: ToolCallRecord[];
 };
 
-const toToolSpecs = (gate: CapabilityGate): ToolSpec[] =>
-	gate.definitions.map((def) => ({
+export const toToolSpecs = (
+	definitions: readonly ToolDefinition[],
+): ToolSpec[] =>
+	definitions.map((def) => ({
 		name: def.name,
 		description: def.description,
 		inputSchema: toStructuredJsonSchema(def.input),
@@ -97,7 +101,7 @@ export const runToolLoop = async (
 	args: ToolLoopArgs,
 ): Promise<ToolLoopOutcome> => {
 	const { router, capabilities, now } = args;
-	const tools = toToolSpecs(capabilities.gate);
+	const tools = toToolSpecs(capabilities.gate.definitions);
 	const messages: StepMessage[] = [...args.messages];
 	const toolCalls: ToolCallRecord[] = [];
 	const wallStarted = Date.now();
@@ -176,6 +180,7 @@ export const runToolLoop = async (
 						isOwner: args.speaker.isOwner,
 						channelId: args.channelId,
 						sourceMessageId: args.messageId,
+						replyToMessageId: args.replyToMessageId ?? null,
 						now: now(),
 					},
 				);
@@ -183,6 +188,7 @@ export const runToolLoop = async (
 				results.push({
 					toolCallId: call.id,
 					content: handled.content,
+					...(handled.images ? { images: handled.images } : {}),
 					isError: handled.isError,
 				});
 			}
