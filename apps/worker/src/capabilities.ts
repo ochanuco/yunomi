@@ -3,6 +3,7 @@ import {
 	type CapabilityPolicy,
 	createCapabilityGate,
 	createDiscordAttachmentAdapter,
+	createGithubAdapter,
 	createGoogleCalendarAdapter,
 	createGooglePlacesAdapter,
 	createToolRegistry,
@@ -17,6 +18,9 @@ export type CapabilityEnv = {
 	GOOGLE_REFRESH_TOKEN?: string;
 	GOOGLE_CALENDAR_ID?: string;
 	GOOGLE_PLACES_API_KEY?: string;
+	GITHUB_TOKEN?: string;
+	/** github_read が repo を省略されたときに読む `owner/name`。 */
+	GITHUB_DEFAULT_REPO?: string;
 	OWNER_DISCORD_USER_ID?: string;
 	/** 添付の読み取りに使う。送信と同じ bot の token。 */
 	DISCORD_BOT_TOKEN?: string;
@@ -44,6 +48,8 @@ export const defaultCapabilities = (
 		GOOGLE_REFRESH_TOKEN: refreshToken,
 		GOOGLE_CALENDAR_ID: calendarId,
 		GOOGLE_PLACES_API_KEY: placesApiKey,
+		GITHUB_TOKEN: githubToken,
+		GITHUB_DEFAULT_REPO: githubDefaultRepo,
 		OWNER_DISCORD_USER_ID: ownerId,
 		DISCORD_BOT_TOKEN: botToken,
 	} = env;
@@ -64,6 +70,15 @@ export const defaultCapabilities = (
 	if (placesApiKey) {
 		adapters.push(
 			createGooglePlacesAdapter({ fetch: doFetch, apiKey: placesApiKey }),
+		);
+	}
+	if (githubToken) {
+		adapters.push(
+			createGithubAdapter({
+				fetch: doFetch,
+				token: githubToken,
+				...(githubDefaultRepo ? { defaultRepo: githubDefaultRepo } : {}),
+			}),
 		);
 	}
 	// owner がいない環境（dev）では gate がすべて拒否するので、道具の一覧にも出さない。

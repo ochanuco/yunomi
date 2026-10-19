@@ -26,6 +26,7 @@
 | CE4 | Google の OAuth が通り、prod で通しの確認が取れる | なし |
 | CE5 | （後続）Gmail の検索・本文の要約・下書き | CE3 |
 | CE6 | 「くずはの麦とラーメン開いてる？」と聞くと、Yukarin が Google マップの営業時間を調べて答える | CE3 |
+| CE7 | 「#176 って何だっけ？」と聞くと、Yukarin が GitHub の Issue / PR を読んで答える | CE3 |
 
 ### CE1. 道具の契約と gate
 
@@ -65,6 +66,14 @@
 
 `fieldMask` に `currentOpeningHours` を含むため、1 回の検索は Text Search の Enterprise 区分で課金される（月 1,000 回まで無料、超過分は 1,000 回あたり $35）。Google Cloud の割り当てで 1 日の上限を設け、無料枠を超えないようにする。Google の規約では `place_id` 以外の保存が制限されるため、検索結果は Audit にも会話の記録にも残さない。
 
+### CE7. GitHub の Issue / PR を読む
+
+- 技術範囲: `packages/capabilities` に道具 `github_read`（カテゴリ `github_read`、`auto`）と GitHub REST API の adapter を足す。入力は `repo`（`owner/name`、省略可）と `number`。省略時の repo は Worker の設定値 `GITHUB_DEFAULT_REPO`（`ochanuco/yunomi`）から adapter の設定として渡し、省略かつ既定もなければ道具のエラーにする。`GET /repos/{owner}/{repo}/issues/{number}` を 1 回呼び（PR も返る）、`pull_request` の有無で種類を、`pull_request.merged_at` でマージ済みを判定する。返す項目は種類、repo、番号、タイトル、状態（open / closed / merged）、ラベル、作成者、作成・更新日時、本文の冒頭（1,500 文字）、コメント数、URL。認証は secret `GITHUB_TOKEN`（fine-grained PAT、Issues と Pull requests の Read-only）で、Calendar・Places とは独立に、token があるときだけ登録する。`TOOLS_BLOCK` への使い方の追記、`partners/yukarin/profile.yaml` の `capability_defaults` への `github_read: auto` の追加。
+- 非ゴール: コメント本文、PR の差分とレビュー、CI の状態、検索と一覧、Issue・PR の作成や更新。
+- Done: `fetch` を差し替えたテストで、open / closed の Issue、open / merged の PR、本文の切り詰め、本文なし、既定 repo の補完、404、401、通信失敗が扱える。Calendar の認証情報がない組み立てでも `github_read` が登録される。prod で「#176 って何だっけ？」に内容つきで答えられる。
+
+private repo の中身を残さないよう、Audit の summary には `owner/repo#番号` と種類だけを書き、タイトルと本文は書かない。
+
 ## Issue 一覧
 
 番号は計画上の ID。右端の列が GitHub Issue の番号。
@@ -82,6 +91,7 @@
 | G01 | CE5 | Gmail を読めるようにする（後続） | C07 | - | #139 |
 | P01 | CE6 | 場所の検索の道具と Google Places の adapter、組み立ての分離 | C07 | P02 と並行 | #160 |
 | P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | #161 |
+| H01 | CE7 | GitHub の Issue / PR を読む道具と adapter、組み立て、secret の登録 | C07 | - | #176 |
 
 C08 と P02 の Google Cloud の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
@@ -101,6 +111,7 @@ graph TD
   C07 --> G01
   C07 --> P01
   P02 --> P01
+  C07 --> H01
 ```
 
 ### クリティカルパス

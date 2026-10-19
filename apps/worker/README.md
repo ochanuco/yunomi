@@ -208,6 +208,8 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` | secret | Google の OAuth クライアントと、`calendar.events` の refresh token |
 | `GOOGLE_PLACES_API_KEY` | secret | 場所の検索（Places API (New) の Text Search）の API キー |
+| `GITHUB_TOKEN` | secret | GitHub の Issue / PR の読み取り（`github_read`）の token。fine-grained PAT で、対象 repo の Issues と Pull requests を Read-only にする |
+| `GITHUB_DEFAULT_REPO` | var | `github_read` が repo を省略されたときに読む repo（`ochanuco/yunomi`） |
 | `GOOGLE_CALENDAR_ID` | secret | 予定を読み書きするカレンダー。prod はオーナーのメインカレンダー（`primary`） |
 | `OWNER_DISCORD_USER_ID` | secret | 道具を使えるオーナーの Discord user id。それ以外の発言者の呼び出しは gate が拒否する |
 

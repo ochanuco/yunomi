@@ -31,6 +31,11 @@ const placesEnv = {
 	GOOGLE_PLACES_API_KEY: "places-key",
 } satisfies CapabilityEnv;
 
+const githubEnv = {
+	GITHUB_TOKEN: "github-token",
+	GITHUB_DEFAULT_REPO: "ochanuco/yunomi",
+} satisfies CapabilityEnv;
+
 const inertStore: PendingStore = {
 	listOpen: async () => [],
 	get: async () => null,
@@ -91,6 +96,25 @@ describe("defaultCapabilities", () => {
 			"pending_cancel",
 		]);
 		expect(caps?.isOwner(OWNER)).toBe(true);
+	});
+
+	it("GitHub の token だけなら、github_read だけを持つ（カレンダーの認証情報とは独立）", () => {
+		const caps = defaultCapabilities(githubEnv, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"github_read",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+	});
+
+	it("GitHub の token が空文字なら null", () => {
+		expect(defaultCapabilities({ GITHUB_TOKEN: "" }, baseDeps)).toBeNull();
+	});
+
+	it("GITHUB_DEFAULT_REPO だけでは道具を作らない", () => {
+		expect(
+			defaultCapabilities({ GITHUB_DEFAULT_REPO: "ochanuco/yunomi" }, baseDeps),
+		).toBeNull();
 	});
 
 	it("Places の API キーが空文字なら null", () => {
