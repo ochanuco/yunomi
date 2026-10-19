@@ -144,3 +144,4 @@ capability_defaults:
   calendar_write: confirm
   place_read: auto
   attachment_read: auto
+  github_read: auto

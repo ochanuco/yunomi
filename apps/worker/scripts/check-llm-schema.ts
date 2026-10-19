@@ -15,6 +15,8 @@ const fullEnv: Required<CapabilityEnv> = {
 	GOOGLE_REFRESH_TOKEN: "x",
 	GOOGLE_CALENDAR_ID: "x",
 	GOOGLE_PLACES_API_KEY: "x",
+	GITHUB_TOKEN: "x",
+	GITHUB_DEFAULT_REPO: "x/y",
 	OWNER_DISCORD_USER_ID: "x",
 	DISCORD_BOT_TOKEN: "x",
 };
