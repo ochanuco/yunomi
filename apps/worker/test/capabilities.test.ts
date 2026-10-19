@@ -36,6 +36,12 @@ const githubEnv = {
 	GITHUB_DEFAULT_REPO: "ochanuco/yunomi",
 } satisfies CapabilityEnv;
 
+const chatsumiEnv = {
+	CHATSUMI_URL: "https://chatsumi.example.test",
+	CHATSUMI_ACCESS_CLIENT_ID: "chatsumi-id",
+	CHATSUMI_ACCESS_CLIENT_SECRET: "chatsumi-secret",
+} satisfies CapabilityEnv;
+
 const inertStore: PendingStore = {
 	listOpen: async () => [],
 	get: async () => null,
@@ -114,6 +120,31 @@ describe("defaultCapabilities", () => {
 	it("GITHUB_DEFAULT_REPO だけでは道具を作らない", () => {
 		expect(
 			defaultCapabilities({ GITHUB_DEFAULT_REPO: "ochanuco/yunomi" }, baseDeps),
+		).toBeNull();
+	});
+
+	it("chatsumi のサービストークンが揃えば、web_fetch だけを持つ（カレンダーの認証情報とは独立）", () => {
+		const caps = defaultCapabilities(chatsumiEnv, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"web_fetch",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+	});
+
+	it.each([
+		["CHATSUMI_ACCESS_CLIENT_ID", { CHATSUMI_ACCESS_CLIENT_ID: "" }],
+		["CHATSUMI_ACCESS_CLIENT_SECRET", { CHATSUMI_ACCESS_CLIENT_SECRET: "" }],
+		["CHATSUMI_URL", { CHATSUMI_URL: "" }],
+	])("chatsumi の %s が空文字なら web_fetch を作らない", (_, empty) => {
+		expect(
+			defaultCapabilities({ ...chatsumiEnv, ...empty }, baseDeps),
+		).toBeNull();
+	});
+
+	it("CHATSUMI_URL だけでは道具を作らない", () => {
+		expect(
+			defaultCapabilities({ CHATSUMI_URL: chatsumiEnv.CHATSUMI_URL }, baseDeps),
 		).toBeNull();
 	});
 

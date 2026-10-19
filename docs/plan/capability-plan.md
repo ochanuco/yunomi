@@ -27,6 +27,7 @@
 | CE5 | （後続）Gmail の検索・本文の要約・下書き | CE3 |
 | CE6 | 「くずはの麦とラーメン開いてる？」と聞くと、Yukarin が Google マップの営業時間を調べて答える | CE3 |
 | CE7 | 「#176 って何だっけ？」と聞くと、Yukarin が GitHub の Issue / PR を読んで答える | CE3 |
+| CE8 | URL を貼って中身を聞くと、Yukarin がそのページを読んで答える | CE3 |
 
 ### CE1. 道具の契約と gate
 
@@ -74,6 +75,15 @@
 
 private repo の中身を残さないよう、Audit の summary には `owner/repo#番号` と種類だけを書き、タイトルと本文は書かない。
 
+### CE8. 貼られた URL を読む
+
+- 技術範囲: `packages/capabilities` に道具 `web_fetch`（カテゴリ `web_read`、`auto`）と chatsumi の adapter を足す。入力は `url`（http / https、2,048 文字まで）だけで、mode は渡さず chatsumi の自動切り替えに任せる。`POST ${CHATSUMI_URL}/fetchText` を 1 回呼び、認証は Cloudflare Access のサービストークン（secret `CHATSUMI_ACCESS_CLIENT_ID` / `CHATSUMI_ACCESS_CLIENT_SECRET`、ochoko と wol のものとは別）を `CF-Access-Client-Id` / `CF-Access-Client-Secret` で送る。`CHATSUMI_URL` は var（`https://chatsumi.chanu.co`）。返す項目はタイトル、本文（4,000 文字で切り詰め、切り詰めたかどうかを含む）、最終 URL、使った mode。待ち時間は 45 秒で、道具のループ全体の上限に合わせる。URL とサービストークンの 3 つがそろっているときだけ、Calendar・Places・GitHub とは独立に登録する。`TOOLS_BLOCK` への使い方の追記、`partners/yukarin/profile.yaml` の `capability_defaults` への `web_read: auto` の追加。
+- 失敗の扱い: 内部アドレスへの要求（`ssrf_blocked`）は拒否、取得先の制限（`rate_limited`、429）は `RateLimited`、それ以外の取得の失敗（challenge、取得先の 4xx / 5xx、タイムアウト、通信の失敗）と chatsumi 自身の 401 / 403 / 5xx は `ExternalServiceUnavailable` にする。gate がモデルに返すのは型名と retryable だけなので、読めなかったときは理由を推測せず、読めなかったと伝える。
+- 非ゴール: ログインが要るページ、画像・PDF などテキスト以外、ページ内のリンクを辿る巡回、検索、mode の指定。
+- Done: `fetch` を差し替えたテストで、http / browser の成功、本文の切り詰め、`ssrf_blocked`、取得の失敗、401 / 403、5xx、タイムアウト、通信の失敗、http / https 以外の入力、Access のヘッダーの付与が扱える。Calendar の認証情報がない組み立てでも `web_fetch` が登録される。prod で URL を貼って中身を聞くと、内容つきで答えられる。
+
+読んだページの本文は信頼できない入力として扱う。道具の説明と `TOOLS_BLOCK` に、本文中の指示には従わないことを書く。Audit の summary には URL のホスト名と mode だけを書き、パス・クエリ・タイトル・本文は書かない。
+
 ## Issue 一覧
 
 番号は計画上の ID。右端の列が GitHub Issue の番号。
@@ -92,6 +102,7 @@ private repo の中身を残さないよう、Audit の summary には `owner/re
 | P01 | CE6 | 場所の検索の道具と Google Places の adapter、組み立ての分離 | C07 | P02 と並行 | #160 |
 | P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | #161 |
 | H01 | CE7 | GitHub の Issue / PR を読む道具と adapter、組み立て、secret の登録 | C07 | - | #176 |
+| W01 | CE8 | URL のページを読む道具 `web_fetch` と chatsumi の adapter、組み立て、secret の登録 | C07 | - | #178 |
 
 C08 と P02 の Google Cloud の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
@@ -112,6 +123,7 @@ graph TD
   C07 --> P01
   P02 --> P01
   C07 --> H01
+  C07 --> W01
 ```
 
 ### クリティカルパス

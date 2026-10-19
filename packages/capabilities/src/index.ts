@@ -1,3 +1,4 @@
+export * from "./adapters/chatsumi.ts";
 export * from "./adapters/discord-attachment.ts";
 export * from "./adapters/github.ts";
 export * from "./adapters/google-calendar.ts";
@@ -7,6 +8,7 @@ export * from "./definitions/attachment.ts";
 export * from "./definitions/calendar.ts";
 export * from "./definitions/github.ts";
 export * from "./definitions/place.ts";
+export * from "./definitions/web.ts";
 export * from "./gate.ts";
 export * from "./input.ts";
 export * from "./pending.ts";

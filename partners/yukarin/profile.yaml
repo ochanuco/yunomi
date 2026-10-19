@@ -145,3 +145,4 @@ capability_defaults:
   place_read: auto
   attachment_read: auto
   github_read: auto
+  web_read: auto
