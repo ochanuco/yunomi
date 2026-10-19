@@ -2,6 +2,7 @@ import {
 	type CapabilityAdapter,
 	type CapabilityPolicy,
 	createCapabilityGate,
+	createChatsumiAdapter,
 	createDiscordAttachmentAdapter,
 	createGithubAdapter,
 	createGoogleCalendarAdapter,
@@ -21,6 +22,11 @@ export type CapabilityEnv = {
 	GITHUB_TOKEN?: string;
 	/** github_read が repo を省略されたときに読む `owner/name`。 */
 	GITHUB_DEFAULT_REPO?: string;
+	/** web_fetch の呼び先 chatsumi の origin。 */
+	CHATSUMI_URL?: string;
+	/** chatsumi の Cloudflare Access のサービストークン。ochoko と wol のものとは別。 */
+	CHATSUMI_ACCESS_CLIENT_ID?: string;
+	CHATSUMI_ACCESS_CLIENT_SECRET?: string;
 	OWNER_DISCORD_USER_ID?: string;
 	/** 添付の読み取りに使う。送信と同じ bot の token。 */
 	DISCORD_BOT_TOKEN?: string;
@@ -50,6 +56,9 @@ export const defaultCapabilities = (
 		GOOGLE_PLACES_API_KEY: placesApiKey,
 		GITHUB_TOKEN: githubToken,
 		GITHUB_DEFAULT_REPO: githubDefaultRepo,
+		CHATSUMI_URL: chatsumiUrl,
+		CHATSUMI_ACCESS_CLIENT_ID: chatsumiClientId,
+		CHATSUMI_ACCESS_CLIENT_SECRET: chatsumiClientSecret,
 		OWNER_DISCORD_USER_ID: ownerId,
 		DISCORD_BOT_TOKEN: botToken,
 	} = env;
@@ -78,6 +87,16 @@ export const defaultCapabilities = (
 				fetch: doFetch,
 				token: githubToken,
 				...(githubDefaultRepo ? { defaultRepo: githubDefaultRepo } : {}),
+			}),
+		);
+	}
+	if (chatsumiUrl && chatsumiClientId && chatsumiClientSecret) {
+		adapters.push(
+			createChatsumiAdapter({
+				fetch: doFetch,
+				baseUrl: chatsumiUrl,
+				accessClientId: chatsumiClientId,
+				accessClientSecret: chatsumiClientSecret,
 			}),
 		);
 	}

@@ -17,6 +17,9 @@ const fullEnv: Required<CapabilityEnv> = {
 	GOOGLE_PLACES_API_KEY: "x",
 	GITHUB_TOKEN: "x",
 	GITHUB_DEFAULT_REPO: "x/y",
+	CHATSUMI_URL: "https://chatsumi.example.test",
+	CHATSUMI_ACCESS_CLIENT_ID: "x",
+	CHATSUMI_ACCESS_CLIENT_SECRET: "x",
 	OWNER_DISCORD_USER_ID: "x",
 	DISCORD_BOT_TOKEN: "x",
 };

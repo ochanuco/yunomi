@@ -47,6 +47,8 @@ export default defineConfig(({ mode }) => {
 				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
 				// github_read が repo を省略されたときに読む repo。
 				GITHUB_DEFAULT_REPO: bindings.text("ochanuco/yunomi"),
+				// web_fetch の呼び先。サービストークンは prod だけが secret で持つ。
+				CHATSUMI_URL: bindings.text("https://chatsumi.chanu.co"),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
@@ -63,7 +65,7 @@ export default defineConfig(({ mode }) => {
 				CF_ACCESS_CLIENT_ID: bindings.secret(),
 				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
 				AIVOICE_TOKEN: bindings.secret(),
-				// 道具（Google カレンダー、Google Places、GitHub）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
+				// 道具（Google カレンダー、Google Places、GitHub、chatsumi）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
 				// 値を置かない dev で宣言すると deploy が通らない。
 				...(production
 					? {
@@ -73,6 +75,8 @@ export default defineConfig(({ mode }) => {
 							GOOGLE_CALENDAR_ID: bindings.secret(),
 							GOOGLE_PLACES_API_KEY: bindings.secret(),
 							GITHUB_TOKEN: bindings.secret(),
+							CHATSUMI_ACCESS_CLIENT_ID: bindings.secret(),
+							CHATSUMI_ACCESS_CLIENT_SECRET: bindings.secret(),
 							OWNER_DISCORD_USER_ID: bindings.secret(),
 						}
 					: {}),

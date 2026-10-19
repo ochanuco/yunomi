@@ -210,6 +210,8 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 | `GOOGLE_PLACES_API_KEY` | secret | 場所の検索（Places API (New) の Text Search）の API キー |
 | `GITHUB_TOKEN` | secret | GitHub の Issue / PR の読み取り（`github_read`）の token。fine-grained PAT で、対象 repo の Issues と Pull requests を Read-only にする |
 | `GITHUB_DEFAULT_REPO` | var | `github_read` が repo を省略されたときに読む repo（`ochanuco/yunomi`） |
+| `CHATSUMI_ACCESS_CLIENT_ID` / `CHATSUMI_ACCESS_CLIENT_SECRET` | secret | 貼られた URL のページを読む（`web_fetch`）ための chatsumi の Cloudflare Access のサービストークン。2 つがそろっているときだけ登録する |
+| `CHATSUMI_URL` | var | chatsumi の origin（`https://chatsumi.chanu.co`） |
 | `GOOGLE_CALENDAR_ID` | secret | 予定を読み書きするカレンダー。prod はオーナーのメインカレンダー（`primary`） |
 | `OWNER_DISCORD_USER_ID` | secret | 道具を使えるオーナーの Discord user id。それ以外の発言者の呼び出しは gate が拒否する |
 
