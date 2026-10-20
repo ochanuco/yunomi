@@ -29,6 +29,12 @@ import {
 import { drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
 import { defaultCapabilities } from "../capabilities.ts";
+import {
+	CONTEXT_BEFORE_COUNT,
+	type ConversationLogWriter,
+	createConversationLogWriter,
+	type LoggedMessage,
+} from "../conversation-log.ts";
 import { createDiscordRest } from "../discord-rest.ts";
 import {
 	createInterestOpinionRepo,
@@ -44,7 +50,13 @@ import { createPendingStore } from "./pending-store.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
 import { messageNonce, sendMessages } from "./send-messages.ts";
-import { DoStore, type RelationshipRow, type StoredResult } from "./store.ts";
+import {
+	DoStore,
+	type RecentMessage,
+	type RelationshipRow,
+	type StoredResult,
+	toRecentMessage,
+} from "./store.ts";
 import type { TurnCapabilities } from "./tool-loop.ts";
 import { runTurn } from "./turn.ts";
 import { VoiceBody, wakeIfAsleep } from "./voice.ts";
@@ -81,6 +93,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #openLoops: OpenLoopRepo;
 	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
+	readonly #conversationLog: ConversationLogWriter;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
@@ -129,6 +142,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#openLoops = createOpenLoopRepo(db);
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
+		this.#conversationLog = createConversationLogWriter(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		this.capabilities =
 			defaultCapabilities(env, {
@@ -229,6 +243,10 @@ export class PartnerDO extends DurableObject<Env> {
 		if (outcome.response.action !== "reply") return toResult(outcome);
 		if (port) {
 			const sent = await this.#send(port, inbound, outcome);
+			this.#logConversation(
+				inbound,
+				sent.map((m) => ({ ...m.row, discordMessageId: m.messageId })),
+			);
 			const voice = this.#voiceDirective(
 				inbound,
 				outcome,
@@ -245,6 +263,7 @@ export class PartnerDO extends DurableObject<Env> {
 		}
 		// Gateway が送る。送れたかは sent 通知でしか分からないので、先に全件を文脈に積む。
 		for (const m of outcome.partnerMessages ?? []) this.#store.appendRecent(m);
+		this.#logConversation(inbound, outcome.partnerMessages ?? []);
 		const voice = this.#voiceDirective(
 			inbound,
 			outcome,
@@ -254,6 +273,26 @@ export class PartnerDO extends DurableObject<Env> {
 			...outcome,
 			response: withVoice(outcome.response, voice),
 		});
+	}
+
+	// 返事をしたターンの直前の文脈・受信・返事を長期ログへ残す。応答は待たせない。
+	#logConversation(
+		inbound: InboundMessage,
+		replies: readonly LoggedMessage[],
+	): void {
+		const context = this.#store
+			.recentMessages(inbound.channelId, inbound.messageId)
+			.slice(-CONTEXT_BEFORE_COUNT);
+		this.#background(
+			this.#conversationLog.record(
+				{
+					partnerId: inbound.partnerId,
+					turnEventId: inbound.eventId,
+					now: this.now(),
+				},
+				[...context, toRecentMessage(inbound), ...replies],
+			),
+		);
 	}
 
 	// 声が使えるのは、発声の器官と意思疎通の口が両方あるときだけ。
@@ -477,7 +516,7 @@ export class PartnerDO extends DurableObject<Env> {
 		port: CommunicationPort,
 		inbound: InboundMessage,
 		outcome: TurnOutcome,
-	): Promise<{ text: string; messageId: string }[]> {
+	): Promise<{ text: string; messageId: string; row: RecentMessage }[]> {
 		const rows = outcome.partnerMessages ?? [];
 		const reply = outcome.response;
 		const target =
@@ -516,10 +555,10 @@ export class PartnerDO extends DurableObject<Env> {
 				unsent: rows.length - at,
 			});
 		}
-		return result.sentIds.map((messageId, i) => ({
-			text: rows[i]?.content ?? "",
-			messageId,
-		}));
+		return result.sentIds.flatMap((messageId, i) => {
+			const row = rows[i];
+			return row ? [{ text: row.content, messageId, row }] : [];
+		});
 	}
 
 	async #process(inbound: InboundMessage, key: string): Promise<HandleResult> {

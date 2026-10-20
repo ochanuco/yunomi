@@ -57,6 +57,13 @@
       "when": 1791678296555,
       "tag": "0007_closed_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792519899909,
+      "tag": "0008_bent_darkstar",
+      "breakpoints": true
     }
   ]
 }

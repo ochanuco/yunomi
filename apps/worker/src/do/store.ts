@@ -64,6 +64,17 @@ const toRecent = (r: RecentRow): RecentMessage => ({
 	occurredAt: r.occurred_at,
 });
 
+export const toRecentMessage = (msg: InboundMessage): RecentMessage => ({
+	channelId: msg.channelId,
+	messageId: msg.messageId,
+	authorId: msg.author.id,
+	authorName: msg.author.displayName,
+	isBot: msg.author.isBot,
+	isPartner: false,
+	content: msg.content,
+	occurredAt: msg.occurredAt.toISOString(),
+});
+
 export class DoStore {
 	readonly #sql: SqlStorage;
 
@@ -95,16 +106,7 @@ export class DoStore {
 	}
 
 	appendInbound(msg: InboundMessage): void {
-		this.appendRecent({
-			channelId: msg.channelId,
-			messageId: msg.messageId,
-			authorId: msg.author.id,
-			authorName: msg.author.displayName,
-			isBot: msg.author.isBot,
-			isPartner: false,
-			content: msg.content,
-			occurredAt: msg.occurredAt.toISOString(),
-		});
+		this.appendRecent(toRecentMessage(msg));
 	}
 
 	appendRecent(m: RecentMessage): void {
