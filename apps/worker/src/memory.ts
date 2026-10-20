@@ -12,8 +12,8 @@ import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates } from "./db/schema.ts";
 
-export const PROMPT_FACT_LIMIT = 12;
-export const PROMPT_EPISODE_LIMIT = 8;
+export const PROMPT_FACT_LIMIT = 30;
+export const PROMPT_EPISODE_LIMIT = 30;
 
 /** facts.decay_policy。lasting は standard、episode は episodic に残す。 */
 const DECAY_POLICY = {

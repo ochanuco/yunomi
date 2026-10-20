@@ -123,8 +123,8 @@ export type PromptBudget = {
 };
 
 export const DEFAULT_BUDGET: PromptBudget = {
-	totalTokens: 6000,
-	memoryRatio: 0.2,
+	totalTokens: 9000,
+	memoryRatio: 0.3,
 	contextRatio: 0.4,
 };
 

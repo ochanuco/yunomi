@@ -4,7 +4,11 @@ import type { TurnResponse } from "@yunomi/conversation";
 import { FakeLLMProvider, HAIKU, ModelRouter } from "@yunomi/llm";
 import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
-import { createMemoryRepo, PROMPT_EPISODE_LIMIT } from "../src/memory.ts";
+import {
+	createMemoryRepo,
+	PROMPT_EPISODE_LIMIT,
+	PROMPT_FACT_LIMIT,
+} from "../src/memory.ts";
 import { inbound, partnerStub } from "./helpers.ts";
 
 const BOT = env.PARTNER_DISCORD_USER_ID;
@@ -329,21 +333,22 @@ describe("Fact memory", () => {
 		);
 	});
 
-	it("プロンプトには importance 順の上位 12 件だけを入れる", async () => {
+	it("プロンプトには importance 順の上位 PROMPT_FACT_LIMIT 件だけを入れる", async () => {
 		const a = newAuthor();
-		const many = Array.from({ length: 14 }, (_, i) =>
+		const count = PROMPT_FACT_LIMIT + 2;
+		const many = Array.from({ length: count }, (_, i) =>
 			candidate({
 				predicate: `item-${String(i).padStart(2, "0")}`,
 				object: { type: "string", value: `v${i}` },
-				importance: (i + 1) / 20,
+				importance: (i + 1) / (count + 1),
 			}),
 		);
 		const { stub, fake } = await setup("mem-top", [many, []]);
 		await stub.handleDiscordMessage(say(a));
 		await stub.handleDiscordMessage(say(a, { content: "次" }));
 		const block = memoryOf(fake.requests[1]);
-		expect(block.match(/alice item-/g)).toHaveLength(12);
-		expect(block).toContain("item-13");
+		expect(block.match(/alice item-/g)).toHaveLength(PROMPT_FACT_LIMIT);
+		expect(block).toContain(`item-${count - 1}`);
 		expect(block).not.toContain("item-00");
 		expect(block).not.toContain("item-01 ");
 	});
