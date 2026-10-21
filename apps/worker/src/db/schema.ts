@@ -205,6 +205,40 @@ export const auditEvents = sqliteTable(
 	(t) => [index("audit_events_partner_created").on(t.partnerId, t.createdAt)],
 );
 
+// ゆかりさんが返事をしたターンの会話本文。長期保存で、削除処理は持たない。
+export const conversationMessages = sqliteTable(
+	"conversation_messages",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		// Discord の id か、DO が振った仮 ID（partner:...）。
+		messageId: text("message_id").notNull(),
+		discordMessageId: text("discord_message_id"),
+		// 記録のきっかけになった受信 Envelope の event_id。
+		turnEventId: text("turn_event_id").notNull(),
+		authorId: text("author_id").notNull(),
+		authorName: text("author_name").notNull(),
+		isBot: integer("is_bot", { mode: "boolean" }).notNull(),
+		isPartner: integer("is_partner", { mode: "boolean" }).notNull(),
+		content: text("content").notNull(),
+		occurredAt: text("occurred_at").notNull(),
+		loggedAt: text("logged_at").notNull(),
+	},
+	(t) => [
+		uniqueIndex("conversation_messages_key").on(
+			t.partnerId,
+			t.channelId,
+			t.messageId,
+		),
+		index("conversation_messages_channel_time").on(
+			t.partnerId,
+			t.channelId,
+			t.occurredAt,
+		),
+	],
+);
+
 // audit_events は 30 日で消えるため、削除前に生活日単位へ集計して長期保存する。
 export const auditDailyKpis = sqliteTable(
 	"audit_daily_kpis",
