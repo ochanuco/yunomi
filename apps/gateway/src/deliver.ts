@@ -44,6 +44,20 @@ export type DeliverTarget = {
 	replyTo: () => string | null;
 };
 
+/** VC の操作が失敗しても、テキストの返信は止めないよう待たない。 */
+export const applyVoice = (
+	deps: Pick<DeliverDeps, "voice" | "logger">,
+	directive: VoiceDirective | undefined,
+	logFields: Record<string, unknown>,
+): void => {
+	void deps.voice?.apply(directive).catch((e: unknown) => {
+		deps.logger.error("voice directive failed", {
+			...logFields,
+			error: e instanceof Error ? e.name : "unknown",
+		});
+	});
+};
+
 /** Worker の応答を実行する。VC の指示・返事の送信・表情画像。 */
 export const deliverResponse = async (
 	deps: DeliverDeps,
@@ -51,15 +65,6 @@ export const deliverResponse = async (
 	{ channel, channelId, logFields, replyTo }: DeliverTarget,
 ): Promise<void> => {
 	const log = deps.logger;
-	// VC の操作が失敗しても、テキストの返信は止めない
-	const applyVoice = (directive: VoiceDirective | undefined) => {
-		void deps.voice?.apply(directive).catch((e: unknown) => {
-			log.error("voice directive failed", {
-				...logFields,
-				error: e instanceof Error ? e.name : "unknown",
-			});
-		});
-	};
 	// 表情画像は返事の添え物なので、送れなくても返事の扱いは変えない
 	const postAvatar = async (avatar: AvatarDirective | undefined) => {
 		if (!avatar || !deps.avatars) return;
@@ -90,7 +95,7 @@ export const deliverResponse = async (
 		log.info("ignored", logFields);
 		return;
 	}
-	applyVoice(response.voice);
+	applyVoice(deps, response.voice, logFields);
 	// Worker が送信まで済ませている。Worker が REST で送る設定になる前は reply で返ってくる
 	if (response.action === "ack") {
 		log.info("acked", logFields);

@@ -72,6 +72,9 @@ const httpError = (status: number): DomainError => {
 	return validationFailed({ issues: [`kukicha ${status}`] });
 };
 
+const isTimeout = (e: unknown): boolean =>
+	e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+
 const defaultSleep = (ms: number) =>
 	new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -95,7 +98,7 @@ export const createKukichaClient = (
 				headers: {
 					authorization: `Bearer ${opts.token}`,
 					"content-type": "application/json",
-					accept: "application/json, text/event-stream",
+					accept: "application/json",
 					"mcp-protocol-version": MCP_PROTOCOL_VERSION,
 				},
 				redirect: "manual",
@@ -118,7 +121,20 @@ export const createKukichaClient = (
 		}
 		if (!res.ok) return { kind: "done", result: err(httpError(res.status)) };
 
-		const json = await res.json().catch(() => null);
+		let json: unknown;
+		try {
+			json = await res.json();
+		} catch (e) {
+			// 本文を読んでいる途中でもタイムアウトは来る。接続中のタイムアウトと同じに扱う
+			if (isTimeout(e)) {
+				return {
+					kind: "retry",
+					error: externalServiceUnavailable({ service: "kukicha" }),
+					reason: (e as Error).name,
+				};
+			}
+			json = null;
+		}
 		const parsed = v.safeParse(rpcSchema, json);
 		if (!parsed.success) {
 			return {

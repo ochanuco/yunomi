@@ -7,12 +7,15 @@ import {
 } from "@yunomi/protocol";
 import * as v from "valibot";
 import type { AvatarStock } from "./avatar-stock.ts";
-import { type ChannelLike, deliverResponse } from "./deliver.ts";
+import { applyVoice, type ChannelLike, deliverResponse } from "./deliver.ts";
 import type { Utterance, Where } from "./ears.ts";
 import type { KukichaClient } from "./kukicha-client.ts";
 import type { Logger } from "./logger.ts";
 import type { VoiceManager } from "./voice-manager.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
+
+// 待たされた発話に今さら返事をしても会話がかみ合わないので、話し始めからこれを過ぎたら捨てる
+const MAX_UTTERANCE_AGE_MS = 60_000;
 
 export type HearingDeps = {
 	kukicha: Pick<KukichaClient, "transcribe">;
@@ -23,6 +26,8 @@ export type HearingDeps = {
 	displayNameOf: (guildId: string, userId: string) => string | null;
 	/** VC のテキストチャット。見つからなければ null。 */
 	channelOf: (channelId: string) => ChannelLike | null;
+	/** guild でいま接続している VC。接続していなければ null。 */
+	connectedChannelOf: (guildId: string) => string | null;
 	voice?: Pick<VoiceManager, "apply">;
 	avatars?: Pick<AvatarStock, "pick">;
 	now?: () => Date;
@@ -38,8 +43,24 @@ export const createHearing = (deps: HearingDeps) => {
 	const now = deps.now ?? (() => new Date());
 	const tails = new Map<string, Promise<void>>();
 
+	/** 待たされて古くなった発話や、もう出た VC の発話は扱わない。 */
+	const stale = (u: Utterance, where: Where, stage: string): boolean => {
+		const at = { guild_id: where.guildId, channel_id: where.channelId };
+		const ageMs = now().getTime() - u.startedAt.getTime();
+		if (ageMs > MAX_UTTERANCE_AGE_MS) {
+			log.debug("utterance too old", { ...at, stage, age_ms: ageMs });
+			return true;
+		}
+		if (deps.connectedChannelOf(where.guildId) !== where.channelId) {
+			log.debug("utterance from left channel", { ...at, stage });
+			return true;
+		}
+		return false;
+	};
+
 	const handle = async (u: Utterance, where: Where): Promise<void> => {
 		const at = { guild_id: where.guildId, channel_id: where.channelId };
+		if (stale(u, where, "transcribe")) return;
 		const transcript = await deps.kukicha.transcribe({
 			wav: u.wav,
 			speaker: deps.ownerUserId,
@@ -98,6 +119,7 @@ export const createHearing = (deps: HearingDeps) => {
 			chars: text.length,
 		});
 
+		if (stale(u, where, "send")) return;
 		const result = await deps.client.send(envelope);
 		if (!result.ok) {
 			log.error("yunomi request failed", {
@@ -110,7 +132,9 @@ export const createHearing = (deps: HearingDeps) => {
 		const channel = deps.channelOf(where.channelId);
 		if (!channel) {
 			log.warn("voice text channel not found", at);
-			if (response.action !== "ignore") await deps.voice?.apply(response.voice);
+			if (response.action !== "ignore") {
+				applyVoice(deps, response.voice, { event_id: envelope.event_id });
+			}
 			return;
 		}
 		await deliverResponse(deps, response, {

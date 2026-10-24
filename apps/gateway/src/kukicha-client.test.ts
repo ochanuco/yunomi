@@ -93,4 +93,57 @@ describe("transcribe", () => {
 			expect(fetchMock).toHaveBeenCalledTimes(1);
 		}
 	});
+
+	it("タイムアウトは 1 回だけやり直す", async () => {
+		for (const name of ["AbortError", "TimeoutError"]) {
+			const { client, fetchMock } = setup([
+				new DOMException("timed out", name),
+				transcript("あ"),
+			]);
+			expect((await client.transcribe(request)).ok).toBe(true);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		}
+	});
+
+	it("本文を読んでいる間のタイムアウトもやり直す", async () => {
+		const slow = {
+			ok: true,
+			status: 200,
+			json: () => Promise.reject(new DOMException("timed out", "TimeoutError")),
+		} as unknown as Response;
+		const { client, fetchMock } = setup([slow, transcript("あ")]);
+		const r = await client.transcribe(request);
+		expect(r.ok && r.value.text).toBe("あ");
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("JSON-RPC の error と 429 はやり直さない", async () => {
+		const rpcError = setup([
+			new Response(
+				JSON.stringify({
+					jsonrpc: "2.0",
+					id: 1,
+					error: { code: -32602, message: "invalid params" },
+				}),
+				{ status: 200 },
+			),
+		]);
+		const r = await rpcError.client.transcribe(request);
+		expect(!r.ok && r.error.type).toBe("ValidationFailed");
+		expect(rpcError.fetchMock).toHaveBeenCalledTimes(1);
+
+		const limited = setup([new Response("", { status: 429 })]);
+		const r2 = await limited.client.transcribe(request);
+		expect(!r2.ok && r2.error.type).toBe("RateLimited");
+		expect(limited.fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("accept は application/json だけにする", async () => {
+		const { client, fetchMock } = setup([transcript("あ")]);
+		await client.transcribe(request);
+		const init = fetchMock.mock.calls[0]?.[1];
+		expect((init?.headers as Record<string, string> | undefined)?.accept).toBe(
+			"application/json",
+		);
+	});
 });

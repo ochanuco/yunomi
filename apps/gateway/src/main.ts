@@ -29,6 +29,11 @@ if (!config.ok) {
 }
 const cfg = config.value;
 const logger = createLogger(cfg.logLevel);
+if (cfg.kukicha && !cfg.ownerUserId) {
+	logger.warn(
+		"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
+	);
+}
 
 const avatarDir = cfg.avatarDir ?? DEFAULT_AVATAR_DIR;
 const avatars = await loadAvatarStock(avatarDir);
@@ -86,6 +91,7 @@ const hear =
 				},
 				// VoiceManager は耳を受け取るので後で作る。発話が届く時点では作られている
 				voice: { apply: (d) => voice.apply(d) },
+				connectedChannelOf: (guildId) => voice.channelOf(guildId),
 				avatars,
 				logger,
 			})

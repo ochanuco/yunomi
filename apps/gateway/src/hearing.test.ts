@@ -21,6 +21,12 @@ const setup = (
 		action: "ack",
 		voice: { leave: { guild_id: "1" } },
 	}),
+	opts: {
+		displayName?: string | null;
+		channelFound?: boolean;
+		connected?: () => string | null;
+		now?: () => Date;
+	} = {},
 ) => {
 	const kukicha = {
 		transcribe: vi.fn(async (r: { wav: Uint8Array; speaker: string }) =>
@@ -33,16 +39,24 @@ const setup = (
 	};
 	const voice = { apply: vi.fn(async (_d: unknown) => {}) };
 	const channel = { send: vi.fn(async (_o: unknown) => ({ id: "500" })) };
-	const logger = { ...silentLogger, info: vi.fn(), warn: vi.fn() };
+	const logger = {
+		...silentLogger,
+		debug: vi.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+	};
 	const hear = createHearing({
 		kukicha: kukicha as never,
 		client: client as never,
 		partnerId: "yukarin",
 		ownerUserId: "42",
-		displayNameOf: () => "持ち主",
-		channelOf: () => channel,
+		displayNameOf: () =>
+			opts.displayName === undefined ? "持ち主" : opts.displayName,
+		channelOf: () => (opts.channelFound === false ? null : channel),
+		connectedChannelOf: opts.connected ?? (() => "2"),
 		voice,
-		now: () => new Date("2026-01-01T00:00:05.000Z"),
+		now: opts.now ?? (() => new Date("2026-01-01T00:00:05.000Z")),
 		logger,
 	});
 	return { channel, client, hear, kukicha, logger, voice };
@@ -140,5 +154,109 @@ describe("createHearing", () => {
 		release();
 		await Promise.all([first, second]);
 		expect(order).toEqual(["stt:1", "send:1", "stt:2"]);
+	});
+
+	it("Worker への送信が失敗したら捨てて次の発話に進む", async () => {
+		const { client, hear, logger } = setup(async (wav) =>
+			said(`発話${wav[0]}`),
+		);
+		client.send.mockResolvedValueOnce(
+			err(externalServiceUnavailable({ service: "yunomi" })),
+		);
+		await Promise.all([hear(utterance(1), where), hear(utterance(2), where)]);
+		expect(logger.error).toHaveBeenCalledWith(
+			"yunomi request failed",
+			expect.objectContaining({ error: "ExternalServiceUnavailable" }),
+		);
+		expect(client.send).toHaveBeenCalledTimes(2);
+	});
+
+	it("テキストチャットが見つからなくても voice は実行し、失敗はログに残す", async () => {
+		const { channel, hear, logger, voice } = setup(
+			async () => said("こんにちは"),
+			ok({
+				action: "reply",
+				content: "やあ",
+				voice: { leave: { guild_id: "1" } },
+			}),
+			{ channelFound: false },
+		);
+		voice.apply.mockRejectedValueOnce(new Error("boom"));
+		await hear(utterance(1), where);
+		expect(channel.send).not.toHaveBeenCalled();
+		expect(voice.apply).toHaveBeenCalledWith({ leave: { guild_id: "1" } });
+		await vi.waitFor(() =>
+			expect(logger.error).toHaveBeenCalledWith(
+				"voice directive failed",
+				expect.objectContaining({ error: "Error" }),
+			),
+		);
+	});
+
+	it("ignore は何も送らず VC も操作しない", async () => {
+		const { channel, hear, voice } = setup(
+			async () => said("こんにちは"),
+			ok({ action: "ignore" }),
+		);
+		await hear(utterance(1), where);
+		expect(channel.send).not.toHaveBeenCalled();
+		expect(voice.apply).not.toHaveBeenCalled();
+	});
+
+	it("表示名が取れなければ user id を表示名にする", async () => {
+		const { client, hear } = setup(async () => said("こんにちは"), undefined, {
+			displayName: null,
+		});
+		await hear(utterance(1), where);
+		const heard = toHeardUtterance(client.send.mock.calls[0]?.[0]);
+		expect(heard.ok && heard.value.author).toEqual({
+			id: "42",
+			displayName: "42",
+		});
+	});
+
+	it("話し始めから 60 秒を過ぎた発話は文字にせず捨てる", async () => {
+		const { client, hear, kukicha } = setup(
+			async () => said("こんにちは"),
+			undefined,
+			{ now: () => new Date("2026-01-01T00:01:00.001Z") },
+		);
+		await hear(utterance(1), where);
+		expect(kukicha.transcribe).not.toHaveBeenCalled();
+		expect(client.send).not.toHaveBeenCalled();
+	});
+
+	it("文字にしている間に 60 秒を過ぎたら Worker に送らない", async () => {
+		let clock = new Date("2026-01-01T00:00:05.000Z");
+		const { client, hear, kukicha } = setup(
+			async () => {
+				clock = new Date("2026-01-01T00:01:00.001Z");
+				return said("こんにちは");
+			},
+			undefined,
+			{ now: () => clock },
+		);
+		await hear(utterance(1), where);
+		expect(kukicha.transcribe).toHaveBeenCalledTimes(1);
+		expect(client.send).not.toHaveBeenCalled();
+	});
+
+	it("VC を出た・移ったあとは、残った発話をその VC に送らない", async () => {
+		let connected: string | null = "2";
+		const { client, hear, kukicha } = setup(
+			async () => {
+				connected = "3";
+				return said("こんにちは");
+			},
+			undefined,
+			{ connected: () => connected },
+		);
+		await hear(utterance(1), where);
+		expect(kukicha.transcribe).toHaveBeenCalledTimes(1);
+		expect(client.send).not.toHaveBeenCalled();
+
+		connected = null;
+		await hear(utterance(2), where);
+		expect(kukicha.transcribe).toHaveBeenCalledTimes(1);
 	});
 });
