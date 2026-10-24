@@ -20,6 +20,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | 本番 | Access service token。どちらか一方だけの指定は起動時エラー |
 | `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.254:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
+| `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
@@ -54,7 +55,7 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 
 ## VC
 
-intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別の VC を指示されたら接続を移す（別の guild なら先に切る）。耳は閉じて（`selfDeaf`）入る。
+intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別の VC を指示されたら接続を移す（別の guild なら先に切る）。`OWNER_DISCORD_USER_ID` が無ければ耳を閉じて（`selfDeaf`）入る。Discord は耳を閉じた参加者には音声を送らない。
 
 ### 出入り
 
@@ -72,13 +73,23 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 - VC にいる間、ochoko の `keep_awake`（`ttl_seconds: 900`、`partner_id: yukarin`）を Ready 直後と 5 分ごとに呼ぶ。失敗は警告ログだけで、次の周期で再び試す。切断で止める。
 - ログに token と音声は出さない（発話は文字数だけ）。
 
+### 耳
+
+- `OWNER_DISCORD_USER_ID` の人が話し始めると（receiver の `speaking` の `start`）、その人の音声を購読する。他の人の声は購読しない。
+- 購読は 700ms 音声が途切れたら終わり、そこまでを 1 つの発話にする。この待ちは、そのまま返事までの遅れに乗る。
+- Opus はパケットごとに 16kHz mono の 16bit PCM へデコードし、WAV にする。デコードで直接この形にするので、変換は要らない。壊れたパケットは飛ばす。
+- 300ms に満たない発話は捨てる。30 秒を超えたらそこで区切り、続きは次の発話にする。
+- 発話には、その時点で接続している VC を付ける。VC を出たあとに終わった途中の発話は捨てる。
+- 再接続で Ready に戻っても、同じ receiver で聞き続ける。
+- ログに音声は出さない（発話は長さだけ）。
+
 ### 依存
 
 | 用途 | 採用 |
 | --- | --- |
 | VC 接続 | `@discordjs/voice`（DAVE 対応版） |
 | E2EE（DAVE） | `@snazzah/davey`（`@discordjs/voice` の依存。ビルド済みバイナリ） |
-| Opus | `opusscript`（WASM。ビルドツール不要。prism-media の peer の版 0.0.8 に固定） |
+| Opus | `opusscript`（WASM。ビルドツール不要。prism-media の peer の版 0.0.8 に固定）。耳のデコードにも使う |
 | 暗号 | Node 組み込みの `aes-256-gcm`（libsodium 不要） |
 | 変換 | ffmpeg（Docker の実行ステージで apt から入れる。ローカル実行では PATH に必要） |
 

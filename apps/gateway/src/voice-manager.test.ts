@@ -6,6 +6,7 @@ import {
 } from "@discordjs/voice";
 import { err, externalServiceUnavailable, ok } from "@yunomi/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Ears } from "./ears.ts";
 import { silentLogger } from "./logger.ts";
 import { type VoiceLib, VoiceManager } from "./voice-manager.ts";
 
@@ -14,6 +15,7 @@ class FakeConnection extends EventEmitter {
 	rejoinAttempts = 0;
 	rejoin = vi.fn();
 	subscribe = vi.fn();
+	receiver = { kind: "receiver" };
 	constructor(
 		public joinConfig: { guildId: string; channelId: string | null },
 	) {
@@ -47,7 +49,7 @@ const values = {
 	},
 };
 
-const setup = (withOchoko = true) => {
+const setup = (withOchoko = true, ears: Ears | null = null) => {
 	const connections = new Map<string, FakeConnection>();
 	const players: FakePlayer[] = [];
 	const lib = {
@@ -89,6 +91,7 @@ const setup = (withOchoko = true) => {
 		partnerId: "yukarin",
 		ochoko: withOchoko ? ochoko : null,
 		yunomi,
+		ears,
 		adapterCreator: () => (() => ({})) as never,
 		lib: lib as unknown as VoiceLib,
 		sleep: async () => {},
@@ -396,5 +399,53 @@ describe("keep_awake", () => {
 		conn(m).set(VoiceConnectionStatus.Ready);
 		await vi.advanceTimersByTimeAsync(10 * 60_000);
 		expect(m.ochoko.keepAwake).not.toHaveBeenCalled();
+	});
+});
+
+describe("ears", () => {
+	const fakeEars = () => {
+		const stop = vi.fn();
+		const listen = vi.fn<Ears["listen"]>(() => stop);
+		return { ears: { listen }, listen, stop };
+	};
+
+	it("耳があれば耳を開けて入り、Ready で聞き始める", async () => {
+		const e = fakeEars();
+		const m = setup(true, e.ears);
+		await m.manager.join("1", "vc1");
+		expect(m.lib.joinVoiceChannel).toHaveBeenCalledWith(
+			expect.objectContaining({ selfDeaf: false }),
+		);
+		expect(e.listen).not.toHaveBeenCalled();
+		conn(m).set(VoiceConnectionStatus.Ready);
+		expect(e.listen).toHaveBeenCalledTimes(1);
+		expect(e.listen.mock.calls[0]?.[0]).toBe(conn(m).receiver);
+	});
+
+	it("再接続で Ready に戻っても聞き直さない", async () => {
+		const e = fakeEars();
+		const m = setup(true, e.ears);
+		await m.manager.join("1", "vc1");
+		conn(m).set(VoiceConnectionStatus.Ready);
+		conn(m).set(VoiceConnectionStatus.Disconnected, {
+			reason: VoiceConnectionDisconnectReason.WebSocketClose,
+			closeCode: 4000,
+		});
+		conn(m).set(VoiceConnectionStatus.Ready);
+		expect(e.listen).toHaveBeenCalledTimes(1);
+	});
+
+	it("発話の時点の VC を返し、切断で聞くのをやめる", async () => {
+		const e = fakeEars();
+		const m = setup(true, e.ears);
+		await m.manager.join("1", "vc1");
+		conn(m).set(VoiceConnectionStatus.Ready);
+		const where = e.listen.mock.calls[0]?.[1];
+		expect(where?.()).toEqual({ guildId: "1", channelId: "vc1" });
+		await m.manager.join("1", "vc2");
+		expect(where?.()).toEqual({ guildId: "1", channelId: "vc2" });
+		m.manager.leave("1");
+		expect(e.stop).toHaveBeenCalledTimes(1);
+		expect(where?.()).toBeNull();
 	});
 });

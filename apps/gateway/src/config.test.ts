@@ -15,6 +15,7 @@ describe("loadConfig", () => {
 				ochoko: null,
 				devCaller: false,
 				avatarDir: null,
+				ownerUserId: null,
 				logLevel: "info",
 			},
 		});
@@ -27,12 +28,14 @@ describe("loadConfig", () => {
 			CF_ACCESS_CLIENT_SECRET: "s",
 			YUNOMI_DEV_CALLER: "1",
 			AVATAR_DIR: "/srv/avatars",
+			OWNER_DISCORD_USER_ID: "42",
 			LOG_LEVEL: "debug",
 		});
 		expect(r.ok && r.value).toMatchObject({
 			access: { clientId: "i", clientSecret: "s" },
 			devCaller: true,
 			avatarDir: "/srv/avatars",
+			ownerUserId: "42",
 			logLevel: "debug",
 		});
 	});
