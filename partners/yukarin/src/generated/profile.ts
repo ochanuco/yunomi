@@ -166,11 +166,7 @@ export const yukarinProfile: PartnerProfile = {
 	"voice": {
 		"traits": {
 			"base_pace": 1,
-			"base_pitch": 1,
-			"expressiveness": 0.7,
-			"quiet_emotions": [
-				"anger"
-			]
+			"base_pitch": 1
 		},
 		"engines": {
 			"aivoice": {
@@ -178,17 +174,57 @@ export const yukarinProfile: PartnerProfile = {
 				"realizations": {
 					"yukari": {
 						"preset": "結月 ゆかり",
-						"emotion_styles": {
-							"joy": "J",
-							"amused": "J",
-							"sorrow": "S",
-							"surprised": "J"
-						},
 						"styles": [
 							"J",
 							"A",
 							"S"
 						],
+						"tones": {
+							"joy": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"amused": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"anger": {
+								"strength": 0,
+								"volume": 0.95,
+								"speed": 0.95,
+								"pitch": 1,
+								"pitch_range": 0.85,
+								"middle_pause": 1.15
+							},
+							"sorrow": {
+								"style": "S",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"surprised": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							}
+						},
 						"master": {
 							"volume": 0.825,
 							"speed": 1.21,
@@ -201,8 +237,8 @@ export const yukarinProfile: PartnerProfile = {
 					},
 					"shizuku": {
 						"preset": "結月 ゆかり（雫）",
-						"emotion_styles": {},
 						"styles": [],
+						"tones": {},
 						"master": {
 							"volume": 0.825,
 							"speed": 1.21,
@@ -966,4 +1002,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "54b191c03db5";
+export const profileVersion = "238a560fc33e";

@@ -9,6 +9,7 @@ import {
 	type SentMessage,
 	type SpeechResult,
 } from "@yunomi/core";
+import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DoStore } from "../src/do/store.ts";
 import { VOICE_DEADLINE_MS, VOICE_POLL_MS } from "../src/do/voice.ts";
@@ -184,8 +185,12 @@ describe("声の添付", () => {
 		];
 		expect(request[0].text).toBe("おはよう");
 		expect(request[0].values.preset).toBe("結月 ゆかり");
+		const joy =
+			yukarinProfile.voice?.engines.aivoice?.realizations.yukari?.tones.joy;
 		expect(request[0].values.presetOverrides).toMatchObject({
-			Styles: expect.arrayContaining([{ Name: "J", Value: 0.7 }]),
+			Styles: expect.arrayContaining([
+				{ Name: joy?.style, Value: joy?.strength },
+			]),
 		});
 	});
 

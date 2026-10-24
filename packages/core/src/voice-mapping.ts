@@ -1,5 +1,9 @@
 import type { AivoiceValues, PacePhrase, PerformanceIR } from "./body.ts";
-import type { AivoiceRealization, VoiceProfile } from "./voice-profile.ts";
+import type {
+	AivoiceRealization,
+	AivoiceTone,
+	VoiceProfile,
+} from "./voice-profile.ts";
 
 const clamp = (x: number, min: number, max: number): number =>
 	Math.min(max, Math.max(min, x));
@@ -14,12 +18,13 @@ const paceFactor: Record<PacePhrase, number> = {
 	fast: 1.2,
 };
 
-// 抑えて表す感情の言い方。聞き比べて決めた倍率。
-const quiet = {
-	pitchRange: 0.85,
-	speed: 0.95,
-	volume: 0.95,
-	middlePause: 1.15,
+const plainTone: AivoiceTone = {
+	strength: 0,
+	volume: 1,
+	speed: 1,
+	pitch: 1,
+	pitch_range: 1,
+	middle_pause: 1,
 };
 
 export type ResolvedRealization = {
@@ -52,6 +57,7 @@ export const resolveAivoiceRealization = (
 
 /**
  * IR と声の性質から A.I.VOICE の値を作る。同じ入力なら同じ値になる。
+ * 声は感情ごとに 1 つのトーンで決め、energy では揺らさない。調整する組み合わせを感情の数に抑えるため。
  * pause_before_ms は発声の前の間なので、エンジンの値には入れず身体が扱う。
  * 声の性質に A.I.VOICE の実現方法がなければ undefined を返す。
  * realizationName は環境が選ぶ実現方法の名前で、未指定や未知の名前は default になる。
@@ -64,25 +70,13 @@ export const toAivoiceValues = (
 	const real = resolveAivoiceRealization(profile, realizationName)?.realization;
 	if (!real) return undefined;
 
-	const isQuiet = profile.traits.quiet_emotions.includes(ir.emotion);
-	const styleEnergy = unit(ir.energy);
-	// 抑える感情では、声の張りを標準より上げない。
-	const energy = isQuiet ? Math.min(styleEnergy, 0.5) : styleEnergy;
+	const tone = real.tones[ir.emotion] ?? plainTone;
 	const warmth = unit(ir.warmth);
 	const { master } = real;
-	const q = isQuiet
-		? quiet
-		: { pitchRange: 1, speed: 1, volume: 1, middlePause: 1 };
 
-	// エンジンは前回のスタイル値を保持するので、対象外のスタイルも 0 で明示して持ち越しを防ぐ。
-	const names = [
-		...new Set([...real.styles, ...Object.values(real.emotion_styles)]),
-	];
-	const active = real.emotion_styles[ir.emotion];
-	const strength = unit(styleEnergy * profile.traits.expressiveness);
-	const Styles = names.map((Name) => ({
+	const Styles = real.styles.map((Name) => ({
 		Name,
-		Value: Name === active ? strength : 0,
+		Value: Name === tone.style ? tone.strength : 0,
 	}));
 	// スタイルを持たないプリセットには Styles を送らない。
 	const presetOverrides = Styles.length > 0 ? { Styles } : {};
@@ -92,30 +86,25 @@ export const toAivoiceValues = (
 		preset: real.preset,
 		presetOverrides,
 		masterOverrides: {
-			Volume: clamp(master.volume * (0.9 + 0.2 * energy) * q.volume, 0, 5),
+			Volume: clamp(master.volume * tone.volume, 0, 5),
 			Speed: clamp(
 				master.speed *
 					profile.traits.base_pace *
 					paceFactor[ir.pace] *
-					(0.9 + 0.2 * energy) *
-					q.speed,
+					tone.speed,
 				0.5,
 				4,
 			),
 			Pitch: clamp(
-				master.pitch * profile.traits.base_pitch * (0.95 + 0.1 * energy),
+				master.pitch * profile.traits.base_pitch * tone.pitch,
 				0.5,
 				2,
 			),
-			PitchRange: clamp(
-				master.pitch_range * (0.8 + 0.4 * energy) * q.pitchRange,
-				0,
-				2,
-			),
+			PitchRange: clamp(master.pitch_range * tone.pitch_range, 0, 2),
 			// A.I.VOICE は間に整数のミリ秒しか受け付けず、小数を送ると合成ごと失敗する。
 			MiddlePause: Math.round(
 				clamp(
-					master.middle_pause_ms * (0.9 + 0.2 * warmth) * q.middlePause,
+					master.middle_pause_ms * (0.9 + 0.2 * warmth) * tone.middle_pause,
 					80,
 					500,
 				),
