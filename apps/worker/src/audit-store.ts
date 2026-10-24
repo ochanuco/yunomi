@@ -60,6 +60,7 @@ export const toAuditRow = (
 			openLoops: audit.openLoops,
 			interestOpinion: audit.interestOpinion,
 			toolCalls: audit.toolCalls,
+			face: audit.face,
 			degradedTransition: audit.degradedTransition,
 		}),
 		occurredAt: ctx.occurredAt.toISOString(),

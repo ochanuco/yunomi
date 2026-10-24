@@ -1,5 +1,6 @@
 import type { ToolCallRecord } from "@yunomi/capabilities";
 import type {
+	PerformanceEmotion,
 	RelationshipDelta,
 	RelationshipUpdateRejected,
 	StateDelta,
@@ -64,6 +65,12 @@ export type TurnAuditData = {
 	} | null;
 	/** reply ターンだけ。適用した変化と、適用しなかったシグナルの理由。 */
 	interestOpinion: (InterestOpinionOutcome & { error: string | null }) | null;
+	/** reply ターンだけ。showFace はモデルが返した生の値（欠けたら null）、avatar は表情画像の指示を実際に出したか。 */
+	face: {
+		emotion: PerformanceEmotion;
+		showFace: boolean | null;
+		avatar: boolean;
+	} | null;
 	/** このターンで degradedMode が切り替わったとき。LLM 失敗の連続による遷移だけを示す。 */
 	degradedTransition: "entered" | "recovered" | null;
 };

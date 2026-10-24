@@ -618,7 +618,16 @@ const withBody = (
 			}
 		: response;
 
+// 表情を貼るかは送信の結果まで決まらないので、最終的な応答から監査に写す。
 const toResult = (o: TurnOutcome): HandleResult => ({
 	...o.response,
-	audit: o.audit,
+	audit: o.audit.face
+		? {
+				...o.audit,
+				face: {
+					...o.audit.face,
+					avatar: "avatar" in o.response && o.response.avatar !== undefined,
+				},
+			}
+		: o.audit,
 });

@@ -611,6 +611,11 @@ export const runTurn = async (
 			reason: "llm",
 			degraded: false,
 			errorType: null,
+			face: {
+				emotion: output.performance.emotion,
+				showFace: output.show_face ?? null,
+				avatar: false,
+			},
 			...common,
 		},
 	};
