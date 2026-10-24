@@ -13,6 +13,7 @@ describe("loadConfig", () => {
 				yunomiUrl: "http://localhost:8787",
 				access: null,
 				ochoko: null,
+				kukicha: null,
 				devCaller: false,
 				avatarDir: null,
 				ownerUserId: null,
@@ -68,5 +69,20 @@ describe("loadConfig", () => {
 		});
 		expect(loadConfig({ ...base, OCHOKO_URL: "http://x:1" }).ok).toBe(false);
 		expect(loadConfig({ ...base, AIVOICE_TOKEN: "tok" }).ok).toBe(false);
+	});
+
+	it("KUKICHA_URL と KUKICHA_TOKEN は任意で、指定するなら両方そろえる", () => {
+		const both = loadConfig({
+			...base,
+			KUKICHA_URL: "http://kukicha.lan:8191/",
+			KUKICHA_TOKEN: "tok",
+		});
+		expect(both.ok && both.value.kukicha).toEqual({
+			url: "http://kukicha.lan:8191",
+			token: "tok",
+		});
+		const urlOnly = loadConfig({ ...base, KUKICHA_URL: "http://x:1" });
+		expect(!urlOnly.ok && urlOnly.error.join("\n")).toMatch(/KUKICHA_TOKEN/);
+		expect(loadConfig({ ...base, KUKICHA_TOKEN: "tok" }).ok).toBe(false);
 	});
 });

@@ -11,6 +11,8 @@ const envSchema = v.pipe(
 		CF_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
 		OCHOKO_URL: v.optional(v.pipe(v.string(), v.url())),
 		AIVOICE_TOKEN: v.optional(nonEmpty),
+		KUKICHA_URL: v.optional(v.pipe(v.string(), v.url())),
+		KUKICHA_TOKEN: v.optional(nonEmpty),
 		YUNOMI_DEV_CALLER: v.optional(v.string()),
 		AVATAR_DIR: v.optional(nonEmpty),
 		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
@@ -25,6 +27,10 @@ const envSchema = v.pipe(
 		(e) => Boolean(e.OCHOKO_URL) === Boolean(e.AIVOICE_TOKEN),
 		"OCHOKO_URL と AIVOICE_TOKEN は両方指定する",
 	),
+	v.check(
+		(e) => Boolean(e.KUKICHA_URL) === Boolean(e.KUKICHA_TOKEN),
+		"KUKICHA_URL と KUKICHA_TOKEN は両方指定する",
+	),
 );
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -36,6 +42,8 @@ export type GatewayConfig = {
 	devCaller: boolean;
 	/** 未設定なら声の合成と keep_awake を使わない。 */
 	ochoko: { url: string; token: string } | null;
+	/** 未設定なら聞いた発話を文字にせず、ログに残すだけにする。 */
+	kukicha: { url: string; token: string } | null;
 	/** 表情画像を置いたディレクトリ。未設定なら同梱の画像を使う。 */
 	avatarDir: string | null;
 	/** VC でこの人の声だけを聞く。未設定なら耳を閉じて入る。 */
@@ -73,6 +81,10 @@ export const loadConfig = (
 		ochoko:
 			e.OCHOKO_URL && e.AIVOICE_TOKEN
 				? { url: e.OCHOKO_URL.replace(/\/+$/, ""), token: e.AIVOICE_TOKEN }
+				: null,
+		kukicha:
+			e.KUKICHA_URL && e.KUKICHA_TOKEN
+				? { url: e.KUKICHA_URL.replace(/\/+$/, ""), token: e.KUKICHA_TOKEN }
 				: null,
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
 		avatarDir: e.AVATAR_DIR ?? null,

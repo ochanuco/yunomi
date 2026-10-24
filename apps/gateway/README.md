@@ -21,6 +21,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.254:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
+| `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
@@ -81,7 +82,12 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 - 300ms に満たない発話は捨てる。30 秒を超えたらそこで区切り、続きは次の発話にする。
 - 発話には、その時点で接続している VC を付ける。VC を出たあとに終わった途中の発話は捨てる。
 - 再接続で Ready に戻っても、同じ receiver で聞き続ける。
-- ログに音声は出さない（発話は長さだけ）。
+- `KUKICHA_URL` があれば、発話を STT 器官で文字にする（`POST {KUKICHA_URL}/mcp`、JSON-RPC `tools/call` の `transcribe`、`Authorization: Bearer`）。`speaker` は `OWNER_DISCORD_USER_ID` で、器官はこの人の声と判定した部分だけを文字にする。
+- 文字が空なら、持ち主の発話は無かったとして何もしない。空でなければ `discord.voice.utterance` の Envelope（`occurred_at` は話し始めた時刻、表示名は guild の member キャッシュから読む）を、テキストと同じ `POST /v1/interfaces/discord/events` に送る。再送の方針もテキストと同じ。
+- 応答はテキストのときと同じに扱う。`voice` は VC を操作し、`reply` は発話を聞いた VC のテキストチャットへ送る。発話には Discord のメッセージが無いので、返信形式にはしない。
+- 発話は時間が経つと返事の意味が薄れるので、STT 器官の失敗は長く待たない。接続エラー・タイムアウト（30 秒）・5xx だけ 1 回やり直し、それでも失敗したら warn ログを出して捨て、次の発話に進む。
+- 返事が話した順に並ぶよう、同じ VC の発話は順に扱う。前の発話の文字起こしと送信が終わってから、次の発話を文字にする。
+- info 以上のログに音声も文字も出さない（発話は長さ、文字は文字数だけ）。
 
 ### 依存
 
