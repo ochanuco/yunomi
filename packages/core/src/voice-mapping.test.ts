@@ -14,7 +14,12 @@ const master = {
 };
 
 const profile: VoiceProfile = {
-	traits: { base_pace: 1, base_pitch: 1, expressiveness: 0.7 },
+	traits: {
+		base_pace: 1,
+		base_pitch: 1,
+		expressiveness: 0.7,
+		quiet_emotions: [],
+	},
 	engines: {
 		aivoice: {
 			default: "yukari",
@@ -22,11 +27,13 @@ const profile: VoiceProfile = {
 				yukari: {
 					preset: "結月 ゆかり",
 					emotion_styles: { joy: "J", amused: "J", anger: "A", sorrow: "S" },
+					styles: [],
 					master,
 				},
 				shizuku: {
 					preset: "結月 ゆかり（雫）",
 					emotion_styles: {},
+					styles: [],
 					master,
 				},
 			},
@@ -164,7 +171,12 @@ describe("toAivoiceValues", () => {
 
 	it("極端な入力でもエンジンの範囲に収まる", () => {
 		const extreme: VoiceProfile = {
-			traits: { base_pace: 2, base_pitch: 2, expressiveness: 1 },
+			traits: {
+				base_pace: 2,
+				base_pitch: 2,
+				expressiveness: 1,
+				quiet_emotions: [],
+			},
 			engines: {
 				aivoice: {
 					default: "p",
@@ -172,6 +184,7 @@ describe("toAivoiceValues", () => {
 						p: {
 							preset: "p",
 							emotion_styles: {},
+							styles: [],
 							master: {
 								volume: 5,
 								speed: 4,
@@ -201,7 +214,12 @@ describe("toAivoiceValues", () => {
 		});
 		const low = toAivoiceValues(ir({ energy: 0, warmth: 0, pace: "slow" }), {
 			...extreme,
-			traits: { base_pace: 0.5, base_pitch: 0.5, expressiveness: 0 },
+			traits: {
+				base_pace: 0.5,
+				base_pitch: 0.5,
+				expressiveness: 0,
+				quiet_emotions: [],
+			},
 		})?.masterOverrides;
 		expect(low?.Speed).toBeGreaterThanOrEqual(0.5);
 		expect(low?.Pitch).toBeGreaterThanOrEqual(0.5);
@@ -218,6 +236,43 @@ describe("toAivoiceValues", () => {
 			expect(Number.isInteger(m?.LongPause)).toBe(true);
 			expect(Number.isInteger(m?.SentencePause)).toBe(true);
 		}
+	});
+
+	it("styles にだけあるスタイルも 0 で送る", () => {
+		const p: VoiceProfile = structuredClone(profile);
+		const real = p.engines.aivoice?.realizations.yukari;
+		if (!real) throw new Error("fixture");
+		real.styles = ["J", "A", "S"];
+		real.emotion_styles = { joy: "J" };
+		const v = toAivoiceValues(ir({ emotion: "anger", energy: 1 }), p);
+		expect(v?.presetOverrides.Styles).toEqual([
+			{ Name: "J", Value: 0 },
+			{ Name: "A", Value: 0 },
+			{ Name: "S", Value: 0 },
+		]);
+	});
+
+	it("抑える感情では energy が高くても声を張らず、抑えた言い方にする", () => {
+		const p: VoiceProfile = structuredClone(profile);
+		p.traits.quiet_emotions = ["anger"];
+		const loud = toAivoiceValues(ir({ emotion: "joy", energy: 1 }), p);
+		const calm = toAivoiceValues(ir({ emotion: "anger", energy: 1 }), p);
+		const base = toAivoiceValues(ir(), p);
+		if (!loud || !calm || !base) throw new Error("values");
+		expect(calm.masterOverrides.Volume).toBeLessThan(
+			base.masterOverrides.Volume,
+		);
+		expect(calm.masterOverrides.Speed).toBeLessThan(base.masterOverrides.Speed);
+		expect(calm.masterOverrides.PitchRange).toBeLessThan(
+			base.masterOverrides.PitchRange,
+		);
+		expect(calm.masterOverrides.MiddlePause).toBeGreaterThan(
+			base.masterOverrides.MiddlePause,
+		);
+		expect(calm.masterOverrides.Pitch).toBe(base.masterOverrides.Pitch);
+		expect(loud.masterOverrides.Volume).toBeGreaterThan(
+			base.masterOverrides.Volume,
+		);
 	});
 
 	it("NaN の energy / warmth は中間値として扱う", () => {

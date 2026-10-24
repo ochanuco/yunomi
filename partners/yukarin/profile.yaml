@@ -111,6 +111,8 @@ voice:
     base_pace: 1
     base_pitch: 1
     expressiveness: 0.7
+    # 怒るときは声を荒げず、静かに怒る。
+    quiet_emotions: [anger]
   engines:
     aivoice:
       # 環境が VOICE_REALIZATION で選ぶ。選ばれない、または未知の名前のときは default を使う。
@@ -119,11 +121,12 @@ voice:
         yukari:
           preset: 結月 ゆかり
           # J/A/S は emo 系の声が持つ喜び・怒り・哀しみのスタイル。
+          # 怒りの A は声色が別人のように変わるので使わない。
+          styles: [J, A, S]
           emotion_styles:
             joy: J
             amused: J
             surprised: J
-            anger: A
             sorrow: S
           # speed は、手本にした動画の台詞を同じ文で合成し、長さが揃うように測った値。
           # 残りは落ち着いた少しダウナーな声にするため、聞き比べて高さ・抑揚・音量を下げ、文中の間を延ばした。

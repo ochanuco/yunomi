@@ -167,7 +167,10 @@ export const yukarinProfile: PartnerProfile = {
 		"traits": {
 			"base_pace": 1,
 			"base_pitch": 1,
-			"expressiveness": 0.7
+			"expressiveness": 0.7,
+			"quiet_emotions": [
+				"anger"
+			]
 		},
 		"engines": {
 			"aivoice": {
@@ -178,10 +181,14 @@ export const yukarinProfile: PartnerProfile = {
 						"emotion_styles": {
 							"joy": "J",
 							"amused": "J",
-							"anger": "A",
 							"sorrow": "S",
 							"surprised": "J"
 						},
+						"styles": [
+							"J",
+							"A",
+							"S"
+						],
 						"master": {
 							"volume": 0.825,
 							"speed": 1.21,
@@ -195,6 +202,7 @@ export const yukarinProfile: PartnerProfile = {
 					"shizuku": {
 						"preset": "結月 ゆかり（雫）",
 						"emotion_styles": {},
+						"styles": [],
 						"master": {
 							"volume": 0.825,
 							"speed": 1.21,
@@ -958,4 +966,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "7928f59ac6da";
+export const profileVersion = "54b191c03db5";

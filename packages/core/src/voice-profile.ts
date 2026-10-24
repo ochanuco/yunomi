@@ -41,6 +41,8 @@ export const aivoiceRealizationSchema = v.object({
 		),
 		{},
 	),
+	// プリセットが持つスタイルの一覧。emotion_styles に載らないスタイルも 0 で送り、前回の値の持ち越しを防ぐ。
+	styles: v.optional(v.array(styleName), []),
 	master: aivoiceMasterSchema,
 });
 
@@ -69,6 +71,8 @@ export const voiceProfileSchema = v.object({
 		base_pitch: v.pipe(v.number(), v.minValue(0.5), v.maxValue(2)),
 		// 感情がどれだけ声に出やすいか。
 		expressiveness: unit,
+		// 声を張らずに抑えて表す感情。energy が高くても声を大きく・速くしない。
+		quiet_emotions: v.optional(v.array(v.picklist(performanceEmotions)), []),
 	}),
 	engines: v.object({
 		aivoice: v.optional(aivoiceEngineSchema),
