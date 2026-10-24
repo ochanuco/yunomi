@@ -119,6 +119,20 @@ describe("sendText", () => {
 		const r = await port.sendText({ channelId: "2", text: "x" });
 		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
 	});
+
+	it("応答が止まらないよう、送信にタイムアウトを付ける", async () => {
+		const { port, fetchMock } = setup([json({ id: "m" })]);
+		await port.sendText({ channelId: "2", text: "x" });
+		expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+	});
+
+	it("タイムアウトは ExternalServiceUnavailable", async () => {
+		const { port } = setup([
+			new DOMException("The operation timed out.", "TimeoutError"),
+		]);
+		const r = await port.sendText({ channelId: "2", text: "x" });
+		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
+	});
 });
 
 describe("sendTyping", () => {

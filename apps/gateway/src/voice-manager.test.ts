@@ -49,7 +49,11 @@ const values = {
 	},
 };
 
-const setup = (withOchoko = true, ears: Ears | null = null) => {
+const setup = (
+	withOchoko = true,
+	ears: Ears | null = null,
+	listening = false,
+) => {
 	const connections = new Map<string, FakeConnection>();
 	const players: FakePlayer[] = [];
 	const lib = {
@@ -92,6 +96,7 @@ const setup = (withOchoko = true, ears: Ears | null = null) => {
 		ochoko: withOchoko ? ochoko : null,
 		yunomi,
 		ears,
+		listening,
 		adapterCreator: () => (() => ({})) as never,
 		lib: lib as unknown as VoiceLib,
 		sleep: async () => {},
@@ -126,6 +131,7 @@ describe("join / leave", () => {
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenCalledWith("yukarin", {
 			guild_id: "1",
 			channel_id: "vc1",
+			listening: false,
 		});
 		expect(m.manager.channelOf("1")).toBe("vc1");
 	});
@@ -164,6 +170,7 @@ describe("join / leave", () => {
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenLastCalledWith("yukarin", {
 			guild_id: "1",
 			channel_id: "vc2",
+			listening: false,
 		});
 	});
 
@@ -185,6 +192,7 @@ describe("join / leave", () => {
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenLastCalledWith("yukarin", {
 			guild_id: "1",
 			channel_id: null,
+			listening: false,
 		});
 		expect(m.manager.channelOf("1")).toBeNull();
 	});
@@ -196,6 +204,7 @@ describe("join / leave", () => {
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenLastCalledWith("yukarin", {
 			guild_id: "1",
 			channel_id: null,
+			listening: false,
 		});
 	});
 
@@ -226,10 +235,12 @@ describe("join / leave", () => {
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenCalledWith("yukarin", {
 			guild_id: "1",
 			channel_id: null,
+			listening: false,
 		});
 		expect(m.yunomi.reportVoiceConnection).toHaveBeenCalledWith("yukarin", {
 			guild_id: "2",
 			channel_id: null,
+			listening: false,
 		});
 	});
 
@@ -447,5 +458,24 @@ describe("ears", () => {
 		m.manager.leave("1");
 		expect(e.stop).toHaveBeenCalledTimes(1);
 		expect(where?.()).toBeNull();
+	});
+});
+
+describe("listening", () => {
+	it("聞いた発話を届けられるときは、接続の報告に listening を付ける", async () => {
+		const m = setup(true, { listen: () => () => {} }, true);
+		await m.manager.join("1", "vc1");
+		conn(m).set(VoiceConnectionStatus.Ready);
+		expect(m.yunomi.reportVoiceConnection).toHaveBeenLastCalledWith("yukarin", {
+			guild_id: "1",
+			channel_id: "vc1",
+			listening: true,
+		});
+		m.manager.leave("1");
+		expect(m.yunomi.reportVoiceConnection).toHaveBeenLastCalledWith("yukarin", {
+			guild_id: "1",
+			channel_id: null,
+			listening: false,
+		});
 	});
 });

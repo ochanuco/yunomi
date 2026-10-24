@@ -62,7 +62,7 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 
 - 人の VC 出入り（チャンネルが変わった更新だけ。ミュート切り替えと partner 自身の更新は無視）を `POST /v1/interfaces/discord/voice-events` で Worker に送る。人数は bot を除き、変化後の値。`partner_channel_id` は Gateway が実際に接続している VC。応答の `voice_join` / `voice_leave` / `ignore` に従う。
 - 応答の `voice`（`reply` と `ack` に載る）は join → speak → leave の順に実行する。`speak` は、その VC に接続中のときだけ受け付け、それ以外は警告ログを出して捨てる。leave は再生待ちの発話を待たずに切る。
-- 接続が Ready になったら `POST /v1/partners/:partnerId/discord/voice-connection` に `{guild_id, channel_id}` を送る。切断（自分で出た・追い出された・チャンネル削除・復帰できなかった）では `channel_id: null` を送る。起動時（ClientReady）は参加している全 guild に `null` を送り、Worker の古い状態を消す。
+- 接続が Ready になったら `POST /v1/partners/:partnerId/discord/voice-connection` に `{guild_id, channel_id, listening}` を送る。`listening` は、聞いた発話を Worker まで届けられる（`OWNER_DISCORD_USER_ID` と `KUKICHA_URL` がある）ときだけ `true`。切断（自分で出た・追い出された・チャンネル削除・復帰できなかった）では `channel_id: null`・`listening: false` を送る。起動時（ClientReady）は参加している全 guild に `null` を送り、Worker の古い状態を消す。
 - Disconnected は @discordjs/voice の標準の手順で扱う。別の VC への移動（close code 4014）は 5 秒だけ Connecting を待ち、それ以外は 5 秒刻みで最大 5 回 rejoin し、だめなら destroy する。
 
 ### 声

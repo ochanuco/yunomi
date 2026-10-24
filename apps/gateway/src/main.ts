@@ -120,6 +120,7 @@ const voice = new VoiceManager({
 	ochoko,
 	yunomi,
 	ears,
+	listening: hear !== null,
 	adapterCreator: (guildId) =>
 		discord.guilds.cache.get(guildId)?.voiceAdapterCreator ?? null,
 	logger,
