@@ -13,7 +13,7 @@ import {
 	send,
 	turn,
 } from "./e2e/harness.ts";
-import { ACK, inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
+import { inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
 
 type TextInput = {
 	channelId: string;
@@ -50,6 +50,11 @@ const slowLlm = (fake: FakeLLMProvider) =>
 			});
 	});
 
+const faceOfJoy = {
+	show_face: true,
+	performance: { ...turn().performance, emotion: "joy" },
+} as const;
+
 describe("Worker からの送信", () => {
 	it("返事を REST で送り、Gateway には ack だけを返す", async () => {
 		const s = newScenario();
@@ -58,7 +63,7 @@ describe("Worker からの送信", () => {
 		await install(port);
 		const msg = mention(s);
 
-		expect(await send(msg)).toEqual(ACK);
+		expect(await send(msg)).toEqual({ action: "ack" });
 
 		expect(port.sendText).toHaveBeenCalledWith({
 			channelId: s.channelId,
@@ -70,23 +75,32 @@ describe("Worker からの送信", () => {
 		);
 	});
 
-	it("送り終えた返事の感情を、表情画像の指示として Gateway に返す", async () => {
-		const s = newScenario();
-		await installFakeLlm([
-			llmOk(
-				turn({
-					messages: ["やった", "ほんとに"],
-					performance: { ...turn().performance, emotion: "joy" },
-				}),
-			),
-		]);
-		await install(fakePort());
+	it.each([
+		{ face: false, emotion: "joy", avatar: undefined },
+		{ face: true, emotion: "neutral", avatar: undefined },
+		{ face: undefined, emotion: "joy", avatar: undefined },
+		{ face: true, emotion: "joy", avatar: { emotion: "joy" } },
+	] as const)(
+		"show_face=$face, emotion=$emotion の返事を送り終えたら avatar=$avatar",
+		async ({ face, emotion, avatar }) => {
+			const s = newScenario();
+			await installFakeLlm([
+				llmOk(
+					turn({
+						messages: ["やった", "ほんとに"],
+						performance: { ...turn().performance, emotion },
+						...(face === undefined ? {} : { show_face: face }),
+					}),
+				),
+			]);
+			await install(fakePort());
 
-		expect(await send(mention(s))).toEqual({
-			action: "ack",
-			avatar: { emotion: "joy" },
-		});
-	});
+			expect(await send(mention(s))).toEqual({
+				action: "ack",
+				...(avatar ? { avatar } : {}),
+			});
+		},
+	);
 
 	it("考えているあいだに他の発言が入れば、返信形式で送る", async () => {
 		const s = newScenario();
@@ -144,9 +158,9 @@ describe("Worker からの送信", () => {
 		expect(rows).toEqual([{ discord_message_id: "d-500" }]);
 	});
 
-	it("送信に失敗しても reply は返さない", async () => {
+	it("送信に失敗しても reply は返さず、表情も添えない", async () => {
 		const s = newScenario();
-		await installFakeLlm([llmOk(turn())]);
+		await installFakeLlm([llmOk(turn(faceOfJoy))]);
 		await install(
 			fakePort({
 				sendText: vi.fn(async () => err(rateLimited({ retryAfterMs: 9000 }))),
@@ -254,7 +268,7 @@ describe("Worker からの送信", () => {
 			await installFakeLlm([llmOk(three())]);
 			const { events, port } = await recording();
 
-			expect(await send(mention(s))).toEqual(ACK);
+			expect(await send(mention(s))).toEqual({ action: "ack" });
 
 			expect(events).toEqual([
 				"send:えっ",
@@ -334,16 +348,16 @@ describe("Worker からの送信", () => {
 
 			const [a, b] = await Promise.all([send(msg), send(msg)]);
 
-			expect(a).toEqual(ACK);
-			expect(b).toEqual(ACK);
+			expect(a).toEqual({ action: "ack" });
+			expect(b).toEqual({ action: "ack" });
 			expect(port.sendText).toHaveBeenCalledTimes(3);
-			expect(await send(msg)).toEqual(ACK);
+			expect(await send(msg)).toEqual({ action: "ack" });
 			expect(port.sendText).toHaveBeenCalledTimes(3);
 		});
 
 		it("途中の 1 件が失敗したら残りは送らず、送れた分だけを記録する", async () => {
 			const s = newScenario();
-			await installFakeLlm([llmOk(three())]);
+			await installFakeLlm([llmOk({ ...three(), ...faceOfJoy })]);
 			const { port } = await recording();
 			vi.mocked(port.sendText)
 				.mockImplementationOnce(async () => ok({ messageId: "d-1" }))

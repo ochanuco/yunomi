@@ -102,6 +102,8 @@ export const turnResponseSchema = v.object({
 	performance: performanceSchema,
 	/** 声で返すか。false ならテキストだけで返す。 */
 	speak_aloud: v.boolean(),
+	/** 返事に表情画像を添えるか。structured outputs では必須だが、欠けた出力は false として読む。 */
+	show_face: v.optional(v.boolean()),
 	/** VC への出入り。stay は何もしない。join は誘われて自分も入りたいときだけ、leave は頼まれたときや別れの挨拶のとき。 */
 	voice_channel: v.picklist(["join", "leave", "stay"]),
 	needs_review: v.boolean(),
@@ -131,5 +133,8 @@ export const toBodyIntent = (
 		messages,
 		performance: response.performance,
 		speakAloud: response.speak_aloud && bodyState !== "unavailable",
+		// neutral の顔は気持ちが動いた印にならないので、モデルが選んでいても貼らない
+		showFace:
+			response.show_face === true && response.performance.emotion !== "neutral",
 	};
 };

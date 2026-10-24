@@ -52,6 +52,7 @@ const valid = () => ({
 		pause_before_ms: 120,
 	},
 	speak_aloud: true,
+	show_face: false,
 	voice_channel: "stay",
 	needs_review: false,
 });
@@ -200,7 +201,7 @@ describe("turnResponseSchema", () => {
 		expect(turnOutput.name).toBe("turn_response");
 		expect(
 			Object.keys(turnOutput.jsonSchema.properties as object),
-		).toHaveLength(14);
+		).toHaveLength(15);
 	});
 });
 
@@ -213,6 +214,7 @@ describe("toBodyIntent", () => {
 			messages: ["こんにちは"],
 			performance: valid().performance,
 			speakAloud: true,
+			showFace: false,
 		});
 		expect(toBodyIntent(res(), "asleep")?.speakAloud).toBe(true);
 		expect(toBodyIntent(res(), "waking")?.speakAloud).toBe(true);
@@ -223,7 +225,26 @@ describe("toBodyIntent", () => {
 			messages: ["こんにちは"],
 			performance: valid().performance,
 			speakAloud: false,
+			showFace: false,
 		});
+	});
+
+	it("顔を見せるのは show_face が true で neutral 以外のときだけ", () => {
+		const face = (over: Partial<TurnResponse>) =>
+			toBodyIntent(res(over), "can_speak")?.showFace;
+		const neutral = {
+			...res().performance,
+			emotion: "neutral",
+		} satisfies TurnResponse["performance"];
+		expect(face({ show_face: true })).toBe(true);
+		expect(face({ show_face: false })).toBe(false);
+		expect(face({ show_face: true, performance: neutral })).toBe(false);
+	});
+
+	it("show_face が欠けた出力は顔を見せない", () => {
+		const { show_face: _, ...rest } = valid();
+		const parsed = v.parse(turnResponseSchema, rest);
+		expect(toBodyIntent(parsed, "can_speak")?.showFace).toBe(false);
 	});
 
 	it("身体が声を出せないときは、モデルが声を選んでも声にしない", () => {

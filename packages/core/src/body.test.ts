@@ -19,6 +19,7 @@ const intent: BodyIntent = {
 		pause_before_ms: 0,
 	},
 	speakAloud: true,
+	showFace: false,
 };
 
 describe("口の型の使い方", () => {

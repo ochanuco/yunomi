@@ -599,8 +599,11 @@ export class PartnerDO extends DurableObject<Env> {
 }
 
 // 表情は声と同じ感情の判定から決め、画像のための LLM 呼び出しを増やさない。
+// 毎回貼るとうるさいので、モデルが気持ちの大きく動いた返事として選んだときだけ貼る。
 const avatarOf = (outcome: TurnOutcome): AvatarDirective | undefined =>
-	outcome.intent ? { emotion: outcome.intent.performance.emotion } : undefined;
+	outcome.intent?.showFace
+		? { emotion: outcome.intent.performance.emotion }
+		: undefined;
 
 const withBody = (
 	response: GatewayResponse,

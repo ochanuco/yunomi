@@ -57,6 +57,3 @@ export const partnerStub = (name = PARTNER_ID) => {
 	>;
 	return ns.get(ns.idFromName(name));
 };
-
-/** Worker が送り終えた返事への応答。fixture の LLM 出力は感情を neutral にしている。 */
-export const ACK = { action: "ack", avatar: { emotion: "neutral" } } as const;

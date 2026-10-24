@@ -21,7 +21,7 @@ import {
 	send,
 	turn,
 } from "./e2e/harness.ts";
-import { ACK, PARTNER_ID, partnerStub } from "./helpers.ts";
+import { PARTNER_ID, partnerStub } from "./helpers.ts";
 
 // DO の alarm は実時刻で発火する。過去の時刻に予約すると即座に自走し、
 // テストが runAlarm で進める前に pending と alarm を消すので、実時刻より先に置く。
@@ -100,7 +100,7 @@ describe("声の添付", () => {
 		const o = fakeOrgans({ availability: "ready" });
 		await install(port, o.organs);
 
-		expect(await send(mention(s))).toEqual(ACK);
+		expect(await send(mention(s))).toEqual({ action: "ack" });
 
 		expect(port.sendText).toHaveBeenCalledTimes(1);
 		expect(o.synthesize).toHaveBeenCalledTimes(1);
@@ -331,7 +331,7 @@ describe("声の添付", () => {
 		await install(port, o.organs);
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		expect(await send(mention(s))).toEqual(ACK);
+		expect(await send(mention(s))).toEqual({ action: "ack" });
 		expect(port.sendText).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).not.toHaveBeenCalled();
 	});

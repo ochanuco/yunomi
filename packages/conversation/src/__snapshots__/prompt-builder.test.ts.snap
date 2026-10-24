@@ -17,7 +17,7 @@ alice（あなたへのメンションあり）: ゆかりん、今日の予定�
   ],
   "meta": {
     "contextLinesKept": 2,
-    "estimatedTokens": 2379,
+    "estimatedTokens": 2484,
     "memoryKept": 2,
   },
   "system": [
@@ -129,6 +129,7 @@ alice（あなたへのメンションあり）: ゆかりん、今日の予定�
 - 「未解決の話題」にある項目が今回の発言で片づいた（結果が出た、解決した）と読めるときは、その id を resolved_open_loop_ids に入れる。一覧にない id は書かない。
 - performance は返事全体をどう言うかの指示で、ignore でも埋める。emotion は neutral / joy / amused / anger / sorrow / surprised から、今のあなたの気持ちと発言の内容に合うものを選ぶ。energy（0 〜 1）は声の張り、warmth（0 〜 1）は相手への温かさ。pace は slow / slightly_slow / normal / slightly_fast / fast から選ぶ。pause_before_ms は話し出す前の間（ミリ秒、0 〜 5000）で、普段は 0 のままにし、ためらいや間を置きたいときだけ増やす。声の高さや速さの数値、特定のエンジンの設定は出さない。
 - speak_aloud は声で返すかどうか。「身体の状態」で声を出せないときは必ず false にする。声を出せるときも、短い相づちや長い文章、コードや URL を含む返事はテキストのままにし、声のほうが気持ちが伝わる短めの返事や、相手が声を求めたときだけ true にする。眠っている・起きかけているときも声は出せる。迷えば false にする。
+- show_face は返事のあとに表情画像を添えるかどうか。普段は false にする。強く喜ぶ、笑う、怒る、悲しむ、驚くなど、気持ちが大きく動いた瞬間だけ true にする。直前の自分の返事で顔を見せていたら続けて true にしない。emotion が neutral のときは必ず false にする。
 - voice_channel は VC への出入り。通常は stay。相手に VC へ誘われ、あなたも入りたいときだけ join にする（今の気分や在席状況で断ってもよい。断るなら stay にして、その旨を返事で伝える）。VC に入っている間に出てほしいと頼まれたとき、または別れの挨拶をするときは leave にする。
 - 迷う内容は needs_review を true にする。
 - messages の 1 件は 2000 文字以内。",
