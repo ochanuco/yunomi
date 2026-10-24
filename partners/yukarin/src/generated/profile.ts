@@ -164,10 +164,6 @@ export const yukarinProfile: PartnerProfile = {
 		"web_read": "auto"
 	},
 	"voice": {
-		"traits": {
-			"base_pace": 1,
-			"base_pitch": 1
-		},
 		"engines": {
 			"aivoice": {
 				"default": "yukari",
@@ -1002,4 +998,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "238a560fc33e";
+export const profileVersion = "a52032b47f13";

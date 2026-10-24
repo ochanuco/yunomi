@@ -75,16 +75,8 @@ export const toAivoiceValues = (
 		presetOverrides,
 		masterOverrides: {
 			Volume: clamp(master.volume * tone.volume, 0, 5),
-			Speed: clamp(
-				master.speed * profile.traits.base_pace * tone.speed,
-				0.5,
-				4,
-			),
-			Pitch: clamp(
-				master.pitch * profile.traits.base_pitch * tone.pitch,
-				0.5,
-				2,
-			),
+			Speed: clamp(master.speed * tone.speed, 0.5, 4),
+			Pitch: clamp(master.pitch * tone.pitch, 0.5, 2),
 			PitchRange: clamp(master.pitch_range * tone.pitch_range, 0, 2),
 			// A.I.VOICE は間に整数のミリ秒しか受け付けず、小数を送ると合成ごと失敗する。
 			MiddlePause: Math.round(

@@ -107,9 +107,6 @@ familiarity_tiers:
     label: 気心が知れた相手
     text: 遠慮なく言う。からかったり、少し食い下がったりしてよい。丁寧語は崩さない。
 voice:
-  traits:
-    base_pace: 1
-    base_pitch: 1
   engines:
     aivoice:
       # 環境が VOICE_REALIZATION で選ぶ。選ばれない、または未知の名前のときは default を使う。

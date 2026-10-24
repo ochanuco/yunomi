@@ -107,7 +107,7 @@ This is a compact decision register.
 ## Voice profile
 
 - lives with the character in `partners/yukarin`
-- engine-independent traits plus a per-engine realization; a new engine adds a realization
+- a per-engine realization; a new engine adds a realization
 - current engine: A.I.VOICE only
 
 ## Organ

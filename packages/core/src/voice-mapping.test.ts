@@ -24,7 +24,6 @@ const tone = (over: Partial<AivoiceTone> = {}): AivoiceTone => ({
 });
 
 const profile: VoiceProfile = {
-	traits: { base_pace: 1, base_pitch: 1 },
 	engines: {
 		aivoice: {
 			default: "yukari",
@@ -141,7 +140,6 @@ describe("toAivoiceValues", () => {
 
 	it("極端な入力でもエンジンの範囲に収まる", () => {
 		const extreme: VoiceProfile = {
-			traits: { base_pace: 2, base_pitch: 2 },
 			engines: {
 				aivoice: {
 					default: "p",
@@ -182,10 +180,12 @@ describe("toAivoiceValues", () => {
 			LongPause: 2000,
 			SentencePause: 10000,
 		});
-		const low = toAivoiceValues(ir(), {
-			...extreme,
-			traits: { base_pace: 0.5, base_pitch: 0.5 },
-		})?.masterOverrides;
+		const slow: VoiceProfile = structuredClone(extreme);
+		const p = slow.engines.aivoice?.realizations.p;
+		if (!p) throw new Error("fixture");
+		p.master = { ...p.master, speed: 0.5, pitch: 0.5 };
+		p.tones = { neutral: tone({ speed: 0.5, pitch: 0.5 }) };
+		const low = toAivoiceValues(ir(), slow)?.masterOverrides;
 		expect(low?.Speed).toBeGreaterThanOrEqual(0.5);
 		expect(low?.Pitch).toBeGreaterThanOrEqual(0.5);
 	});

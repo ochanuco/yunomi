@@ -92,11 +92,6 @@ export const aivoiceEngineSchema = v.pipe(
 );
 
 export const voiceProfileSchema = v.object({
-	traits: v.object({
-		// 1 が標準。マスター値の基準に掛ける倍率。
-		base_pace: v.pipe(v.number(), v.minValue(0.5), v.maxValue(2)),
-		base_pitch: v.pipe(v.number(), v.minValue(0.5), v.maxValue(2)),
-	}),
 	engines: v.object({
 		aivoice: v.optional(aivoiceEngineSchema),
 	}),
