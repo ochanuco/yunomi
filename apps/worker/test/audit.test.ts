@@ -1,5 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import { err, ok, rateLimited } from "@yunomi/core";
 import {
 	FakeLLMProvider,
 	HAIKU,
@@ -7,7 +8,7 @@ import {
 	ModelRouter,
 } from "@yunomi/llm";
 import { dedupeKey } from "@yunomi/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	AUDIT_RETENTION_DAYS,
 	auditCutoff,
@@ -44,7 +45,11 @@ const auditRows = (partnerId: string) =>
 		.all<AuditRow>()
 		.then((r) => r.results);
 
-const turnJson = (utterance: string, policy = "reply") => ({
+const turnJson = (
+	utterance: string,
+	policy = "reply",
+	over: Record<string, unknown> = {},
+) => ({
 	messages: utterance === "" ? [] : [utterance],
 	reply_policy: policy,
 	decision_summary: "テスト",
@@ -65,7 +70,24 @@ const turnJson = (utterance: string, policy = "reply") => ({
 	speak_aloud: false,
 	voice_channel: "stay",
 	needs_review: false,
+	...over,
 });
+
+const surprised = {
+	show_face: true,
+	performance: {
+		emotion: "surprised",
+		energy: 0.8,
+		pace: "fast",
+		warmth: 0.4,
+		pause_before_ms: 0,
+	},
+};
+
+const faceOf = async (partnerId: string) => {
+	const [row] = await auditRows(partnerId);
+	return JSON.parse(row?.detail_json ?? "{}").face;
+};
 
 const setup = async (name: string, outputs: unknown[]) => {
 	const stub = partnerStub(name);
@@ -126,6 +148,61 @@ describe("audit_events", () => {
 		});
 	});
 
+	it("reply ターンは表情の判断と、表情画像の指示を出したかを残す", async () => {
+		const stub = await setup("audit-face", [
+			turnJson("びっくりしました", "reply", surprised),
+		]);
+		const res = await stub.handleDiscordMessage(
+			inbound({ partnerId: "audit-face", mentionedUserIds: [BOT] }),
+		);
+		await stub.flushBackground();
+
+		expect(res).toMatchObject({ avatar: { emotion: "surprised" } });
+		expect(await faceOf("audit-face")).toEqual({
+			emotion: "surprised",
+			showFace: true,
+			avatar: true,
+		});
+	});
+
+	it("show_face が欠けた返事は showFace を null で残し、表情は出さない", async () => {
+		const stub = await setup("audit-face-missing", [turnJson("うん")]);
+		await stub.handleDiscordMessage(
+			inbound({ partnerId: "audit-face-missing", mentionedUserIds: [BOT] }),
+		);
+		await stub.flushBackground();
+
+		expect(await faceOf("audit-face-missing")).toEqual({
+			emotion: "neutral",
+			showFace: null,
+			avatar: false,
+		});
+	});
+
+	it("送信に失敗して表情を添えなかった返事は avatar を false で残す", async () => {
+		const stub = await setup("audit-face-unsent", [
+			turnJson("びっくりしました", "reply", surprised),
+		]);
+		await runInDurableObject(stub, (o) => {
+			o.createCommunication = () => ({
+				sendText: async () => err(rateLimited({ retryAfterMs: 9000 })),
+				sendTyping: async () => ok(undefined),
+				sendAttachment: async () => ok({ messageId: "unused" }),
+			});
+		});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		await stub.handleDiscordMessage(
+			inbound({ partnerId: "audit-face-unsent", mentionedUserIds: [BOT] }),
+		);
+		await stub.flushBackground();
+
+		expect(await faceOf("audit-face-unsent")).toEqual({
+			emotion: "surprised",
+			showFace: true,
+			avatar: false,
+		});
+	});
+
 	it("LLM を呼ばない ignore も 1 件記録される", async () => {
 		const stub = await setup("audit-ignore", []);
 		await stub.handleDiscordMessage(
@@ -145,6 +222,7 @@ describe("audit_events", () => {
 			model: null,
 			input_tokens: 0,
 		});
+		expect(await faceOf("audit-ignore")).toBeNull();
 	});
 
 	it("同じイベントの再送では増えない", async () => {
@@ -206,6 +284,7 @@ describe("保持期間", () => {
 				memory: null,
 				openLoops: null,
 				interestOpinion: null,
+				face: null,
 				degradedTransition: null,
 			},
 		);

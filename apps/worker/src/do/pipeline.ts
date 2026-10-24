@@ -58,6 +58,7 @@ export const ignoreOutcome = (
 		memory: null,
 		openLoops: null,
 		interestOpinion: null,
+		face: null,
 		degradedTransition: null,
 		...extra,
 	},
