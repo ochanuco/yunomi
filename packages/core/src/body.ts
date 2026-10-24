@@ -2,20 +2,9 @@ import type { DomainError } from "./errors.ts";
 import type { Result } from "./result.ts";
 import type { PerformanceEmotion } from "./voice-profile.ts";
 
-export type PacePhrase =
-	| "slow"
-	| "slightly_slow"
-	| "normal"
-	| "slightly_fast"
-	| "fast";
-
 /** 脳が出す、エンジンに依存しない演技の指示。 */
 export type PerformanceIR = {
 	emotion: PerformanceEmotion;
-	energy: number;
-	pace: PacePhrase;
-	warmth: number;
-	pause_before_ms: number;
 };
 
 /** 脳から身体へ渡す意図。 */

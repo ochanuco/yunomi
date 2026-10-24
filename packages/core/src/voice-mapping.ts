@@ -1,4 +1,4 @@
-import type { AivoiceValues, PacePhrase, PerformanceIR } from "./body.ts";
+import type { AivoiceValues, PerformanceIR } from "./body.ts";
 import type {
 	AivoiceRealization,
 	AivoiceTone,
@@ -7,16 +7,6 @@ import type {
 
 const clamp = (x: number, min: number, max: number): number =>
 	Math.min(max, Math.max(min, x));
-
-const unit = (x: number): number => clamp(Number.isFinite(x) ? x : 0.5, 0, 1);
-
-const paceFactor: Record<PacePhrase, number> = {
-	slow: 0.8,
-	slightly_slow: 0.9,
-	normal: 1,
-	slightly_fast: 1.1,
-	fast: 1.2,
-};
 
 const plainTone: AivoiceTone = {
 	strength: 0,
@@ -57,8 +47,7 @@ export const resolveAivoiceRealization = (
 
 /**
  * IR と声の性質から A.I.VOICE の値を作る。同じ入力なら同じ値になる。
- * 声は感情ごとに 1 つのトーンで決め、energy では揺らさない。調整する組み合わせを感情の数に抑えるため。
- * pause_before_ms は発声の前の間なので、エンジンの値には入れず身体が扱う。
+ * IR は感情だけを運び、声は感情ごとに 1 つのトーンで決める。調整する組み合わせを感情の数に抑えるため。
  * 声の性質に A.I.VOICE の実現方法がなければ undefined を返す。
  * realizationName は環境が選ぶ実現方法の名前で、未指定や未知の名前は default になる。
  */
@@ -71,7 +60,6 @@ export const toAivoiceValues = (
 	if (!real) return undefined;
 
 	const tone = real.tones[ir.emotion] ?? plainTone;
-	const warmth = unit(ir.warmth);
 	const { master } = real;
 
 	const Styles = real.styles.map((Name) => ({
@@ -88,10 +76,7 @@ export const toAivoiceValues = (
 		masterOverrides: {
 			Volume: clamp(master.volume * tone.volume, 0, 5),
 			Speed: clamp(
-				master.speed *
-					profile.traits.base_pace *
-					paceFactor[ir.pace] *
-					tone.speed,
+				master.speed * profile.traits.base_pace * tone.speed,
 				0.5,
 				4,
 			),
@@ -103,11 +88,7 @@ export const toAivoiceValues = (
 			PitchRange: clamp(master.pitch_range * tone.pitch_range, 0, 2),
 			// A.I.VOICE は間に整数のミリ秒しか受け付けず、小数を送ると合成ごと失敗する。
 			MiddlePause: Math.round(
-				clamp(
-					master.middle_pause_ms * (0.9 + 0.2 * warmth) * tone.middle_pause,
-					80,
-					500,
-				),
+				clamp(master.middle_pause_ms * tone.middle_pause, 80, 500),
 			),
 			LongPause: Math.round(clamp(master.long_pause_ms, 100, 2000)),
 			SentencePause: Math.round(clamp(master.sentence_pause_ms, 0, 10000)),

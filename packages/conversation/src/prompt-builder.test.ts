@@ -114,7 +114,7 @@ describe("PromptBuilder", () => {
 	it("IR と声で返すかの指示を含み、エンジン固有の値は求めない", () => {
 		const task = builder.build(baseInput()).system[11]?.text ?? "";
 		expect(task).toContain("performance");
-		expect(task).toContain("pause_before_ms");
+		expect(task).toContain("emotion");
 		expect(task).toContain("speak_aloud");
 		expect(task).toContain("声を出せないときは必ず false");
 	});

@@ -53,10 +53,6 @@ const profile: VoiceProfile = {
 
 const ir = (over: Partial<PerformanceIR> = {}): PerformanceIR => ({
 	emotion: "neutral",
-	energy: 0.5,
-	pace: "normal",
-	warmth: 0.5,
-	pause_before_ms: 0,
 	...over,
 });
 
@@ -143,25 +139,6 @@ describe("toAivoiceValues", () => {
 		});
 	});
 
-	it("energy では声を変えない", () => {
-		for (const emotion of ["joy", "anger", "neutral"] as const) {
-			const at = (energy: number) =>
-				toAivoiceValues(ir({ emotion, energy }), profile);
-			expect(at(0)).toEqual(at(0.5));
-			expect(at(1)).toEqual(at(0.5));
-		}
-	});
-
-	it("pace が速いほど Speed が大きい", () => {
-		const speed = (pace: PerformanceIR["pace"]) =>
-			toAivoiceValues(ir({ pace }), profile)?.masterOverrides.Speed ?? 0;
-		expect(speed("slow")).toBeLessThan(speed("slightly_slow"));
-		expect(speed("slightly_slow")).toBeLessThan(speed("normal"));
-		expect(speed("normal")).toBe(1);
-		expect(speed("normal")).toBeLessThan(speed("slightly_fast"));
-		expect(speed("slightly_fast")).toBeLessThan(speed("fast"));
-	});
-
 	it("極端な入力でもエンジンの範囲に収まる", () => {
 		const extreme: VoiceProfile = {
 			traits: { base_pace: 2, base_pitch: 2 },
@@ -195,10 +172,7 @@ describe("toAivoiceValues", () => {
 				},
 			},
 		};
-		const m = toAivoiceValues(
-			ir({ warmth: 1, pace: "fast" }),
-			extreme,
-		)?.masterOverrides;
+		const m = toAivoiceValues(ir(), extreme)?.masterOverrides;
 		expect(m).toEqual({
 			Volume: 5,
 			Speed: 4,
@@ -208,7 +182,7 @@ describe("toAivoiceValues", () => {
 			LongPause: 2000,
 			SentencePause: 10000,
 		});
-		const low = toAivoiceValues(ir({ warmth: 0, pace: "slow" }), {
+		const low = toAivoiceValues(ir(), {
 			...extreme,
 			traits: { base_pace: 0.5, base_pitch: 0.5 },
 		})?.masterOverrides;
@@ -222,21 +196,10 @@ describe("toAivoiceValues", () => {
 		if (!real) throw new Error("fixture");
 		real.master = { ...master, middle_pause_ms: 200, long_pause_ms: 370.4 };
 		for (const emotion of ["neutral", "anger"] as const) {
-			for (const warmth of [0, 0.37, 0.65, 1]) {
-				const m = toAivoiceValues(
-					ir({ emotion, warmth }),
-					odd,
-				)?.masterOverrides;
-				expect(Number.isInteger(m?.MiddlePause)).toBe(true);
-				expect(Number.isInteger(m?.LongPause)).toBe(true);
-				expect(Number.isInteger(m?.SentencePause)).toBe(true);
-			}
+			const m = toAivoiceValues(ir({ emotion }), odd)?.masterOverrides;
+			expect(Number.isInteger(m?.MiddlePause)).toBe(true);
+			expect(Number.isInteger(m?.LongPause)).toBe(true);
+			expect(Number.isInteger(m?.SentencePause)).toBe(true);
 		}
-	});
-
-	it("NaN の warmth は中間値として扱う", () => {
-		expect(
-			toAivoiceValues(ir({ warmth: Number.NaN }), profile)?.masterOverrides,
-		).toEqual(toAivoiceValues(ir(), profile)?.masterOverrides);
 	});
 });

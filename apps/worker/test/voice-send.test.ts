@@ -167,10 +167,6 @@ describe("声の添付", () => {
 				speakAloud({
 					performance: {
 						emotion: "joy",
-						energy: 1,
-						pace: "normal",
-						warmth: 0.5,
-						pause_before_ms: 0,
 					},
 				}),
 			),

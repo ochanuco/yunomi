@@ -73,7 +73,6 @@
 - 待ちは DO storage の `voice:pending:<返事の message id>` に、チャンネル id・本文・A.I.VOICE の値・期限（受け付けから 2 分）・試行回数を持つ。
 - DO の alarm が 5 秒ごとに `alarm()` を呼び、可用性を取り直して、ready なら合成して添付する。期限を過ぎたら待ちを捨て、可用性を unavailable にして次のターンの脳に返す。待ちが残るかぎり次の alarm を入れる。
 - 待ちは取り出せた側だけが処理するので、alarm が重なっても添付は 1 回になる。添付の失敗は再試行しない。合成の一時的な失敗は期限内で 3 回まで試す。
-- `pause_before_ms` は使わない（合成した WAV の前に無音を足す処理は無い）。
 
 reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の id（`partner_message_id`、`partner:<uuid>`）を含める。Gateway が送信後に `POST /v1/partners/:partnerId/discord/sent`（body: `partner_message_id` / `channel_id` / `discord_message_id`、応答 `{ bound }`）を呼ぶと、DO はその行の `discord_message_id` に Discord id を保存する。以後 `reply_to_message_id` がその Discord id と一致する発言は、メンションなしでも Yukarin への返信として LLM 判定に進む。通知前の行や既存行は `discord_message_id` が NULL のままで、従来どおり動く。
 

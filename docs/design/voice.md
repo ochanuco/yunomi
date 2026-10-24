@@ -91,19 +91,15 @@ Current engine: A.I.VOICE (1) only. Its Editor API is the only one usable progra
 
 Do not let the LLM emit raw vendor-specific voice parameters as the primary semantic interface.
 
-The brain emits a semantic performance/prosody IR.
+The brain emits a semantic performance IR that carries only the emotion.
 
 Example:
 
 ```text
 emotion: amused
-energy: 0.6
-pace: slightly_fast
-warmth: 0.8
-pause_before_ms: 120
 ```
 
-The body maps the IR to A.I.VOICE values using the voice profile. This makes the engine replaceable.
+The body maps the IR to A.I.VOICE values using the voice profile, with one fixed tone per emotion. This makes the engine replaceable.
 
 ### Voice profile
 

@@ -37,10 +37,7 @@ describe("yukarin profile", () => {
 		]);
 		const ir = {
 			emotion: "joy" as const,
-			energy: 0.8,
 			pace: "normal" as const,
-			warmth: 0.5,
-			pause_before_ms: 0,
 		};
 		const yukari = toAivoiceValues(ir, voice, "yukari");
 		expect(yukari?.preset).toBe("結月 ゆかり");

@@ -3,7 +3,6 @@ import {
 	type BodyState,
 	memoryKinds,
 	modelDateTime,
-	type PacePhrase,
 	performanceEmotions,
 	readModelDateTime,
 } from "@yunomi/core";
@@ -12,21 +11,9 @@ import * as v from "valibot";
 
 const unit = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 
-const pacePhrases = [
-	"slow",
-	"slightly_slow",
-	"normal",
-	"slightly_fast",
-	"fast",
-] as const satisfies readonly PacePhrase[];
-
-/** 演技の指示。エンジン固有の値は含めず、身体が声の性質を使って値に直す。 */
+/** 演技の指示。感情だけを選び、エンジン固有の値は含めない。身体が声の性質を使って値に直す。 */
 const performanceSchema = v.object({
 	emotion: v.picklist(performanceEmotions),
-	energy: unit,
-	pace: v.picklist(pacePhrases),
-	warmth: unit,
-	pause_before_ms: v.pipe(v.number(), v.minValue(0), v.maxValue(5000)),
 });
 
 /**

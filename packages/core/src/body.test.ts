@@ -13,10 +13,6 @@ const intent: BodyIntent = {
 	messages: ["おはようございます"],
 	performance: {
 		emotion: "joy",
-		energy: 0.6,
-		pace: "normal",
-		warmth: 0.8,
-		pause_before_ms: 0,
 	},
 	speakAloud: true,
 	showFace: false,
