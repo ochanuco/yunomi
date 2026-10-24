@@ -184,9 +184,9 @@ export const yukarinProfile: PartnerProfile = {
 						},
 						"master": {
 							"volume": 1,
-							"speed": 1,
-							"pitch": 1,
-							"pitch_range": 1,
+							"speed": 1.21,
+							"pitch": 1.03,
+							"pitch_range": 1.13,
 							"middle_pause_ms": 150,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
@@ -197,9 +197,9 @@ export const yukarinProfile: PartnerProfile = {
 						"emotion_styles": {},
 						"master": {
 							"volume": 1,
-							"speed": 1,
-							"pitch": 1,
-							"pitch_range": 1,
+							"speed": 1.21,
+							"pitch": 1.03,
+							"pitch_range": 1.13,
 							"middle_pause_ms": 150,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
@@ -958,4 +958,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "db7b989548c8";
+export const profileVersion = "73df872b514d";
