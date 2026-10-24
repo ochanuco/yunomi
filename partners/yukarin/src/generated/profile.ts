@@ -183,11 +183,11 @@ export const yukarinProfile: PartnerProfile = {
 							"surprised": "J"
 						},
 						"master": {
-							"volume": 1,
+							"volume": 0.825,
 							"speed": 1.21,
-							"pitch": 0.97,
-							"pitch_range": 1.13,
-							"middle_pause_ms": 150,
+							"pitch": 0.925,
+							"pitch_range": 0.75,
+							"middle_pause_ms": 200,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
 						}
@@ -196,11 +196,11 @@ export const yukarinProfile: PartnerProfile = {
 						"preset": "結月 ゆかり（雫）",
 						"emotion_styles": {},
 						"master": {
-							"volume": 1,
+							"volume": 0.825,
 							"speed": 1.21,
-							"pitch": 0.97,
-							"pitch_range": 1.13,
-							"middle_pause_ms": 150,
+							"pitch": 0.925,
+							"pitch_range": 0.75,
+							"middle_pause_ms": 200,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
 						}
@@ -958,4 +958,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "b25c7cf9ddbe";
+export const profileVersion = "7928f59ac6da";

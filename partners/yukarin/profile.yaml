@@ -125,14 +125,14 @@ voice:
             surprised: J
             anger: A
             sorrow: S
-          # speed・pitch_range は、手本にした動画の台詞を同じ文で合成し、長さと F0 の幅が揃うように測った値。
-          # pitch は F0 を揃える 1.03 だと合成の高域が明るいぶん高く聞こえるので、聞き比べて下げた。
+          # speed は、手本にした動画の台詞を同じ文で合成し、長さが揃うように測った値。
+          # 残りは落ち着いた少しダウナーな声にするため、聞き比べて高さ・抑揚・音量を下げ、文中の間を延ばした。
           master: &master
-            volume: 1
+            volume: 0.825
             speed: 1.21
-            pitch: 0.97
-            pitch_range: 1.13
-            middle_pause_ms: 150
+            pitch: 0.925
+            pitch_range: 0.75
+            middle_pause_ms: 200
             long_pause_ms: 370
             sentence_pause_ms: 800
         # dev で聞き分けるための声。このプリセットはスタイルを持たないので Styles を送らない。
