@@ -50,6 +50,11 @@ const slowLlm = (fake: FakeLLMProvider) =>
 			});
 	});
 
+const faceOfJoy = {
+	show_face: true,
+	performance: { ...turn().performance, emotion: "joy" },
+} as const;
+
 describe("Worker からの送信", () => {
 	it("返事を REST で送り、Gateway には ack だけを返す", async () => {
 		const s = newScenario();
@@ -69,6 +74,33 @@ describe("Worker からの送信", () => {
 			"replyToMessageId",
 		);
 	});
+
+	it.each([
+		{ face: false, emotion: "joy", avatar: undefined },
+		{ face: true, emotion: "neutral", avatar: undefined },
+		{ face: undefined, emotion: "joy", avatar: undefined },
+		{ face: true, emotion: "joy", avatar: { emotion: "joy" } },
+	] as const)(
+		"show_face=$face, emotion=$emotion の返事を送り終えたら avatar=$avatar",
+		async ({ face, emotion, avatar }) => {
+			const s = newScenario();
+			await installFakeLlm([
+				llmOk(
+					turn({
+						messages: ["やった", "ほんとに"],
+						performance: { ...turn().performance, emotion },
+						...(face === undefined ? {} : { show_face: face }),
+					}),
+				),
+			]);
+			await install(fakePort());
+
+			expect(await send(mention(s))).toEqual({
+				action: "ack",
+				...(avatar ? { avatar } : {}),
+			});
+		},
+	);
 
 	it("考えているあいだに他の発言が入れば、返信形式で送る", async () => {
 		const s = newScenario();
@@ -126,9 +158,9 @@ describe("Worker からの送信", () => {
 		expect(rows).toEqual([{ discord_message_id: "d-500" }]);
 	});
 
-	it("送信に失敗しても reply は返さない", async () => {
+	it("送信に失敗しても reply は返さず、表情も添えない", async () => {
 		const s = newScenario();
-		await installFakeLlm([llmOk(turn())]);
+		await installFakeLlm([llmOk(turn(faceOfJoy))]);
 		await install(
 			fakePort({
 				sendText: vi.fn(async () => err(rateLimited({ retryAfterMs: 9000 }))),
@@ -325,7 +357,7 @@ describe("Worker からの送信", () => {
 
 		it("途中の 1 件が失敗したら残りは送らず、送れた分だけを記録する", async () => {
 			const s = newScenario();
-			await installFakeLlm([llmOk(three())]);
+			await installFakeLlm([llmOk({ ...three(), ...faceOfJoy })]);
 			const { port } = await recording();
 			vi.mocked(port.sendText)
 				.mockImplementationOnce(async () => ok({ messageId: "d-1" }))

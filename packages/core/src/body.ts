@@ -24,6 +24,8 @@ export type BodyIntent = {
 	messages: string[];
 	performance: PerformanceIR;
 	speakAloud: boolean;
+	/** 返事のあとに表情画像を貼るか。 */
+	showFace: boolean;
 };
 
 export type AivoiceStyle = { Name: string; Value: number };

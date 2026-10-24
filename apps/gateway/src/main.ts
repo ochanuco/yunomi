@@ -1,5 +1,6 @@
 import { generateDependencyReport } from "@discordjs/voice";
 import { Client, Events, GatewayIntentBits } from "discord.js";
+import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
 import { loadConfig } from "./config.ts";
 import {
 	countHumans,
@@ -25,6 +26,14 @@ if (!config.ok) {
 }
 const cfg = config.value;
 const logger = createLogger(cfg.logLevel);
+
+const avatarDir = cfg.avatarDir ?? DEFAULT_AVATAR_DIR;
+const avatars = await loadAvatarStock(avatarDir);
+if (avatars.count() === 0) {
+	logger.warn("no avatar images", { dir: avatarDir });
+} else {
+	logger.info("avatar images loaded", { count: avatars.count() });
+}
 
 const discord = new Client({
 	intents: [
@@ -92,6 +101,7 @@ discord.on(Events.MessageCreate, (message) => {
 		partnerId: PARTNER_ID,
 		botUserId,
 		voice,
+		avatars,
 		logger,
 	});
 	void handle(toMessageLike(message), {
