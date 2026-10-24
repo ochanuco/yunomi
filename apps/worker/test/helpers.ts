@@ -20,6 +20,7 @@ export const inbound = (over: Partial<InboundMessage> = {}): InboundMessage => {
 		authorVoiceChannelId: null,
 		replyToMessageId: null,
 		attachments: [],
+		modality: "text",
 		occurredAt: new Date("2026-10-11T03:00:00Z"),
 		receivedAt: new Date("2026-10-11T03:00:01Z"),
 		...over,
