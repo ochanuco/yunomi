@@ -12,6 +12,8 @@
 	--c-mood: #b4540a;
 	--c-energy: #1f6fb2;
 	--c-stress: #8a3fa8;
+	--dev: #c2410c;
+	--dev-bg: #fff1e6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,6 +30,8 @@
 		--c-mood: #f0a35e;
 		--c-energy: #7ab8ee;
 		--c-stress: #cf9be6;
+		--dev: #fb923c;
+		--dev-bg: #2a1a10;
 	}
 }
 
@@ -58,6 +62,29 @@ header {
 h1 {
 	margin: 0;
 	font-size: 16px;
+}
+
+.env-badge {
+	padding: 0 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+[data-env="dev"] body {
+	border-top: 6px solid var(--dev);
+}
+
+[data-env="dev"] header {
+	background: var(--dev-bg);
+}
+
+[data-env="dev"] .env-badge {
+	border-color: var(--dev);
+	background: var(--dev);
+	color: #fff;
 }
 
 h2 {
