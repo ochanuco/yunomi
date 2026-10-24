@@ -125,11 +125,12 @@ voice:
             surprised: J
             anger: A
             sorrow: S
-          # speed・pitch・pitch_range は、手本にした動画の台詞を同じ文で合成し、F0 と長さが揃うように測った値。
+          # speed・pitch_range は、手本にした動画の台詞を同じ文で合成し、長さと F0 の幅が揃うように測った値。
+          # pitch は F0 を揃える 1.03 だと合成の高域が明るいぶん高く聞こえるので、聞き比べて下げた。
           master: &master
             volume: 1
             speed: 1.21
-            pitch: 1.03
+            pitch: 0.97
             pitch_range: 1.13
             middle_pause_ms: 150
             long_pause_ms: 370

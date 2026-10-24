@@ -185,7 +185,7 @@ export const yukarinProfile: PartnerProfile = {
 						"master": {
 							"volume": 1,
 							"speed": 1.21,
-							"pitch": 1.03,
+							"pitch": 0.97,
 							"pitch_range": 1.13,
 							"middle_pause_ms": 150,
 							"long_pause_ms": 370,
@@ -198,7 +198,7 @@ export const yukarinProfile: PartnerProfile = {
 						"master": {
 							"volume": 1,
 							"speed": 1.21,
-							"pitch": 1.03,
+							"pitch": 0.97,
 							"pitch_range": 1.13,
 							"middle_pause_ms": 150,
 							"long_pause_ms": 370,
@@ -958,4 +958,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "73df872b514d";
+export const profileVersion = "b25c7cf9ddbe";
