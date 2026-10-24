@@ -13,6 +13,7 @@ const envSchema = v.pipe(
 		AIVOICE_TOKEN: v.optional(nonEmpty),
 		YUNOMI_DEV_CALLER: v.optional(v.string()),
 		AVATAR_DIR: v.optional(nonEmpty),
+		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -37,6 +38,8 @@ export type GatewayConfig = {
 	ochoko: { url: string; token: string } | null;
 	/** 表情画像を置いたディレクトリ。未設定なら同梱の画像を使う。 */
 	avatarDir: string | null;
+	/** VC でこの人の声だけを聞く。未設定なら耳を閉じて入る。 */
+	ownerUserId: string | null;
 	logLevel: LogLevel;
 };
 
@@ -73,6 +76,7 @@ export const loadConfig = (
 				: null,
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
 		avatarDir: e.AVATAR_DIR ?? null,
+		ownerUserId: e.OWNER_DISCORD_USER_ID ?? null,
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };

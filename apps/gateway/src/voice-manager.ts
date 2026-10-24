@@ -20,6 +20,7 @@ import {
 	speakQueueOf,
 	type VoiceDirective,
 } from "@yunomi/protocol";
+import type { Ears } from "./ears.ts";
 import type { Logger } from "./logger.ts";
 import { silentLogger } from "./logger.ts";
 import type { OchokoClient } from "./ochoko-client.ts";
@@ -58,6 +59,8 @@ export type VoiceManagerDeps = {
 	/** null なら speak と keep_awake は無効。 */
 	ochoko: Pick<OchokoClient, "synthesizeWithRetry" | "keepAwake"> | null;
 	yunomi: Pick<YunomiClient, "reportVoiceConnection">;
+	/** null なら耳を閉じて入る。 */
+	ears?: Ears | null;
 	/** guild が見つからなければ null。 */
 	adapterCreator: (guildId: string) => DiscordGatewayAdapterCreator | null;
 	lib?: VoiceLib;
@@ -72,6 +75,7 @@ type Session = {
 	queue: SpeechRequest[];
 	draining: boolean;
 	keepAwakeTimer: ReturnType<typeof setInterval> | null;
+	stopListening: (() => void) | null;
 	closed: boolean;
 };
 
@@ -129,8 +133,8 @@ export class VoiceManager {
 			channelId,
 			guildId,
 			adapterCreator,
-			// まだ聞き取れないので耳を閉じる
-			selfDeaf: true,
+			// Discord は耳を閉じた参加者には音声を送らない
+			selfDeaf: !this.#deps.ears,
 			selfMute: false,
 		});
 		this.#log.info("voice join", { guild_id: guildId, channel_id: channelId });
@@ -207,6 +211,7 @@ export class VoiceManager {
 			queue: [],
 			draining: false,
 			keepAwakeTimer: null,
+			stopListening: null,
 			closed: false,
 		};
 		this.#sessions.set(guildId, session);
@@ -237,6 +242,7 @@ export class VoiceManager {
 		});
 		void this.#report(session.guildId, channelId);
 		this.#startKeepAwake(session);
+		this.#startListening(session);
 	}
 
 	async #onDisconnected(
@@ -279,6 +285,8 @@ export class VoiceManager {
 		session.queue.length = 0;
 		if (session.keepAwakeTimer) clearInterval(session.keepAwakeTimer);
 		session.keepAwakeTimer = null;
+		session.stopListening?.();
+		session.stopListening = null;
 		session.player.stop(true);
 		if (this.#sessions.get(session.guildId) === session) {
 			this.#sessions.delete(session.guildId);
@@ -310,6 +318,16 @@ export class VoiceManager {
 			.finally(() => this.#pending.delete(task));
 		this.#pending.add(task);
 		return task;
+	}
+
+	#startListening(session: Session): void {
+		const { ears } = this.#deps;
+		// 再接続で Ready に戻っても receiver は同じなので、聞き直さない
+		if (!ears || session.stopListening) return;
+		session.stopListening = ears.listen(session.connection.receiver, () => {
+			const channelId = this.channelOf(session.guildId);
+			return channelId ? { guildId: session.guildId, channelId } : null;
+		});
 	}
 
 	#startKeepAwake(session: Session): void {

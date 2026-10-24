@@ -8,6 +8,7 @@ import {
 	toMessageLike,
 	toVoiceStateLike,
 } from "./discord-adapter.ts";
+import { createEars } from "./ears.ts";
 import { createMessageHandler } from "./handler.ts";
 import { DEFAULT_HEARTBEAT_PATH, startHeartbeat } from "./heartbeat.ts";
 import { createLogger } from "./logger.ts";
@@ -59,10 +60,25 @@ const ochoko = cfg.ochoko
 		})
 	: null;
 
+const ears = cfg.ownerUserId
+	? createEars({
+			ownerUserId: cfg.ownerUserId,
+			onUtterance: (u, where) => {
+				logger.info("utterance heard", {
+					guild_id: where.guildId,
+					channel_id: where.channelId,
+					duration_ms: u.durationMs,
+				});
+			},
+			logger,
+		})
+	: null;
+
 const voice = new VoiceManager({
 	partnerId: PARTNER_ID,
 	ochoko,
 	yunomi,
+	ears,
 	adapterCreator: (guildId) =>
 		discord.guilds.cache.get(guildId)?.voiceAdapterCreator ?? null,
 	logger,
