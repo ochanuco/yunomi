@@ -92,6 +92,10 @@ const MIGRATIONS: string[][] = [
 		)`,
 		"CREATE INDEX IF NOT EXISTS pending_operations_open ON pending_operations (partner_id, channel_id, status)",
 	],
+	[
+		// 既存行は 0（耳を開けていない）。耳の報告は接続の報告と一緒に来る
+		"ALTER TABLE voice_connection ADD COLUMN voice_listening INTEGER NOT NULL DEFAULT 0",
+	],
 ];
 
 export const migrateDoStorage = (sql: SqlStorage): void => {

@@ -2,9 +2,11 @@ import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	DISCORD_VOICE_EVENTS_PATH,
+	DISCORD_VOICE_UTTERANCE,
 	discordSentSchema,
 	discordVoiceConnectionSchema,
 	type GatewayResponse,
+	toHeardUtterance,
 	toInboundMessage,
 	toVoiceStateUpdate,
 	type VoiceResponse,
@@ -106,27 +108,11 @@ const isGateway = (p: Principal) =>
 	p.kind === "service" && p.caller === "gateway";
 
 async function discordEvents(request: Request, env: Env): Promise<Response> {
-	if (request.method !== "POST") {
-		return Response.json({ error: "method_not_allowed" }, { status: 405 });
-	}
-	const auth = await authenticate(request, accessEnv(env));
-	if (!auth.ok) {
-		return Response.json(
-			{ error: auth.failure.error },
-			{ status: auth.failure.status },
-		);
-	}
-	if (!isGateway(auth.principal)) {
-		return Response.json({ error: "forbidden" }, { status: 403 });
-	}
-
-	let body: unknown;
-	try {
-		body = await request.json();
-	} catch {
-		return Response.json({ error: "invalid_json" }, { status: 400 });
-	}
-	const inbound = toInboundMessage(body);
+	const read = await readGatewayJson(request, env);
+	if ("response" in read) return read.response;
+	const inbound = isVoiceUtterance(read.body)
+		? toHeardUtterance(read.body)
+		: toInboundMessage(read.body);
 	if (!inbound.ok) {
 		return Response.json(
 			{ error: "validation_failed", message: inbound.error.message },
@@ -139,11 +125,19 @@ async function discordEvents(request: Request, env: Env): Promise<Response> {
 
 	const partner = partnerNamespace(env);
 	const stub = partner.get(partner.idFromName(inbound.value.partnerId));
-	const { audit: _audit, ...response } = await stub.handleDiscordMessage(
-		inbound.value,
-	);
+	const { audit: _audit, ...response } =
+		"text" in inbound.value
+			? await stub.handleVoiceUtterance(inbound.value)
+			: await stub.handleDiscordMessage(inbound.value);
 	return Response.json(response satisfies GatewayResponse);
 }
+
+// 中身の検証は type ごとのスキーマに任せ、ここでは振り分け先だけを決める。
+const isVoiceUtterance = (body: unknown): boolean =>
+	typeof body === "object" &&
+	body !== null &&
+	"type" in body &&
+	body.type === DISCORD_VOICE_UTTERANCE;
 
 // Gateway からの POST を受ける経路の共通部分: メソッド・認証・caller・JSON 本文。
 async function readGatewayJson(

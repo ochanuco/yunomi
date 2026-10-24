@@ -226,7 +226,13 @@ export const runTurn = async (
 	let gateInterests:
 		| Awaited<ReturnType<typeof loadInterestOpinion>>
 		| undefined;
-	if (!mentioned && !isContinuation(deps, msg) && !isCalledByName(deps, msg)) {
+	// 聞いた発話は、耳を開けて同じ VC にいる自分に向けた声として扱う。相づちや独り言はターンの中で黙る。
+	if (
+		msg.modality === "text" &&
+		!mentioned &&
+		!isContinuation(deps, msg) &&
+		!isCalledByName(deps, msg)
+	) {
 		if (isAddressedToOther(deps, msg)) {
 			return ignoreOutcome(msg, "addressed_to_other");
 		}
@@ -294,6 +300,7 @@ export const runTurn = async (
 			}
 		: undefined;
 
+	const connection = store.getVoiceConnection();
 	const prompt = new PromptBuilder().build({
 		profile,
 		examples: selectExamples(profile.examples, {
@@ -335,7 +342,8 @@ export const runTurn = async (
 		tools,
 		channel: { name: null, presence: null },
 		voice: {
-			connectedChannelId: store.getVoiceConnection()?.channelId ?? null,
+			connectedChannelId: connection?.channelId ?? null,
+			listening: connection?.listening ?? false,
 			messageChannelId: msg.channelId,
 		},
 		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
@@ -596,7 +604,8 @@ export const runTurn = async (
 			content: m.content,
 			partner_message_id: m.messageId,
 		})),
-		replyToMessageId: msg.messageId,
+		// 聞いた発話の messageId は Discord に無いので、返信の宛先にしない
+		...(msg.modality === "text" ? { replyToMessageId: msg.messageId } : {}),
 	});
 	if (!reply) return ignoreOutcome(msg, "llm", common);
 	return {

@@ -19,6 +19,9 @@ import {
 	type DiscordVoiceConnection,
 	dedupeKey,
 	type GatewayResponse,
+	type HeardUtterance,
+	heardDedupeKey,
+	heardToInbound,
 	type InboundMessage,
 	replyMessagesOf,
 	type SpeakDirective,
@@ -50,7 +53,11 @@ import { createHistoryWriter, type HistoryWriter } from "./history.ts";
 import { createPendingStore } from "./pending-store.ts";
 import { ignoreOutcome, type Pipeline, type TurnOutcome } from "./pipeline.ts";
 import { migrateDoStorage } from "./schema.ts";
-import { messageNonce, sendMessages } from "./send-messages.ts";
+import {
+	messageNonce,
+	NONCE_MAX_LENGTH,
+	sendMessages,
+} from "./send-messages.ts";
 import {
 	DoStore,
 	type RecentMessage,
@@ -215,16 +222,46 @@ export class PartnerDO extends DurableObject<Env> {
 
 	handleDiscordMessage(inbound: InboundMessage): Promise<HandleResult> {
 		const key = dedupeKey(inbound);
+		return this.#once(key, () => this.#process(inbound, key));
+	}
+
+	/** VC で聞いた発話。聞き取った文字をチャットに書いてから、発言としてターンに乗せる。 */
+	handleVoiceUtterance(heard: HeardUtterance): Promise<HandleResult> {
+		const key = heardDedupeKey(heard);
+		return this.#once(key, async () => {
+			await this.#postHeard(heard);
+			return this.#process(heardToInbound(heard), key);
+		});
+	}
+
+	#once(key: string, run: () => Promise<HandleResult>): Promise<HandleResult> {
 		const done = this.#store.getProcessed(key);
 		if (done) return Promise.resolve(done);
 		const running = this.#inflight.get(key);
 		if (running) return running;
 
-		const p = this.#process(inbound, key).finally(() =>
-			this.#inflight.delete(key),
-		);
+		const p = run().finally(() => this.#inflight.delete(key));
 		this.#inflight.set(key, p);
 		return p;
+	}
+
+	// 誰が何を言ったと聞き取ったかを、返事より先に同じチャットへ残す。
+	// 書けなくても返事は止めない。送信を Gateway に任せている環境では書かない。
+	async #postHeard(heard: HeardUtterance): Promise<void> {
+		const port = this.createCommunication(this.env);
+		if (!port) return;
+		const sent = await port.sendText({
+			channelId: heard.channelId,
+			text: heardLine(heard),
+			nonce: heardNonce(heard.eventId),
+		});
+		if (!sent.ok) {
+			console.error(
+				"discord heard post failed",
+				sent.error.type,
+				sent.error.message,
+			);
+		}
 	}
 
 	async #runTurn(inbound: InboundMessage): Promise<HandleResult> {
@@ -410,6 +447,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#store.setVoiceConnection(
 			report.guild_id,
 			report.channel_id,
+			report.listening ?? false,
 			this.now(),
 		);
 		return { recorded: true };
@@ -532,9 +570,12 @@ export class PartnerDO extends DurableObject<Env> {
 			(reply.action === "reply" ? reply.reply_to_message_id : undefined) ??
 			inbound.messageId;
 		// 1 対 1 の流れでは普通のメッセージで送り、間に他の発言があるときだけ 1 件目を返信形式にする。
-		const replyTo = this.#store.hasMessagesAfter(inbound.channelId, target)
-			? target
-			: undefined;
+		// 聞いた発話は Discord に無い発言なので、返信形式の宛先にできない。
+		const replyTo =
+			inbound.modality === "text" &&
+			this.#store.hasMessagesAfter(inbound.channelId, target)
+				? target
+				: undefined;
 		const result = await sendMessages(
 			{
 				port,
@@ -597,6 +638,15 @@ export class PartnerDO extends DurableObject<Env> {
 		return result;
 	}
 }
+
+const HEARD_MAX_LENGTH = 2000;
+
+const heardLine = (heard: HeardUtterance): string =>
+	`${heard.author.displayName}: ${heard.text}`.slice(0, HEARD_MAX_LENGTH);
+
+// 返事の nonce は末尾が「:番号」なので、event_id の末尾だけでも重ならない。
+const heardNonce = (eventId: string): string =>
+	eventId.slice(-NONCE_MAX_LENGTH);
 
 // 表情は声と同じ感情の判定から決め、画像のための LLM 呼び出しを増やさない。
 // 毎回貼るとうるさいので、モデルが気持ちの大きく動いた返事として選んだときだけ貼る。

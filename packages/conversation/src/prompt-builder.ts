@@ -66,6 +66,8 @@ export type ToolsContext = {
 export type VoiceContext = {
 	/** いま接続している VC。いなければ null。 */
 	connectedChannelId: string | null;
+	/** 接続している VC で相手の声を聞いているか。未指定は聞いていない。 */
+	listening?: boolean;
 	/** この発言が来たチャンネル。 */
 	messageChannelId: string;
 };
@@ -109,6 +111,8 @@ export type PromptInput = {
 		speaker: string;
 		text: string;
 		mentionsPartner: boolean;
+		/** voice は VC で聞き取った発話。未指定は書かれた発言。 */
+		modality?: "text" | "voice";
 		/** 新着メッセージの添付。名前・種類・大きさだけで、中身は含まない。 */
 		attachments?: readonly AttachmentLine[];
 	};
@@ -149,6 +153,7 @@ export const toPromptMessage = (
 	speaker: msg.author.displayName,
 	text: msg.content,
 	mentionsPartner: msg.mentionedUserIds.includes(partnerUserId),
+	modality: msg.modality,
 	attachments: msg.attachments,
 });
 
@@ -376,6 +381,9 @@ const BODY_STATE_LINES: Record<BodyState, string> = {
 		"今は声を出せない。声で返すことを選ばず、テキストで返す。声での参加や通話への誘いも申し出ない。",
 };
 
+const isListening = (voice: VoiceContext | undefined): boolean =>
+	voice?.connectedChannelId != null && voice.listening === true;
+
 const voiceChannelLines = (voice: VoiceContext | undefined): string[] => {
 	if (!voice?.connectedChannelId) {
 		return ["- VC: 今はどの VC にも入っていない。"];
@@ -383,7 +391,9 @@ const voiceChannelLines = (voice: VoiceContext | undefined): string[] => {
 	if (voice.connectedChannelId === voice.messageChannelId) {
 		return [
 			"- VC: 今 VC に入っていて、この発言はその VC のテキストチャットから来た。ここでの返事は自動で VC に声として流れる（speak_aloud は関係ない）。",
-			"- VC では相手の声は聞こえず、VC のテキストチャットだけを読んでいる。",
+			isListening(voice)
+				? "- VC では相手の声が聞こえていて、VC のテキストチャットも読んでいる。"
+				: "- VC では相手の声は聞こえず、VC のテキストチャットだけを読んでいる。",
 		];
 	}
 	return [
@@ -395,7 +405,9 @@ const bodyBlock = (state: BodyState, voice: VoiceContext | undefined): string =>
 	[
 		"## 身体の状態",
 		`- 声: ${BODY_STATE_LINES[state]}`,
-		"- 聞くことはできない。相手の声は聞こえず、テキストだけを読んでいる。",
+		isListening(voice)
+			? "- 耳: 今いる VC では相手の声が聞こえる。聞いた声は文字に起こして読んでいるので、聞き違いや聞き漏らしがありうる。"
+			: "- 聞くことはできない。相手の声は聞こえず、テキストだけを読んでいる。",
 		...voiceChannelLines(voice),
 	].join("\n");
 
@@ -485,7 +497,7 @@ export class PromptBuilder {
 
 		const m = input.message;
 		const newMessage = [
-			`${m.speaker}${m.mentionsPartner ? "（あなたへのメンションあり）" : ""}: ${m.text}`,
+			`${m.speaker}${m.mentionsPartner ? "（あなたへのメンションあり）" : ""}${m.modality === "voice" ? "（VC で声で話した。文字は聞き取った結果で、聞き違いがありうる）" : ""}: ${m.text}`,
 			...attachmentLines(m.attachments),
 		].join("\n");
 

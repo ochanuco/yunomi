@@ -25,6 +25,8 @@ export type VoiceConnection = {
 	guildId: string;
 	/** VC に入っていなければ null。 */
 	channelId: string | null;
+	/** 接続先の VC で相手の声を受け取っているか。 */
+	listening: boolean;
 	updatedAt: string;
 };
 
@@ -289,6 +291,7 @@ export class DoStore {
 			.exec<{
 				voice_guild_id: string;
 				voice_channel_id: string | null;
+				voice_listening: number;
 				voice_updated_at: string;
 			}>("SELECT * FROM voice_connection WHERE id = 1")
 			.toArray()[0];
@@ -296,6 +299,7 @@ export class DoStore {
 			? {
 					guildId: r.voice_guild_id,
 					channelId: r.voice_channel_id,
+					listening: r.voice_listening === 1,
 					updatedAt: r.voice_updated_at,
 				}
 			: null;
@@ -304,14 +308,16 @@ export class DoStore {
 	setVoiceConnection(
 		guildId: string,
 		channelId: string | null,
+		listening: boolean,
 		at: Date,
 	): void {
 		this.#sql.exec(
 			`INSERT OR REPLACE INTO voice_connection
-				(id, voice_guild_id, voice_channel_id, voice_updated_at)
-			VALUES (1, ?, ?, ?)`,
+				(id, voice_guild_id, voice_channel_id, voice_listening, voice_updated_at)
+			VALUES (1, ?, ?, ?, ?)`,
 			guildId,
 			channelId,
+			channelId !== null && listening ? 1 : 0,
 			at.toISOString(),
 		);
 	}

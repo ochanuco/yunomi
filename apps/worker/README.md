@@ -23,7 +23,7 @@
 
 ## Partner DO
 
-`PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline`・`now`・`capabilities` などはテストが `runInDurableObject` で差し替える seam。
+`PartnerDO`（`idFromName(partner_id)`）が会話状態を持つ。DO SQLite のテーブルは `src/do/schema.ts` の versioned migration でコンストラクタ内に作る。`handleDiscordMessage` と `handleVoiceUtterance` は dedupe（`processed_events`、7 日）、チャンネル単位の直列化（処理中に届いた発言は `recent_messages` に積み、完了後に最新 1 件だけ再判定、古い待機は `coalesced` で ignore）、`pipeline` の呼び出しを行う。`pipeline`・`now`・`capabilities` などはテストが `runInDurableObject` で差し替える seam。
 
 入口（`runTurn`）は、bot の発言を捨てたあと、メンション・リプライ・3 分の継続枠・本文のプロファイルの呼び名（`aliases`）のどれかがあれば Sonnet の判定に回す。どれもない発言は、自分以外へのメンションかリプライなら `addressed_to_other`、同じチャンネルで 30 分以内に割り込んでいれば `interjection_cooldown` で捨て、そうでなければ Haiku が「入る / 入らない」を判定する（`@yunomi/conversation` の `buildGatePrompt`）。判定には直近ログと新着に加えて、場の人数（ゆかりと bot を除く作者の数。ログでは bot の発言に（bot）と付ける）、ゆかりの state（mood・energy・presence。未作成なら初期値で、書き込まない）、発言者との関係（familiarity・trust の平均から 初対面 / 顔見知り / 親しい / とても親しい の段階を付け、数値を添える。既に entity があるときだけ読み、無ければ初めての相手として渡す。判定のために entity は作らない）を user メッセージで渡す。入らなければ `gate_rejected`（Haiku の理由は `decisionSummary`）、Haiku の失敗は `gate_failed` で黙り、`llm_health` には数えない。入る場合は Sonnet の通常判定に回り、reply したときだけ `channel_state.last_interjection_at` を記録する。
 
@@ -82,7 +82,7 @@ Worker から Gateway への押し出しは無く、Gateway が送って応答�
 
 #### 状態
 
-DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_id` / `voice_updated_at`）が、いま入っている VC を持つ。同時に入れるのは 1 つ。`POST /v1/partners/:partnerId/discord/voice-connection`（body: `{ guild_id, channel_id | null }`、応答 `{ recorded: true }`）で Gateway が実際に接続・切断したあと（と起動時に null で）報告したときだけ書き換わる。join の指示を返しただけでは変わらない。プロンプトの「身体の状態」に、VC にいるか・この発言が VC のテキストチャットから来たかを載せる。Admin API の status には出していない。
+DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_id` / `voice_listening` / `voice_updated_at`）が、いま入っている VC と、そこで耳を開けているか（相手の声を受け取っているか）を持つ。同時に入れるのは 1 つ。`POST /v1/partners/:partnerId/discord/voice-connection`（body: `{ guild_id, channel_id | null, listening? }`、応答 `{ recorded: true }`）で Gateway が実際に接続・切断したあと（と起動時に null で）報告したときだけ書き換わる。join の指示を返しただけでは変わらない。`listening` の省略と、`channel_id` が null の報告は「聞いていない」として覚える。プロンプトの「身体の状態」に、VC にいるか・この発言が VC のテキストチャットから来たか・VC で相手の声が聞こえるかを載せる。Admin API の status には出していない。
 
 #### VC の出入りの判断（`POST /v1/interfaces/discord/voice-events`）
 
@@ -100,6 +100,16 @@ DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_
 - `leave`: VC に入っているとき `voice.leave`。
 - VC のテキストチャットへの返事: 返事の送信に成功し、身体の状態が `unavailable` でなければ、`speak_aloud` に関わらず `voice.speak`（`channel_id` は VC、`text` は返事、`values` は WAV 添付と同じ `VOICE_REALIZATION` から作る値）を載せ、WAV は添付しない。`unavailable` ならテキストだけ。
 - ほかのチャンネルは従来どおり（`speak_aloud` なら WAV を添付）。
+
+#### 聞いた発話（`discord.voice.utterance`）
+
+Gateway が VC で聞き取った発話を、発言と同じ `POST /v1/interfaces/discord/events` に送る。認証と応答（`ack` / `reply` / `ignore`）は `discord.message.created` と同じで、`type` で振り分ける。
+
+- 重複: Discord の message id が無いので、Envelope の `event_id` で見る（`heardDedupeKey`）。再送ではチャットへの書き込みもターンも繰り返さない。
+- 聞き取った文字: ターンの前に、身体が VC のテキストチャット（`channel_id` は VC）へ `表示名: 文字` の形で書く。Worker が送信を担わない環境では書かない。書けなくてもターンは続ける。
+- ターン: `heardToInbound` で VC での発言（`modality: "voice"`、`messageId` は `voice:<event_id>`）にし、割り込みの判定を通さず返事のターンに回す。相づちや独り言には、ターンの中で黙る（`ignore`）。黙ったときに残るのは聞き取った文字の書き込みだけ。
+- 返事: 上の「VC のテキストチャットへの返事」と同じく、テキストと `voice.speak` で返す。`messageId` は Discord に存在しないので、返事は返信形式（`message_reference`）にせず、Gateway に返す `reply` にも `reply_to_message_id` を載せない。
+- プロンプト: 新着の発言に、声で話したもので文字は聞き取り結果（聞き違いがありうる）だと添える。
 
 ```json
 {
