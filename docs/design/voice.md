@@ -91,26 +91,21 @@ Current engine: A.I.VOICE (1) only. Its Editor API is the only one usable progra
 
 Do not let the LLM emit raw vendor-specific voice parameters as the primary semantic interface.
 
-The brain emits a semantic performance/prosody IR.
+The brain emits a semantic performance IR that carries only the emotion.
 
 Example:
 
 ```text
 emotion: amused
-energy: 0.6
-pace: slightly_fast
-warmth: 0.8
-pause_before_ms: 120
 ```
 
-The body maps the IR to A.I.VOICE values using the voice profile. This makes the engine replaceable.
+The body maps the IR to A.I.VOICE values using the voice profile, with one fixed tone per emotion. This makes the engine replaceable.
 
 ### Voice profile
 
 Lives with the character in `partners/yukarin`.
 
-- engine-independent traits: baseline pace/pitch, how readily emotions show
-- per-engine realization: for A.I.VOICE, which preset, how emotions map to the preset's style values, master values
+- per-engine realization: for A.I.VOICE, which preset, the preset's styles, master values, and one tone per emotion (a style strength plus multipliers on the master values)
 - an engine can hold several named realizations plus a default; a preset without styles (e.g. the 雫 preset) sends no `Styles`
 - the environment only selects a realization by name (`VOICE_REALIZATION`: production `yukari`, development `shizuku`); an unknown name falls back to the default with a warning
 - adding an engine = adding a realization

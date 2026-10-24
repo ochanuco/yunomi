@@ -62,10 +62,6 @@ const turnJson = (
 	resolved_open_loop_ids: [],
 	performance: {
 		emotion: "neutral",
-		energy: 0.5,
-		pace: "normal",
-		warmth: 0.5,
-		pause_before_ms: 0,
 	},
 	speak_aloud: false,
 	voice_channel: "stay",
@@ -77,10 +73,6 @@ const surprised = {
 	show_face: true,
 	performance: {
 		emotion: "surprised",
-		energy: 0.8,
-		pace: "fast",
-		warmth: 0.4,
-		pause_before_ms: 0,
 	},
 };
 

@@ -164,43 +164,83 @@ export const yukarinProfile: PartnerProfile = {
 		"web_read": "auto"
 	},
 	"voice": {
-		"traits": {
-			"base_pace": 1,
-			"base_pitch": 1,
-			"expressiveness": 0.7
-		},
 		"engines": {
 			"aivoice": {
 				"default": "yukari",
 				"realizations": {
 					"yukari": {
 						"preset": "結月 ゆかり",
-						"emotion_styles": {
-							"joy": "J",
-							"amused": "J",
-							"anger": "A",
-							"sorrow": "S",
-							"surprised": "J"
+						"styles": [
+							"J",
+							"A",
+							"S"
+						],
+						"tones": {
+							"joy": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"amused": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"anger": {
+								"strength": 0,
+								"volume": 0.95,
+								"speed": 0.95,
+								"pitch": 1,
+								"pitch_range": 0.85,
+								"middle_pause": 1.15
+							},
+							"sorrow": {
+								"style": "S",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							},
+							"surprised": {
+								"style": "J",
+								"strength": 0.35,
+								"volume": 1,
+								"speed": 1,
+								"pitch": 1,
+								"pitch_range": 1,
+								"middle_pause": 1
+							}
 						},
 						"master": {
-							"volume": 1,
-							"speed": 1,
-							"pitch": 1,
-							"pitch_range": 1,
-							"middle_pause_ms": 150,
+							"volume": 0.825,
+							"speed": 1.21,
+							"pitch": 0.925,
+							"pitch_range": 0.75,
+							"middle_pause_ms": 200,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
 						}
 					},
 					"shizuku": {
 						"preset": "結月 ゆかり（雫）",
-						"emotion_styles": {},
+						"styles": [],
+						"tones": {},
 						"master": {
-							"volume": 1,
-							"speed": 1,
-							"pitch": 1,
-							"pitch_range": 1,
-							"middle_pause_ms": 150,
+							"volume": 0.825,
+							"speed": 1.21,
+							"pitch": 0.925,
+							"pitch_range": 0.75,
+							"middle_pause_ms": 200,
 							"long_pause_ms": 370,
 							"sentence_pause_ms": 800
 						}
@@ -958,4 +998,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "db7b989548c8";
+export const profileVersion = "a52032b47f13";

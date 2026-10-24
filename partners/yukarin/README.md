@@ -20,4 +20,4 @@
 
 ## 声の実現方法
 
-`profile.yaml` の `voice.engines.aivoice.realizations` に、A.I.VOICE の名前つきの実現方法（`yukari`＝「結月 ゆかり」、`shizuku`＝「結月 ゆかり（雫）」）を持つ。`default` は環境が選ばないとき、または未知の名前を選んだときに使う。`shizuku` はスタイルを持たないので `emotion_styles` を書かず、`Styles` を送らない。環境は Worker の `VOICE_REALIZATION` で名前だけを選ぶ。
+`profile.yaml` の `voice.engines.aivoice.realizations` に、A.I.VOICE の名前つきの実現方法（`yukari`＝「結月 ゆかり」、`shizuku`＝「結月 ゆかり（雫）」）を持つ。`default` は環境が選ばないとき、または未知の名前を選んだときに使う。`shizuku` はスタイルを持たないので `styles` を書かず、`Styles` を送らない。環境は Worker の `VOICE_REALIZATION` で名前だけを選ぶ。`styles` はプリセットが持つスタイルの一覧で、使わないスタイル（怒りの `A`）も 0 で送る。`tones` は感情ごとの声で、スタイルの強さと master に掛ける倍率を 1 組ずつ持つ。IR の energy では声を揺らさない。

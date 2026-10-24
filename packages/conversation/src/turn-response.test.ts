@@ -46,10 +46,6 @@ const valid = () => ({
 	resolved_open_loop_ids: ["01900000-0000-7000-8000-000000000000"],
 	performance: {
 		emotion: "joy",
-		energy: 0.6,
-		pace: "slightly_fast",
-		warmth: 0.8,
-		pause_before_ms: 120,
 	},
 	speak_aloud: true,
 	show_face: false,
@@ -156,17 +152,9 @@ describe("turnResponseSchema", () => {
 		).toBe(false);
 	});
 
-	it("performance は列挙値と範囲を検証し、speak_aloud は必須", () => {
+	it("performance は感情の列挙値を検証し、speak_aloud は必須", () => {
 		const perf = (over: object = {}) => ({ ...valid().performance, ...over });
 		expect(ok({ ...valid(), performance: perf({ emotion: "calm" }) })).toBe(
-			false,
-		);
-		expect(ok({ ...valid(), performance: perf({ pace: "medium" }) })).toBe(
-			false,
-		);
-		expect(ok({ ...valid(), performance: perf({ energy: 1.2 }) })).toBe(false);
-		expect(ok({ ...valid(), performance: perf({ warmth: -0.1 }) })).toBe(false);
-		expect(ok({ ...valid(), performance: perf({ pause_before_ms: -1 }) })).toBe(
 			false,
 		);
 		const { speak_aloud: _, ...noSpeak } = valid();

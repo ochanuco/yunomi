@@ -21,10 +21,6 @@ const response = (over: Partial<TurnResponse> = {}): TurnResponse => ({
 	resolved_open_loop_ids: [],
 	performance: {
 		emotion: "neutral",
-		energy: 0.5,
-		pace: "normal",
-		warmth: 0.5,
-		pause_before_ms: 0,
 	},
 	speak_aloud: false,
 	voice_channel: "stay",
