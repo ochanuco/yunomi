@@ -11,6 +11,7 @@ import * as v from "valibot";
 
 export const DISCORD_MESSAGE_CREATED = "discord.message.created";
 export const DISCORD_VOICE_STATE_UPDATED = "discord.voice_state.updated";
+export const DISCORD_VOICE_UTTERANCE = "discord.voice.utterance";
 export const DISCORD_SOURCE = "discord";
 
 const snowflake = v.pipe(v.string(), v.nonEmpty());
@@ -339,6 +340,8 @@ export type InboundMessage = {
 	authorVoiceChannelId: string | null;
 	replyToMessageId: string | null;
 	attachments: { name: string; contentType: string | null; size: number }[];
+	/** text は書かれた発言、voice は VC で聞き取った発話。 */
+	modality: "text" | "voice";
 	occurredAt: Date;
 	receivedAt: Date;
 };
@@ -380,6 +383,7 @@ export const toInboundMessage = (
 			contentType: a.content_type ?? null,
 			size: a.size,
 		})),
+		modality: "text",
 		occurredAt: new Date(e.occurred_at),
 		receivedAt: new Date(e.received_at),
 	});
@@ -387,3 +391,106 @@ export const toInboundMessage = (
 
 export const dedupeKey = (msg: Pick<InboundMessage, "messageId">): string =>
 	`${DISCORD_SOURCE}:${msg.messageId}`;
+
+/** Gateway → Yunomi。VC で聞き取った 1 つの発話。occurred_at は話し始めた時刻。 */
+export const discordVoiceUtterancePayloadSchema = v.object({
+	guild_id: snowflake,
+	// 発話を聞いた VC。返事もこの VC のテキストチャットと声で返す
+	channel_id: snowflake,
+	author: v.object({
+		id: snowflake,
+		display_name: v.pipe(v.string(), v.nonEmpty()),
+	}),
+	text: v.pipe(v.string(), v.trim(), v.nonEmpty()),
+	duration_ms: v.pipe(v.number(), v.integer(), v.minValue(1)),
+});
+
+export type DiscordVoiceUtterancePayload = v.InferOutput<
+	typeof discordVoiceUtterancePayloadSchema
+>;
+
+export const discordVoiceUtteranceEnvelopeSchema = v.pipe(
+	envelopeSchema(discordVoiceUtterancePayloadSchema),
+	v.check(
+		(e) => e.type === DISCORD_VOICE_UTTERANCE,
+		`type は ${DISCORD_VOICE_UTTERANCE} でなければならない`,
+	),
+	v.check(
+		(e) => e.source === DISCORD_SOURCE,
+		`source は ${DISCORD_SOURCE} でなければならない`,
+	),
+);
+
+export type DiscordVoiceUtteranceEnvelope = Envelope<
+	typeof DISCORD_VOICE_UTTERANCE,
+	DiscordVoiceUtterancePayload
+>;
+
+export type HeardUtterance = {
+	eventId: string;
+	partnerId: string;
+	source: string;
+	guildId: string;
+	channelId: string;
+	author: { id: string; displayName: string };
+	text: string;
+	durationMs: number;
+	occurredAt: Date;
+	receivedAt: Date;
+};
+
+export const toHeardUtterance = (
+	input: unknown,
+): Result<HeardUtterance, DomainError> => {
+	const parsed = v.safeParse(discordVoiceUtteranceEnvelopeSchema, input);
+	if (!parsed.success) {
+		return err(
+			validationFailed({
+				issues: parsed.issues.map((i) => {
+					const path = v.getDotPath(i);
+					return path ? `${path}: ${i.message}` : i.message;
+				}),
+			}),
+		);
+	}
+	const e = parsed.output;
+	const p = e.payload;
+	return ok({
+		eventId: e.event_id,
+		partnerId: e.partner_id,
+		source: e.source,
+		guildId: p.guild_id,
+		channelId: p.channel_id,
+		author: { id: p.author.id, displayName: p.author.display_name },
+		text: p.text,
+		durationMs: p.duration_ms,
+		occurredAt: new Date(e.occurred_at),
+		receivedAt: new Date(e.received_at),
+	});
+};
+
+/** 発話には Discord の message id が無いので、Envelope の event_id で重複を見る。 */
+export const heardDedupeKey = (u: Pick<HeardUtterance, "eventId">): string =>
+	`${DISCORD_SOURCE}-voice:${u.eventId}`;
+
+/**
+ * 聞いた発話を、VC での発言としてターンに乗せる。
+ * Discord の発言ではないので messageId は event_id から作る。Discord の返信形式の宛先にはできない。
+ */
+export const heardToInbound = (u: HeardUtterance): InboundMessage => ({
+	eventId: u.eventId,
+	partnerId: u.partnerId,
+	source: u.source,
+	guildId: u.guildId,
+	channelId: u.channelId,
+	messageId: `voice:${u.eventId}`,
+	author: { id: u.author.id, displayName: u.author.displayName, isBot: false },
+	content: u.text,
+	mentionedUserIds: [],
+	authorVoiceChannelId: u.channelId,
+	replyToMessageId: null,
+	attachments: [],
+	modality: "voice",
+	occurredAt: u.occurredAt,
+	receivedAt: u.receivedAt,
+});

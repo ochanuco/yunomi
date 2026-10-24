@@ -6,6 +6,9 @@ import {
 	discordSentSchema,
 	discordVoiceConnectionSchema,
 	gatewayResponseSchema,
+	heardDedupeKey,
+	heardToInbound,
+	toHeardUtterance,
 	toInboundMessage,
 	toVoiceStateUpdate,
 	voiceResponseSchema,
@@ -324,5 +327,93 @@ describe("discordVoiceConnectionSchema", () => {
 		expect(ok({ guild_id: "1", channel_id: null })).toBe(true);
 		expect(ok({ guild_id: "1" })).toBe(false);
 		expect(ok({ guild_id: "1", channel_id: "" })).toBe(false);
+	});
+});
+
+const utterance = () => ({
+	event_id: newId(),
+	type: "discord.voice.utterance",
+	source: "discord",
+	partner_id: "yukarin",
+	occurred_at: "2026-01-01T00:00:00.000Z",
+	received_at: "2026-01-01T00:00:03.000Z",
+	schema_version: 1,
+	payload: {
+		guild_id: "1",
+		channel_id: "vc1",
+		author: { id: "4", display_name: "alice" },
+		text: " こんにちは ",
+		duration_ms: 1300,
+	},
+});
+
+describe("toHeardUtterance", () => {
+	it("正常な payload を内部型へ変換し、文字の前後の空白を落とす", () => {
+		const e = utterance();
+		const r = toHeardUtterance(e);
+		expect(r.ok && r.value).toEqual({
+			eventId: e.event_id,
+			partnerId: "yukarin",
+			source: "discord",
+			guildId: "1",
+			channelId: "vc1",
+			author: { id: "4", displayName: "alice" },
+			text: "こんにちは",
+			durationMs: 1300,
+			occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+			receivedAt: new Date("2026-01-01T00:00:03.000Z"),
+		});
+	});
+
+	it("空白だけの文字・長さ 0・type 違いは ValidationFailed", () => {
+		const blank = utterance();
+		blank.payload.text = "  ";
+		const zero = utterance();
+		zero.payload.duration_ms = 0;
+		const message = { ...utterance(), type: "discord.message.created" };
+		for (const e of [blank, zero, message]) {
+			const r = toHeardUtterance(e);
+			expect(!r.ok && r.error.type).toBe("ValidationFailed");
+		}
+	});
+
+	it("書かれた発言の Envelope は受けない", () => {
+		expect(toHeardUtterance(valid()).ok).toBe(false);
+		expect(toInboundMessage(utterance()).ok).toBe(false);
+	});
+});
+
+describe("heardToInbound", () => {
+	it("VC からの voice の発言にし、messageId は event_id から作る", () => {
+		const r = toHeardUtterance(utterance());
+		if (!r.ok) throw new Error("fixture");
+		expect(heardToInbound(r.value)).toMatchObject({
+			eventId: r.value.eventId,
+			channelId: "vc1",
+			messageId: `voice:${r.value.eventId}`,
+			author: { id: "4", displayName: "alice", isBot: false },
+			content: "こんにちは",
+			mentionedUserIds: [],
+			authorVoiceChannelId: "vc1",
+			replyToMessageId: null,
+			attachments: [],
+			modality: "voice",
+		});
+	});
+
+	it("重複は event_id で見て、書かれた発言の鍵とぶつからない", () => {
+		const r = toHeardUtterance(utterance());
+		if (!r.ok) throw new Error("fixture");
+		expect(heardDedupeKey(r.value)).toBe(`discord-voice:${r.value.eventId}`);
+		expect(heardDedupeKey(r.value)).not.toBe(
+			dedupeKey({ messageId: r.value.eventId }),
+		);
+	});
+});
+
+describe("toInboundMessage modality", () => {
+	it("書かれた発言は text", () => {
+		const r = toInboundMessage(valid());
+		expect(r.ok && r.value.modality).toBe("text");
 	});
 });
