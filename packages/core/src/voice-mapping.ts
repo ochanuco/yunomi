@@ -91,13 +91,12 @@ export const toAivoiceValues = (
 				2,
 			),
 			PitchRange: clamp(master.pitch_range * (0.8 + 0.4 * energy), 0, 2),
-			MiddlePause: clamp(
-				master.middle_pause_ms * (0.9 + 0.2 * warmth),
-				80,
-				500,
+			// A.I.VOICE は間に整数のミリ秒しか受け付けず、小数を送ると合成ごと失敗する。
+			MiddlePause: Math.round(
+				clamp(master.middle_pause_ms * (0.9 + 0.2 * warmth), 80, 500),
 			),
-			LongPause: clamp(master.long_pause_ms, 100, 2000),
-			SentencePause: clamp(master.sentence_pause_ms, 0, 10000),
+			LongPause: Math.round(clamp(master.long_pause_ms, 100, 2000)),
+			SentencePause: Math.round(clamp(master.sentence_pause_ms, 0, 10000)),
 		},
 	};
 };

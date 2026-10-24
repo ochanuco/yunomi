@@ -207,6 +207,19 @@ describe("toAivoiceValues", () => {
 		expect(low?.Pitch).toBeGreaterThanOrEqual(0.5);
 	});
 
+	it("間は整数のミリ秒にする", () => {
+		const odd: VoiceProfile = structuredClone(profile);
+		const real = odd.engines.aivoice?.realizations.yukari;
+		if (!real) throw new Error("fixture");
+		real.master = { ...master, middle_pause_ms: 200, long_pause_ms: 370.4 };
+		for (const warmth of [0, 0.37, 0.65, 1]) {
+			const m = toAivoiceValues(ir({ warmth }), odd)?.masterOverrides;
+			expect(Number.isInteger(m?.MiddlePause)).toBe(true);
+			expect(Number.isInteger(m?.LongPause)).toBe(true);
+			expect(Number.isInteger(m?.SentencePause)).toBe(true);
+		}
+	});
+
 	it("NaN の energy / warmth は中間値として扱う", () => {
 		expect(
 			toAivoiceValues(ir({ energy: Number.NaN, warmth: Number.NaN }), profile)
