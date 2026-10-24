@@ -1,4 +1,6 @@
-type Slot = { waiters: ((decision: "run" | "skip") => void)[] };
+// skip された待機の coalesced も順番待ちの一部として、前の分が終わってから順に走らせる。
+type Turn = { run: boolean; after: Promise<void>; done: () => void };
+type Slot = { waiters: ((turn: Turn) => void)[] };
 
 /**
  * チャンネル単位の直列化。処理中に届いた呼び出しは待たせ、終了時に最新の 1 件だけを実行し、
@@ -10,15 +12,22 @@ export class ChannelGate {
 	async run<T>(
 		channelId: string,
 		work: () => Promise<T>,
-		coalesced: () => T,
+		coalesced: () => T | Promise<T>,
 	): Promise<T> {
 		let slot = this.#slots.get(channelId);
 		if (slot) {
 			const mine = slot;
-			const decision = await new Promise<"run" | "skip">((resolve) => {
+			const turn = await new Promise<Turn>((resolve) => {
 				mine.waiters.push(resolve);
 			});
-			if (decision === "skip") return coalesced();
+			await turn.after;
+			if (!turn.run) {
+				try {
+					return await coalesced();
+				} finally {
+					turn.done();
+				}
+			}
 		} else {
 			slot = { waiters: [] };
 			this.#slots.set(channelId, slot);
@@ -38,7 +47,11 @@ export class ChannelGate {
 			this.#slots.delete(channelId);
 			return;
 		}
-		for (const w of waiters) w("skip");
-		newest("run");
+		let after = Promise.resolve();
+		for (const w of waiters) {
+			const prev = after;
+			after = new Promise<void>((done) => w({ run: false, after: prev, done }));
+		}
+		newest({ run: true, after, done: () => {} });
 	}
 }

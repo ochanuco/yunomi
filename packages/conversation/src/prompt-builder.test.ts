@@ -104,6 +104,59 @@ describe("PromptBuilder", () => {
 		expect(elsewhere).not.toContain("自動で VC に声として流れる");
 	});
 
+	it("耳を開けて VC にいるときは、声が聞こえる前提の行に書き分ける", () => {
+		const body = (voice: {
+			connectedChannelId: string | null;
+			listening?: boolean;
+		}) => {
+			const input = baseInput();
+			input.voice = { ...voice, messageChannelId: "vc1" };
+			return builder.build(input).system[10]?.text ?? "";
+		};
+		const deaf = body({ connectedChannelId: "vc1", listening: false });
+		expect(deaf).toBe(body({ connectedChannelId: "vc1" }));
+		const listening = body({ connectedChannelId: "vc1", listening: true });
+		expect(listening).not.toContain("聞くことはできない");
+		expect(listening).not.toContain("声は聞こえず");
+		expect({ deaf, listening }).toMatchSnapshot();
+		// 接続していなければ、耳の報告が残っていても聞こえない
+		expect(body({ connectedChannelId: null, listening: true })).toContain(
+			"聞くことはできない",
+		);
+	});
+
+	it("聞いた発話は、新着でも履歴でも声で話して聞き取った文字だと分かるように出す", () => {
+		const input = baseInput();
+		input.recent = [
+			{ speaker: "alice", text: "ただいま", modality: "voice" },
+			{ speaker: "alice", text: "書いた発言", modality: "text" },
+			{ speaker: "bob", text: "未指定の発言" },
+		];
+		input.message = { ...input.message, modality: "voice" };
+		const content = String(builder.build(input).messages[0]?.content);
+		expect(content).toMatchSnapshot();
+		const text = String(builder.build(baseInput()).messages[0]?.content);
+		expect(text).not.toContain("聞き取った結果");
+	});
+
+	it("VC で声で聞いた新着は、テキストチャットから来たとは書かない", () => {
+		const body = (modality: "text" | "voice") => {
+			const input = baseInput();
+			input.voice = {
+				connectedChannelId: "vc1",
+				listening: true,
+				messageChannelId: "vc1",
+			};
+			input.message = { ...input.message, modality };
+			return builder.build(input).system[10]?.text ?? "";
+		};
+		const voice = body("voice");
+		expect(voice).not.toContain("テキストチャットから来た");
+		expect(voice).toContain("その VC で声で聞いたもの");
+		expect(body("text")).toContain("テキストチャットから来た");
+		expect(voice).toMatchSnapshot();
+	});
+
 	it("voice_channel の指示を含む", () => {
 		const task = builder.build(baseInput()).system[11]?.text ?? "";
 		expect(task).toContain("voice_channel");

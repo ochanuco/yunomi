@@ -18,6 +18,8 @@ export type RecentMessage = {
 	isBot: boolean;
 	isPartner: boolean;
 	content: string;
+	/** voice は VC で聞き取った発話。未指定は書かれた発言。 */
+	modality?: "text" | "voice";
 	occurredAt: string;
 };
 
@@ -25,6 +27,8 @@ export type VoiceConnection = {
 	guildId: string;
 	/** VC に入っていなければ null。 */
 	channelId: string | null;
+	/** 接続先の VC で相手の声を受け取っているか。 */
+	listening: boolean;
 	updatedAt: string;
 };
 
@@ -50,6 +54,7 @@ type RecentRow = {
 	is_bot: number;
 	is_partner: number;
 	content: string;
+	modality: string;
 	occurred_at: string;
 };
 
@@ -61,6 +66,7 @@ const toRecent = (r: RecentRow): RecentMessage => ({
 	isBot: r.is_bot === 1,
 	isPartner: r.is_partner === 1,
 	content: r.content,
+	modality: r.modality === "voice" ? "voice" : "text",
 	occurredAt: r.occurred_at,
 });
 
@@ -72,6 +78,7 @@ export const toRecentMessage = (msg: InboundMessage): RecentMessage => ({
 	isBot: msg.author.isBot,
 	isPartner: false,
 	content: msg.content,
+	modality: msg.modality,
 	occurredAt: msg.occurredAt.toISOString(),
 });
 
@@ -112,8 +119,8 @@ export class DoStore {
 	appendRecent(m: RecentMessage): void {
 		this.#sql.exec(
 			`INSERT OR IGNORE INTO recent_messages
-				(channel_id, message_id, author_id, author_name, is_bot, is_partner, content, occurred_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				(channel_id, message_id, author_id, author_name, is_bot, is_partner, content, modality, occurred_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			m.channelId,
 			m.messageId,
 			m.authorId,
@@ -121,6 +128,7 @@ export class DoStore {
 			m.isBot ? 1 : 0,
 			m.isPartner ? 1 : 0,
 			m.content,
+			m.modality ?? "text",
 			m.occurredAt,
 		);
 		this.#sql.exec(
@@ -289,6 +297,7 @@ export class DoStore {
 			.exec<{
 				voice_guild_id: string;
 				voice_channel_id: string | null;
+				voice_listening: number;
 				voice_updated_at: string;
 			}>("SELECT * FROM voice_connection WHERE id = 1")
 			.toArray()[0];
@@ -296,6 +305,7 @@ export class DoStore {
 			? {
 					guildId: r.voice_guild_id,
 					channelId: r.voice_channel_id,
+					listening: r.voice_listening === 1,
 					updatedAt: r.voice_updated_at,
 				}
 			: null;
@@ -304,14 +314,16 @@ export class DoStore {
 	setVoiceConnection(
 		guildId: string,
 		channelId: string | null,
+		listening: boolean,
 		at: Date,
 	): void {
 		this.#sql.exec(
 			`INSERT OR REPLACE INTO voice_connection
-				(id, voice_guild_id, voice_channel_id, voice_updated_at)
-			VALUES (1, ?, ?, ?)`,
+				(id, voice_guild_id, voice_channel_id, voice_listening, voice_updated_at)
+			VALUES (1, ?, ?, ?, ?)`,
 			guildId,
 			channelId,
+			channelId !== null && listening ? 1 : 0,
 			at.toISOString(),
 		);
 	}

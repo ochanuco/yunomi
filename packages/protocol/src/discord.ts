@@ -321,6 +321,8 @@ export const discordVoiceConnectionPathFor = (partnerId: string): string =>
 export const discordVoiceConnectionSchema = v.object({
 	guild_id: snowflake,
 	channel_id: v.nullable(snowflake),
+	// 接続先の VC で相手の声を受け取っているか。耳を持たない古い Gateway は省略する
+	listening: v.optional(v.boolean()),
 });
 
 export type DiscordVoiceConnection = v.InferOutput<

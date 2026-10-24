@@ -8,7 +8,7 @@ export const MESSAGE_GAP_MAX_MS = 2500;
 export const MESSAGE_GAPS_TOTAL_MAX_MS = 8000;
 
 // Discord の nonce は 25 文字まで。
-const NONCE_MAX_LENGTH = 25;
+export const NONCE_MAX_LENGTH = 25;
 
 /** 次のメッセージを送る前の間。文字数は書記素ではなくコードポイントで数える。 */
 export const messageGapMs = (text: string): number =>
