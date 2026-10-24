@@ -528,6 +528,7 @@ describe("HTTP 経由", () => {
 				},
 			],
 			reply_to_message_id: msg.messageId,
+			avatar: { emotion: "neutral" },
 		});
 	});
 });

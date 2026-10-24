@@ -13,7 +13,7 @@ import {
 	send,
 	turn,
 } from "./e2e/harness.ts";
-import { inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
+import { ACK, inbound, PARTNER_ID, partnerStub } from "./helpers.ts";
 
 type TextInput = {
 	channelId: string;
@@ -58,7 +58,7 @@ describe("Worker からの送信", () => {
 		await install(port);
 		const msg = mention(s);
 
-		expect(await send(msg)).toEqual({ action: "ack" });
+		expect(await send(msg)).toEqual(ACK);
 
 		expect(port.sendText).toHaveBeenCalledWith({
 			channelId: s.channelId,
@@ -68,6 +68,24 @@ describe("Worker からの送信", () => {
 		expect(vi.mocked(port.sendText).mock.calls[0]?.[0]).not.toHaveProperty(
 			"replyToMessageId",
 		);
+	});
+
+	it("送り終えた返事の感情を、表情画像の指示として Gateway に返す", async () => {
+		const s = newScenario();
+		await installFakeLlm([
+			llmOk(
+				turn({
+					messages: ["やった", "ほんとに"],
+					performance: { ...turn().performance, emotion: "joy" },
+				}),
+			),
+		]);
+		await install(fakePort());
+
+		expect(await send(mention(s))).toEqual({
+			action: "ack",
+			avatar: { emotion: "joy" },
+		});
 	});
 
 	it("考えているあいだに他の発言が入れば、返信形式で送る", async () => {
@@ -236,7 +254,7 @@ describe("Worker からの送信", () => {
 			await installFakeLlm([llmOk(three())]);
 			const { events, port } = await recording();
 
-			expect(await send(mention(s))).toEqual({ action: "ack" });
+			expect(await send(mention(s))).toEqual(ACK);
 
 			expect(events).toEqual([
 				"send:えっ",
@@ -316,10 +334,10 @@ describe("Worker からの送信", () => {
 
 			const [a, b] = await Promise.all([send(msg), send(msg)]);
 
-			expect(a).toEqual({ action: "ack" });
-			expect(b).toEqual({ action: "ack" });
+			expect(a).toEqual(ACK);
+			expect(b).toEqual(ACK);
 			expect(port.sendText).toHaveBeenCalledTimes(3);
-			expect(await send(msg)).toEqual({ action: "ack" });
+			expect(await send(msg)).toEqual(ACK);
 			expect(port.sendText).toHaveBeenCalledTimes(3);
 		});
 

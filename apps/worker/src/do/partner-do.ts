@@ -14,6 +14,7 @@ import {
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
+	type AvatarDirective,
 	type DiscordSent,
 	type DiscordVoiceConnection,
 	dedupeKey,
@@ -256,9 +257,17 @@ export class PartnerDO extends DurableObject<Env> {
 			if (outcome.intent && !voice?.speak) {
 				this.#speakAloud(outcome.intent, inbound.channelId, sent);
 			}
+			// 一部しか送れなかった返事に表情を添えると、途切れた発言の締めに見えてしまう
+			const delivered =
+				sent.length > 0 &&
+				sent.length === (outcome.partnerMessages ?? []).length;
 			return toResult({
 				...outcome,
-				response: withVoice({ action: "ack" }, voice),
+				response: withBody(
+					{ action: "ack" },
+					voice,
+					delivered ? avatarOf(outcome) : undefined,
+				),
 			});
 		}
 		// Gateway が送る。送れたかは sent 通知でしか分からないので、先に全件を文脈に積む。
@@ -271,7 +280,7 @@ export class PartnerDO extends DurableObject<Env> {
 		);
 		return toResult({
 			...outcome,
-			response: withVoice(outcome.response, voice),
+			response: withBody(outcome.response, voice, avatarOf(outcome)),
 		});
 	}
 
@@ -589,12 +598,21 @@ export class PartnerDO extends DurableObject<Env> {
 	}
 }
 
-const withVoice = (
+// 表情は声と同じ感情の判定から決め、画像のための LLM 呼び出しを増やさない。
+const avatarOf = (outcome: TurnOutcome): AvatarDirective | undefined =>
+	outcome.intent ? { emotion: outcome.intent.performance.emotion } : undefined;
+
+const withBody = (
 	response: GatewayResponse,
 	voice: VoiceDirective | undefined,
+	avatar: AvatarDirective | undefined,
 ): GatewayResponse =>
-	voice && (response.action === "ack" || response.action === "reply")
-		? { ...response, voice }
+	response.action === "ack" || response.action === "reply"
+		? {
+				...response,
+				...(voice ? { voice } : {}),
+				...(avatar ? { avatar } : {}),
+			}
 		: response;
 
 const toResult = (o: TurnOutcome): HandleResult => ({

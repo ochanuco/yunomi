@@ -63,6 +63,7 @@ describe("reply と ignore", () => {
 				},
 			],
 			reply_to_message_id: msg.messageId,
+			avatar: { emotion: "neutral" },
 		});
 		expect(fake.requests).toHaveLength(1);
 	});

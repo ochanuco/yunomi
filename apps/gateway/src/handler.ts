@@ -1,4 +1,9 @@
-import { replyMessagesOf, type VoiceDirective } from "@yunomi/protocol";
+import {
+	type AvatarDirective,
+	replyMessagesOf,
+	type VoiceDirective,
+} from "@yunomi/protocol";
+import type { AvatarStock } from "./avatar-stock.ts";
 import type { Logger } from "./logger.ts";
 import { type MessageLike, toEnvelope } from "./to-envelope.ts";
 import type { VoiceManager } from "./voice-manager.ts";
@@ -7,11 +12,18 @@ import type { YunomiClient } from "./yunomi-client.ts";
 /** discord.js のテキストチャンネルのうち handler が使う部分。 */
 export type ChannelLike = {
 	lastMessageId?: string | null;
-	send: (options: {
-		content: string;
-		reply?: { messageReference: string; failIfNotExists: boolean };
-		allowedMentions: { repliedUser: boolean; parse: never[] };
-	}) => Promise<{ id: string }>;
+	send: (
+		options:
+			| {
+					content: string;
+					reply?: { messageReference: string; failIfNotExists: boolean };
+					allowedMentions: { repliedUser: boolean; parse: never[] };
+			  }
+			| {
+					files: { attachment: string; name: string }[];
+					allowedMentions: { repliedUser: boolean; parse: never[] };
+			  },
+	) => Promise<{ id: string }>;
 };
 
 export type HandlerDeps = {
@@ -19,6 +31,8 @@ export type HandlerDeps = {
 	partnerId: string;
 	botUserId: string;
 	voice?: Pick<VoiceManager, "apply">;
+	/** 未設定なら表情画像を貼らない。 */
+	avatars?: Pick<AvatarStock, "pick">;
 	now?: () => Date;
 	logger: Logger;
 };
@@ -35,6 +49,31 @@ export const createMessageHandler =
 					error: e instanceof Error ? e.name : "unknown",
 				});
 			});
+		};
+		// 表情画像は返事の添え物なので、送れなくても返事の扱いは変えない
+		const postAvatar = async (avatar: AvatarDirective | undefined) => {
+			if (!avatar || !deps.avatars) return;
+			const image = deps.avatars.pick(avatar.emotion);
+			if (!image) {
+				log.debug("avatar not stocked", { emotion: avatar.emotion });
+				return;
+			}
+			try {
+				await channel.send({
+					files: [{ attachment: image.path, name: image.name }],
+					allowedMentions: { repliedUser: false, parse: [] },
+				});
+				log.info("avatar posted", {
+					message_id: message.id,
+					emotion: avatar.emotion,
+					image: image.name,
+				});
+			} catch (e) {
+				log.warn("avatar send failed", {
+					message_id: message.id,
+					error: e instanceof Error ? e.name : "unknown",
+				});
+			}
 		};
 		const envelope = toEnvelope(message, {
 			partnerId: deps.partnerId,
@@ -65,6 +104,7 @@ export const createMessageHandler =
 		// Worker が送信まで済ませている。Worker が REST で送る設定になる前は reply で返ってくる
 		if (response.action === "ack") {
 			log.info("acked", { message_id: message.id });
+			await postAvatar(response.avatar);
 			return;
 		}
 		// 通知は best effort。失敗しても返信自体は済んでいる
@@ -131,4 +171,5 @@ export const createMessageHandler =
 			});
 			await notify(m.partner_message_id, sent.id);
 		}
+		await postAvatar(response.avatar);
 	};

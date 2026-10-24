@@ -31,14 +31,22 @@ const setup = (send: (e: unknown) => Promise<unknown>) => {
 		),
 	};
 	const logger = { ...silentLogger, warn: vi.fn() };
+	const avatars = {
+		pick: vi.fn((emotion: string) =>
+			emotion === "joy"
+				? { name: "101-abc.png", path: "/avatars/joy/101-abc.png" }
+				: null,
+		),
+	};
 	const handle = createMessageHandler({
 		client: client as never,
 		partnerId: "yukarin",
 		botUserId: "999",
 		voice,
+		avatars,
 		logger,
 	});
-	return { channel, client, handle, logger, voice };
+	return { avatars, channel, client, handle, logger, voice };
 };
 
 describe("createMessageHandler", () => {
@@ -275,5 +283,83 @@ describe("createMessageHandler", () => {
 		manager.apply.mockRejectedValueOnce(new Error("boom"));
 		await handle(message, channel);
 		expect(channel.send).toHaveBeenCalledTimes(1);
+	});
+
+	describe("表情画像", () => {
+		const image = {
+			files: [{ attachment: "/avatars/joy/101-abc.png", name: "101-abc.png" }],
+			allowedMentions: { repliedUser: false, parse: [] },
+		};
+
+		it("ack では Worker が送ったテキストのあとに、感情の画像を 1 枚貼る", async () => {
+			const { avatars, channel, handle } = setup(async () =>
+				ok({ action: "ack", avatar: { emotion: "joy" } }),
+			);
+			await handle(message, channel);
+			expect(avatars.pick).toHaveBeenCalledWith("joy");
+			expect(channel.send.mock.calls.map((c) => c[0])).toEqual([image]);
+		});
+
+		it("分割された reply は最後のメッセージのあとに 1 枚だけ貼る", async () => {
+			const { channel, handle } = setup(async () =>
+				ok({
+					action: "reply",
+					content: "えっ\n本当に",
+					messages: [{ content: "えっ" }, { content: "本当に" }],
+					avatar: { emotion: "joy" },
+				}),
+			);
+			await handle(message, channel);
+			expect(channel.send.mock.calls.map((c) => c[0])).toEqual([
+				{
+					content: "えっ",
+					allowedMentions: { repliedUser: false, parse: [] },
+				},
+				{
+					content: "本当に",
+					allowedMentions: { repliedUser: false, parse: [] },
+				},
+				image,
+			]);
+		});
+
+		it("テキストを送りきれなかったら貼らない", async () => {
+			const { channel, handle } = setup(async () =>
+				ok({
+					action: "reply",
+					content: "1\n2",
+					messages: [{ content: "1" }, { content: "2" }],
+					avatar: { emotion: "joy" },
+				}),
+			);
+			channel.send
+				.mockResolvedValueOnce({ id: "501" })
+				.mockRejectedValueOnce(new Error("missing access"));
+			await handle(message, channel);
+			expect(channel.send).toHaveBeenCalledTimes(2);
+		});
+
+		it("画像の無い感情と avatar の無い応答では何も貼らない", async () => {
+			for (const response of [
+				{ action: "ack", avatar: { emotion: "anger" } },
+				{ action: "ack" },
+			]) {
+				const { channel, handle } = setup(async () => ok(response));
+				await handle(message, channel);
+				expect(channel.send).not.toHaveBeenCalled();
+			}
+		});
+
+		it("画像を送れなくても handler は落ちない", async () => {
+			const { channel, handle, logger } = setup(async () =>
+				ok({ action: "ack", avatar: { emotion: "joy" } }),
+			);
+			channel.send.mockRejectedValueOnce(new Error("missing access"));
+			await expect(handle(message, channel)).resolves.toBeUndefined();
+			expect(logger.warn).toHaveBeenCalledWith(
+				"avatar send failed",
+				expect.objectContaining({ message_id: "3" }),
+			);
+		});
 	});
 });

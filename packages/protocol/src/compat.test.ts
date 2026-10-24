@@ -108,6 +108,14 @@ describe("新しい Worker → 古い Gateway", () => {
 		expect(() => parse(legacyGatewayResponseSchema, long)).not.toThrow();
 	});
 
+	it("avatar は古い Gateway では落ちる", () => {
+		const old = parse(legacyGatewayResponseSchema, {
+			action: "ack",
+			avatar: { emotion: "joy" },
+		});
+		expect(old).toEqual({ action: "ack" });
+	});
+
 	it("voice は speak_queue を落とし、1 件目の speak だけを読む", () => {
 		const voice = withSpeakQueue({ leave: { guild_id: "1" } }, [
 			speak("えっ"),
@@ -160,6 +168,14 @@ describe("新しい Worker → 新しい Gateway", () => {
 			"えっ",
 			"本当に",
 		]);
+	});
+
+	it("avatar は reply と ack に載り、知らない感情でも応答ごと読める", () => {
+		const res = parse(gatewayResponseSchema, {
+			action: "ack",
+			avatar: { emotion: "sleepy" },
+		});
+		expect(res).toEqual({ action: "ack", avatar: { emotion: "sleepy" } });
 	});
 
 	it("読み上げがなければ speak も speak_queue も付けない", () => {

@@ -100,6 +100,16 @@ export const voiceDirectiveSchema = v.object({
 
 export type VoiceDirective = v.InferOutput<typeof voiceDirectiveSchema>;
 
+/**
+ * 返事のまとまりのあとに Gateway が同じチャンネルへ貼る表情画像。古い Gateway は無視する。
+ * 感情が増えたときに古い Gateway が応答ごと読めなくならないよう、emotion は picklist にしない。
+ */
+export const avatarDirectiveSchema = v.object({
+	emotion: v.pipe(v.string(), v.nonEmpty()),
+});
+
+export type AvatarDirective = v.InferOutput<typeof avatarDirectiveSchema>;
+
 /** Yunomi → Gateway のレスポンス。各 content は Discord の 2000 文字制限に合わせる。 */
 export const gatewayResponseSchema = v.variant("action", [
 	v.object({
@@ -123,12 +133,14 @@ export const gatewayResponseSchema = v.variant("action", [
 			),
 		),
 		voice: v.optional(voiceDirectiveSchema),
+		avatar: v.optional(avatarDirectiveSchema),
 	}),
 	v.object({ action: v.literal("ignore") }),
 	// Worker が Discord への送信まで済ませた。Gateway は VC の操作だけを実行する
 	v.object({
 		action: v.literal("ack"),
 		voice: v.optional(voiceDirectiveSchema),
+		avatar: v.optional(avatarDirectiveSchema),
 	}),
 ]);
 

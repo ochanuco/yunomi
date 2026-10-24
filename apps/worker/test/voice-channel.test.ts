@@ -26,7 +26,7 @@ import {
 	T0,
 	turn,
 } from "./e2e/harness.ts";
-import { PARTNER_ID, partnerStub } from "./helpers.ts";
+import { ACK, PARTNER_ID, partnerStub } from "./helpers.ts";
 
 type Availability = "ready" | "asleep" | "waking" | "unreachable";
 
@@ -454,7 +454,7 @@ describe("VC のテキストチャットへの返事", () => {
 		const port = fakePort();
 		await install(port, null);
 
-		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
+		expect(await sendAs(mention(s))).toEqual(ACK);
 		expect(port.sendText).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).not.toHaveBeenCalled();
 	});
@@ -467,7 +467,7 @@ describe("VC のテキストチャットへの返事", () => {
 		const o = fakeOrgans({ availability: "ready" });
 		await install(port, o.organs);
 
-		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
+		expect(await sendAs(mention(s))).toEqual(ACK);
 		expect(o.synthesize).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).toHaveBeenCalledTimes(1);
 	});
@@ -476,7 +476,7 @@ describe("VC のテキストチャットへの返事", () => {
 		const s = newScenario();
 		await installFakeLlm([llmOk(turn())]);
 		await install(fakePort(), fakeOrgans({ availability: "ready" }).organs);
-		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
+		expect(await sendAs(mention(s))).toEqual(ACK);
 	});
 
 	it("プロンプトに VC の状態を載せる", async () => {
@@ -513,7 +513,7 @@ describe("voice_channel の出力", () => {
 		const o = fakeOrgans({ availability: "asleep" });
 		await install(fakePort(), o.organs);
 
-		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
+		expect(await sendAs(mention(s))).toEqual(ACK);
 		expect(o.wake).not.toHaveBeenCalled();
 	});
 
@@ -523,9 +523,9 @@ describe("voice_channel の出力", () => {
 		await installFakeLlm([llmOk(turn({ voice_channel: "join" }))]);
 		await install(fakePort(), fakeOrgans({ availability: "ready" }).organs);
 
-		expect(await sendAs(mention(s, { authorVoiceChannelId: "vc7" }))).toEqual({
-			action: "ack",
-		});
+		expect(await sendAs(mention(s, { authorVoiceChannelId: "vc7" }))).toEqual(
+			ACK,
+		);
 	});
 
 	it("leave: VC にいれば voice.leave を載せる", async () => {
@@ -535,7 +535,7 @@ describe("voice_channel の出力", () => {
 		await install(fakePort(), fakeOrgans({ availability: "ready" }).organs);
 
 		expect(await sendAs(mention(s))).toEqual({
-			action: "ack",
+			...ACK,
 			voice: { leave: { guild_id: "g1" } },
 		});
 	});
@@ -545,7 +545,7 @@ describe("voice_channel の出力", () => {
 		await installFakeLlm([llmOk(turn({ voice_channel: "leave" }))]);
 		await install(fakePort(), fakeOrgans({ availability: "ready" }).organs);
 
-		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
+		expect(await sendAs(mention(s))).toEqual(ACK);
 	});
 
 	it("意思疎通の口が無いときは reply に載せる", async () => {
