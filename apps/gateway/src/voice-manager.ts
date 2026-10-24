@@ -61,6 +61,8 @@ export type VoiceManagerDeps = {
 	yunomi: Pick<YunomiClient, "reportVoiceConnection">;
 	/** null なら耳を閉じて入る。 */
 	ears?: Ears | null;
+	/** 聞いた発話を Worker まで届けられるか。耳を開けていても STT が無ければ false。 */
+	listening?: boolean;
 	/** guild が見つからなければ null。 */
 	adapterCreator: (guildId: string) => DiscordGatewayAdapterCreator | null;
 	lib?: VoiceLib;
@@ -300,6 +302,7 @@ export class VoiceManager {
 			.reportVoiceConnection(this.#deps.partnerId, {
 				guild_id: guildId,
 				channel_id: channelId,
+				listening: channelId !== null && (this.#deps.listening ?? false),
 			})
 			.then((r) => {
 				if (!r.ok) {

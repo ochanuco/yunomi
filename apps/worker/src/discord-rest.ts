@@ -17,6 +17,8 @@ const USER_AGENT = "DiscordBot (https://github.com/ochanuco/yunomi, 0)";
 const MAX_RETRIES = 2;
 // これを超える待ちは、応答を保持したまま待たずに RateLimited として返す。
 const MAX_RETRY_WAIT_MS = 5000;
+// 応答が止まると、同じチャンネルの後の返事がすべてこの送信を待つ
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export type DiscordRestDeps = {
 	token: string;
@@ -84,6 +86,7 @@ export const createDiscordRest = (deps: DiscordRestDeps): CommunicationPort => {
 							: {}),
 					},
 					...(payload ? { body: payload.body } : {}),
+					signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 				});
 			} catch {
 				return err(externalServiceUnavailable({ service: "discord" }));
