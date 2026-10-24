@@ -228,10 +228,12 @@ export class PartnerDO extends DurableObject<Env> {
 	/** VC で聞いた発話。聞き取った文字をチャットに書いてから、発言としてターンに乗せる。 */
 	handleVoiceUtterance(heard: HeardUtterance): Promise<HandleResult> {
 		const key = heardDedupeKey(heard);
-		return this.#once(key, async () => {
-			await this.#postHeard(heard);
-			return this.#process(heardToInbound(heard), key);
-		});
+		// 書き込みも返事の送信と同じ順番待ちに並べ、複数メッセージの返事の途中に割り込ませない。
+		// まとめて飛ばされた発話も、聞き取った文字だけは残す。
+		const post = () => this.#postHeard(heard);
+		return this.#once(key, () =>
+			this.#process(heardToInbound(heard), key, post),
+		);
 	}
 
 	#once(key: string, run: () => Promise<HandleResult>): Promise<HandleResult> {
@@ -250,17 +252,21 @@ export class PartnerDO extends DurableObject<Env> {
 	async #postHeard(heard: HeardUtterance): Promise<void> {
 		const port = this.createCommunication(this.env);
 		if (!port) return;
-		const sent = await port.sendText({
-			channelId: heard.channelId,
-			text: heardLine(heard),
-			nonce: heardNonce(heard.eventId),
-		});
-		if (!sent.ok) {
-			console.error(
-				"discord heard post failed",
-				sent.error.type,
-				sent.error.message,
-			);
+		try {
+			const sent = await port.sendText({
+				channelId: heard.channelId,
+				text: heardLine(heard),
+				nonce: heardNonce(heard.eventId),
+			});
+			if (!sent.ok) {
+				console.error(
+					"discord heard post failed",
+					sent.error.type,
+					sent.error.message,
+				);
+			}
+		} catch (e) {
+			console.error("discord heard post threw", e);
 		}
 	}
 
@@ -611,13 +617,23 @@ export class PartnerDO extends DurableObject<Env> {
 		});
 	}
 
-	async #process(inbound: InboundMessage, key: string): Promise<HandleResult> {
+	async #process(
+		inbound: InboundMessage,
+		key: string,
+		before: () => Promise<void> = async () => {},
+	): Promise<HandleResult> {
 		// 待機中の発言も次の判定の文脈になるよう、直列化の前に積む。
 		this.#store.appendInbound(inbound);
 		const result = await this.#gate.run<HandleResult>(
 			inbound.channelId,
-			() => this.#runTurn(inbound),
-			() => toResult(ignoreOutcome(inbound, "coalesced")),
+			async () => {
+				await before();
+				return this.#runTurn(inbound);
+			},
+			async () => {
+				await before();
+				return toResult(ignoreOutcome(inbound, "coalesced"));
+			},
 		);
 		const at = this.now();
 		this.#store.putProcessed(key, at, result);
@@ -641,8 +657,11 @@ export class PartnerDO extends DurableObject<Env> {
 
 const HEARD_MAX_LENGTH = 2000;
 
+// Discord の上限は文字数なので、サロゲートペアを割らないようコードポイントで切る。
 const heardLine = (heard: HeardUtterance): string =>
-	`${heard.author.displayName}: ${heard.text}`.slice(0, HEARD_MAX_LENGTH);
+	Array.from(`${heard.author.displayName}: ${heard.text}`)
+		.slice(0, HEARD_MAX_LENGTH)
+		.join("");
 
 // 返事の nonce は末尾が「:番号」なので、event_id の末尾だけでも重ならない。
 const heardNonce = (eventId: string): string =>

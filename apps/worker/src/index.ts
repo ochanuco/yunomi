@@ -1,11 +1,15 @@
 import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
+import { type DomainError, ok, type Result } from "@yunomi/core";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
+	DISCORD_MESSAGE_CREATED,
 	DISCORD_VOICE_EVENTS_PATH,
 	DISCORD_VOICE_UTTERANCE,
 	discordSentSchema,
 	discordVoiceConnectionSchema,
 	type GatewayResponse,
+	type HeardUtterance,
+	type InboundMessage,
 	toHeardUtterance,
 	toInboundMessage,
 	toVoiceStateUpdate,
@@ -110,34 +114,46 @@ const isGateway = (p: Principal) =>
 async function discordEvents(request: Request, env: Env): Promise<Response> {
 	const read = await readGatewayJson(request, env);
 	if ("response" in read) return read.response;
-	const inbound = isVoiceUtterance(read.body)
-		? toHeardUtterance(read.body)
-		: toInboundMessage(read.body);
-	if (!inbound.ok) {
+	const event = toDiscordEvent(read.body);
+	if (!event.ok) {
 		return Response.json(
-			{ error: "validation_failed", message: inbound.error.message },
+			{ error: "validation_failed", message: event.error.message },
 			{ status: 400 },
 		);
 	}
-	if (inbound.value.partnerId !== yukarinProfile.partner_id) {
+	if (event.value.value.partnerId !== yukarinProfile.partner_id) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
 
 	const partner = partnerNamespace(env);
-	const stub = partner.get(partner.idFromName(inbound.value.partnerId));
+	const stub = partner.get(partner.idFromName(event.value.value.partnerId));
 	const { audit: _audit, ...response } =
-		"text" in inbound.value
-			? await stub.handleVoiceUtterance(inbound.value)
-			: await stub.handleDiscordMessage(inbound.value);
+		event.value.type === DISCORD_VOICE_UTTERANCE
+			? await stub.handleVoiceUtterance(event.value.value)
+			: await stub.handleDiscordMessage(event.value.value);
 	return Response.json(response satisfies GatewayResponse);
 }
 
-// 中身の検証は type ごとのスキーマに任せ、ここでは振り分け先だけを決める。
-const isVoiceUtterance = (body: unknown): boolean =>
-	typeof body === "object" &&
-	body !== null &&
-	"type" in body &&
-	body.type === DISCORD_VOICE_UTTERANCE;
+type DiscordEvent =
+	| { type: typeof DISCORD_VOICE_UTTERANCE; value: HeardUtterance }
+	| { type: typeof DISCORD_MESSAGE_CREATED; value: InboundMessage };
+
+// 中身の検証は type ごとのスキーマに任せ、ここでは Envelope の type で振り分け先だけを決める。
+// 知らない type は発言のスキーマで弾かせる。
+const toDiscordEvent = (body: unknown): Result<DiscordEvent, DomainError> => {
+	const type =
+		typeof body === "object" && body !== null && "type" in body
+			? body.type
+			: undefined;
+	if (type === DISCORD_VOICE_UTTERANCE) {
+		const heard = toHeardUtterance(body);
+		return heard.ok ? ok({ type, value: heard.value }) : heard;
+	}
+	const inbound = toInboundMessage(body);
+	return inbound.ok
+		? ok({ type: DISCORD_MESSAGE_CREATED, value: inbound.value })
+		: inbound;
+};
 
 // Gateway からの POST を受ける経路の共通部分: メソッド・認証・caller・JSON 本文。
 async function readGatewayJson(

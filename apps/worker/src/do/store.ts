@@ -18,6 +18,8 @@ export type RecentMessage = {
 	isBot: boolean;
 	isPartner: boolean;
 	content: string;
+	/** voice は VC で聞き取った発話。未指定は書かれた発言。 */
+	modality?: "text" | "voice";
 	occurredAt: string;
 };
 
@@ -52,6 +54,7 @@ type RecentRow = {
 	is_bot: number;
 	is_partner: number;
 	content: string;
+	modality: string;
 	occurred_at: string;
 };
 
@@ -63,6 +66,7 @@ const toRecent = (r: RecentRow): RecentMessage => ({
 	isBot: r.is_bot === 1,
 	isPartner: r.is_partner === 1,
 	content: r.content,
+	modality: r.modality === "voice" ? "voice" : "text",
 	occurredAt: r.occurred_at,
 });
 
@@ -74,6 +78,7 @@ export const toRecentMessage = (msg: InboundMessage): RecentMessage => ({
 	isBot: msg.author.isBot,
 	isPartner: false,
 	content: msg.content,
+	modality: msg.modality,
 	occurredAt: msg.occurredAt.toISOString(),
 });
 
@@ -114,8 +119,8 @@ export class DoStore {
 	appendRecent(m: RecentMessage): void {
 		this.#sql.exec(
 			`INSERT OR IGNORE INTO recent_messages
-				(channel_id, message_id, author_id, author_name, is_bot, is_partner, content, occurred_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				(channel_id, message_id, author_id, author_name, is_bot, is_partner, content, modality, occurred_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			m.channelId,
 			m.messageId,
 			m.authorId,
@@ -123,6 +128,7 @@ export class DoStore {
 			m.isBot ? 1 : 0,
 			m.isPartner ? 1 : 0,
 			m.content,
+			m.modality ?? "text",
 			m.occurredAt,
 		);
 		this.#sql.exec(

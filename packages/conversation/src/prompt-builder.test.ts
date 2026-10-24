@@ -125,13 +125,36 @@ describe("PromptBuilder", () => {
 		);
 	});
 
-	it("聞いた発話は、声で話して聞き取った文字だと分かるように出す", () => {
+	it("聞いた発話は、新着でも履歴でも声で話して聞き取った文字だと分かるように出す", () => {
 		const input = baseInput();
+		input.recent = [
+			{ speaker: "alice", text: "ただいま", modality: "voice" },
+			{ speaker: "alice", text: "書いた発言", modality: "text" },
+			{ speaker: "bob", text: "未指定の発言" },
+		];
 		input.message = { ...input.message, modality: "voice" };
 		const content = String(builder.build(input).messages[0]?.content);
-		expect(content).toContain("声で話した。文字は聞き取った結果で");
+		expect(content).toMatchSnapshot();
 		const text = String(builder.build(baseInput()).messages[0]?.content);
 		expect(text).not.toContain("聞き取った結果");
+	});
+
+	it("VC で声で聞いた新着は、テキストチャットから来たとは書かない", () => {
+		const body = (modality: "text" | "voice") => {
+			const input = baseInput();
+			input.voice = {
+				connectedChannelId: "vc1",
+				listening: true,
+				messageChannelId: "vc1",
+			};
+			input.message = { ...input.message, modality };
+			return builder.build(input).system[10]?.text ?? "";
+		};
+		const voice = body("voice");
+		expect(voice).not.toContain("テキストチャットから来た");
+		expect(voice).toContain("その VC で声で聞いたもの");
+		expect(body("text")).toContain("テキストチャットから来た");
+		expect(voice).toMatchSnapshot();
 	});
 
 	it("voice_channel の指示を含む", () => {

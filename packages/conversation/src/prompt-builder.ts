@@ -45,7 +45,12 @@ export type OpinionLine = {
 	confidence: number;
 };
 
-export type ChannelLine = { speaker: string; text: string };
+export type ChannelLine = {
+	speaker: string;
+	text: string;
+	/** voice は VC で聞き取った発話。未指定は書かれた発言。 */
+	modality?: "text" | "voice";
+};
 
 export type PendingLine = {
 	id: string;
@@ -384,13 +389,18 @@ const BODY_STATE_LINES: Record<BodyState, string> = {
 const isListening = (voice: VoiceContext | undefined): boolean =>
 	voice?.connectedChannelId != null && voice.listening === true;
 
-const voiceChannelLines = (voice: VoiceContext | undefined): string[] => {
+const voiceChannelLines = (
+	voice: VoiceContext | undefined,
+	modality: "text" | "voice" | undefined,
+): string[] => {
 	if (!voice?.connectedChannelId) {
 		return ["- VC: 今はどの VC にも入っていない。"];
 	}
 	if (voice.connectedChannelId === voice.messageChannelId) {
 		return [
-			"- VC: 今 VC に入っていて、この発言はその VC のテキストチャットから来た。ここでの返事は自動で VC に声として流れる（speak_aloud は関係ない）。",
+			modality === "voice"
+				? "- VC: 今 VC に入っていて、この発言はその VC で声で聞いたもの。ここでの返事は自動で VC に声として流れる（speak_aloud は関係ない）。"
+				: "- VC: 今 VC に入っていて、この発言はその VC のテキストチャットから来た。ここでの返事は自動で VC に声として流れる（speak_aloud は関係ない）。",
 			isListening(voice)
 				? "- VC では相手の声が聞こえていて、VC のテキストチャットも読んでいる。"
 				: "- VC では相手の声は聞こえず、VC のテキストチャットだけを読んでいる。",
@@ -401,14 +411,18 @@ const voiceChannelLines = (voice: VoiceContext | undefined): string[] => {
 	];
 };
 
-const bodyBlock = (state: BodyState, voice: VoiceContext | undefined): string =>
+const bodyBlock = (
+	state: BodyState,
+	voice: VoiceContext | undefined,
+	modality: "text" | "voice" | undefined,
+): string =>
 	[
 		"## 身体の状態",
 		`- 声: ${BODY_STATE_LINES[state]}`,
 		isListening(voice)
 			? "- 耳: 今いる VC では相手の声が聞こえる。聞いた声は文字に起こして読んでいるので、聞き違いや聞き漏らしがありうる。"
 			: "- 聞くことはできない。相手の声は聞こえず、テキストだけを読んでいる。",
-		...voiceChannelLines(voice),
+		...voiceChannelLines(voice, modality),
 	].join("\n");
 
 const TASK_BLOCK = [
@@ -452,7 +466,11 @@ const openingBlock = (opening: string): string =>
 const transcriptTokens = (lines: ChannelLine[], message: string): number =>
 	estimateTokens(renderUserTurn(lines, message));
 
-const renderLine = (l: ChannelLine) => `${l.speaker}: ${l.text}`;
+const HEARD_MARK =
+	"（VC で声で話した。文字は聞き取った結果で、聞き違いがありうる）";
+
+const renderLine = (l: ChannelLine) =>
+	`${l.speaker}${l.modality === "voice" ? HEARD_MARK : ""}: ${l.text}`;
 
 const renderUserTurn = (lines: ChannelLine[], newMessage: string): string =>
 	[
@@ -479,7 +497,11 @@ export class PromptBuilder {
 			input.profile.familiarity_tiers,
 		);
 		const channel = channelBlock(input.channel);
-		const body = bodyBlock(input.bodyState ?? "unavailable", input.voice);
+		const body = bodyBlock(
+			input.bodyState ?? "unavailable",
+			input.voice,
+			input.message.modality,
+		);
 		const interest = interestBlock(
 			input.interests.slice(0, INTEREST_PROMPT_LIMIT),
 		);
@@ -497,7 +519,7 @@ export class PromptBuilder {
 
 		const m = input.message;
 		const newMessage = [
-			`${m.speaker}${m.mentionsPartner ? "（あなたへのメンションあり）" : ""}${m.modality === "voice" ? "（VC で声で話した。文字は聞き取った結果で、聞き違いがありうる）" : ""}: ${m.text}`,
+			`${m.speaker}${m.mentionsPartner ? "（あなたへのメンションあり）" : ""}${m.modality === "voice" ? HEARD_MARK : ""}: ${m.text}`,
 			...attachmentLines(m.attachments),
 		].join("\n");
 

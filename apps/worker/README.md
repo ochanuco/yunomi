@@ -106,10 +106,10 @@ DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_
 Gateway が VC で聞き取った発話を、発言と同じ `POST /v1/interfaces/discord/events` に送る。認証と応答（`ack` / `reply` / `ignore`）は `discord.message.created` と同じで、`type` で振り分ける。
 
 - 重複: Discord の message id が無いので、Envelope の `event_id` で見る（`heardDedupeKey`）。再送ではチャットへの書き込みもターンも繰り返さない。
-- 聞き取った文字: ターンの前に、身体が VC のテキストチャット（`channel_id` は VC）へ `表示名: 文字` の形で書く。Worker が送信を担わない環境では書かない。書けなくてもターンは続ける。
+- 聞き取った文字: ターンの前に、身体が VC のテキストチャット（`channel_id` は VC）へ `表示名: 文字` の形（2000 コードポイントまで）で書く。書き込みは返事の送信と同じチャンネル単位の直列化の中で行うので、複数メッセージの返事の途中には入らない。`coalesced` で飛ばされた発話も、文字は届いた順に書く。Worker が送信を担わない環境では書かない。書けなくても（エラーでも例外でも）ターンは続ける。
 - ターン: `heardToInbound` で VC での発言（`modality: "voice"`、`messageId` は `voice:<event_id>`）にし、割り込みの判定を通さず返事のターンに回す。相づちや独り言には、ターンの中で黙る（`ignore`）。黙ったときに残るのは聞き取った文字の書き込みだけ。
 - 返事: 上の「VC のテキストチャットへの返事」と同じく、テキストと `voice.speak` で返す。`messageId` は Discord に存在しないので、返事は返信形式（`message_reference`）にせず、Gateway に返す `reply` にも `reply_to_message_id` を載せない。
-- プロンプト: 新着の発言に、声で話したもので文字は聞き取り結果（聞き違いがありうる）だと添える。
+- プロンプト: 新着の発言に、声で話したもので文字は聞き取り結果（聞き違いがありうる）だと添え、「身体の状態」でも VC で声で聞いた発言だと書く。`recent_messages` は `modality` を持ち（既存行は `text`）、後のターンの履歴でも聞いた発話に同じ注記を付ける。
 
 ```json
 {

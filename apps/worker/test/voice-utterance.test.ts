@@ -3,6 +3,8 @@ import { exports } from "cloudflare:workers";
 import {
 	type CommunicationPort,
 	type DomainError,
+	err,
+	externalServiceUnavailable,
 	ok,
 	type Result,
 	type SentMessage,
@@ -203,6 +205,137 @@ describe("VC で聞いた発話のターン", () => {
 		expect(await system(true)).toContain("相手の声が聞こえる");
 		expect(await system(false)).toContain("聞くことはできない");
 		expect(await system(undefined)).toContain("聞くことはできない");
+	});
+
+	it.each([
+		[
+			"エラーを返す",
+			async () => err(externalServiceUnavailable({ service: "discord" })),
+		],
+		[
+			"例外を投げる",
+			async () => {
+				throw new Error("boom");
+			},
+		],
+	])(
+		"聞き取った文字の書き込みが%sときも、ターンを回して返事を出す",
+		async (_, fail) => {
+			const s = newScenario();
+			await report(s.channelId, true);
+			const fake = await installFakeLlm([
+				llmOk(turn({ messages: ["おかえり"] })),
+			]);
+			const port = fakePort();
+			port.sendText.mockImplementationOnce(fail);
+			await install(port, readyOrgans());
+
+			const res = await hear(utterance(s));
+
+			expect(fake.requests).toHaveLength(1);
+			expect(port.sendText.mock.calls.map(([c]) => c.text)).toEqual([
+				`${s.author.displayName}: ただいま`,
+				"おかえり",
+			]);
+			expect(res).toMatchObject({ action: "ack" });
+		},
+	);
+
+	it("同じ発話が同時に 2 つ届いてもターンは 1 回", async () => {
+		const s = newScenario();
+		await report(s.channelId, true);
+		const fake = await installFakeLlm([llmOk(turn()), llmOk(turn())]);
+		const port = fakePort();
+		await install(port, readyOrgans());
+		const body = utterance(s);
+
+		const [first, again] = await Promise.all([hear(body), hear(body)]);
+
+		expect(again).toEqual(first);
+		expect(fake.requests).toHaveLength(1);
+		expect(port.sendText).toHaveBeenCalledTimes(2);
+	});
+
+	it("書き込みの nonce は返事の nonce と重ならない", async () => {
+		const s = newScenario();
+		await report(s.channelId, true);
+		await installFakeLlm([llmOk(turn({ messages: ["うん", "それで？"] }))]);
+		const port = fakePort();
+		await install(port, readyOrgans());
+
+		await hear(utterance(s));
+
+		const nonces = port.sendText.mock.calls.map(([c]) => c.nonce);
+		expect(nonces).toHaveLength(3);
+		expect(nonces.every((n) => n !== undefined)).toBe(true);
+		expect(new Set(nonces).size).toBe(3);
+	});
+
+	it("複数メッセージの返事の途中に、次の発話の書き込みを割り込ませない", async () => {
+		const s = newScenario();
+		await report(s.channelId, true);
+		await installFakeLlm([
+			llmOk(turn({ messages: ["うん", "それで？"] })),
+			llmOk(turn({ messages: ["へえ"] })),
+		]);
+		const port = fakePort();
+		await install(port, readyOrgans());
+		// 1 件目と 2 件目の間の待ちを止め、その間に次の発話を届ける
+		let release = () => {};
+		const held = new Promise<void>((r) => {
+			release = r;
+		});
+		await runInDurableObject(partnerStub(PARTNER_ID), (o) => {
+			o.sleep = () => held;
+		});
+
+		const first = hear(utterance(s, "ただいま"));
+		await vi.waitFor(() => expect(port.sendText).toHaveBeenCalledTimes(2));
+		const second = hear(utterance(s, "あのね"));
+		await new Promise((r) => setTimeout(r, 50));
+		release();
+		await Promise.all([first, second]);
+
+		expect(port.sendText.mock.calls.map(([c]) => c.text)).toEqual([
+			`${s.author.displayName}: ただいま`,
+			"うん",
+			"それで？",
+			`${s.author.displayName}: あのね`,
+			"へえ",
+		]);
+	});
+
+	it("聞いた発話は、後のターンの履歴でも声で話したと分かる", async () => {
+		const s = newScenario();
+		await report(s.channelId, true);
+		const fake = await installFakeLlm([
+			llmOk(turn({ messages: ["おかえり"] })),
+			llmOk(turn({ messages: ["うん"] })),
+		]);
+		await install(fakePort(), readyOrgans());
+
+		await hear(utterance(s, "ただいま"));
+		await hear(utterance(s, "あのね"));
+
+		const log = JSON.stringify(fake.requests[1]?.messages);
+		expect(log).toContain(
+			`${s.author.displayName}（VC で声で話した。文字は聞き取った結果で、聞き違いがありうる）: ただいま`,
+		);
+	});
+
+	it("聞き取った文字はコードポイント単位で 2000 文字に切る", async () => {
+		const s = newScenario();
+		await report(s.channelId, true);
+		await installFakeLlm([llmOk(turn())]);
+		const port = fakePort();
+		await install(port, readyOrgans());
+
+		await hear(utterance(s, "🍵".repeat(2000)));
+
+		const line = port.sendText.mock.calls[0]?.[0].text ?? "";
+		const chars = Array.from(line);
+		expect(chars).toHaveLength(2000);
+		expect(chars.at(-1)).toBe("🍵");
 	});
 
 	it("不正な発話は 400", async () => {

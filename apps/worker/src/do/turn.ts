@@ -349,6 +349,7 @@ export const runTurn = async (
 		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
 			speaker: m.authorName,
 			text: m.content,
+			modality: m.modality,
 		})),
 		message: toPromptMessage(msg, deps.partnerUserId),
 	});
