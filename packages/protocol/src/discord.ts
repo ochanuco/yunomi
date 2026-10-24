@@ -474,19 +474,16 @@ export const heardDedupeKey = (u: Pick<HeardUtterance, "eventId">): string =>
 	`${DISCORD_SOURCE}-voice:${u.eventId}`;
 
 /**
- * 聞き取った文字を VC のテキストチャットに書いたあと、その発言としてターンに乗せる。
- * messageId は書いた発言の Discord message id で、返信先や直近の発言の並びがテキストと同じに扱える。
+ * 聞いた発話を、VC での発言としてターンに乗せる。
+ * Discord の発言ではないので messageId は event_id から作る。Discord の返信形式の宛先にはできない。
  */
-export const heardToInbound = (
-	u: HeardUtterance,
-	messageId: string,
-): InboundMessage => ({
+export const heardToInbound = (u: HeardUtterance): InboundMessage => ({
 	eventId: u.eventId,
 	partnerId: u.partnerId,
 	source: u.source,
 	guildId: u.guildId,
 	channelId: u.channelId,
-	messageId,
+	messageId: `voice:${u.eventId}`,
 	author: { id: u.author.id, displayName: u.author.displayName, isBot: false },
 	content: u.text,
 	mentionedUserIds: [],

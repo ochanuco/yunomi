@@ -384,13 +384,13 @@ describe("toHeardUtterance", () => {
 });
 
 describe("heardToInbound", () => {
-	it("チャットに書いた発言の id で、VC からの voice の発言にする", () => {
+	it("VC からの voice の発言にし、messageId は event_id から作る", () => {
 		const r = toHeardUtterance(utterance());
 		if (!r.ok) throw new Error("fixture");
-		expect(heardToInbound(r.value, "m9")).toMatchObject({
+		expect(heardToInbound(r.value)).toMatchObject({
 			eventId: r.value.eventId,
 			channelId: "vc1",
-			messageId: "m9",
+			messageId: `voice:${r.value.eventId}`,
 			author: { id: "4", displayName: "alice", isBot: false },
 			content: "こんにちは",
 			mentionedUserIds: [],
