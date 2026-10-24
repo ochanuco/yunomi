@@ -30,6 +30,8 @@ afterEach(() => {
 	stop?.();
 	stop = null;
 	location.hash = "";
+	delete document.documentElement.dataset.env;
+	document.title = "";
 });
 
 const boot = async (hash: string, api: Api, interval = 10_000) => {
@@ -42,6 +44,23 @@ const boot = async (hash: string, api: Api, interval = 10_000) => {
 };
 
 describe("startApp", () => {
+	it("dev では環境バッジとタイトルで dev と分かるようにする", async () => {
+		const root = await boot("", fakeApi());
+		expect(root.querySelector(".env-badge")?.textContent).toBe("DEV");
+		expect(document.documentElement.dataset.env).toBe("dev");
+		expect(document.title).toMatch(/^\[DEV\]/);
+	});
+
+	it("prod ではバッジだけ出し、タイトルは変えない", async () => {
+		const root = await boot(
+			"",
+			fakeApi({ status: async () => ({ ...status, env: "production" }) }),
+		);
+		expect(root.querySelector(".env-badge")?.textContent).toBe("PROD");
+		expect(document.documentElement.dataset.env).toBe("prod");
+		expect(document.title).toBe("");
+	});
+
 	it("既定で State を表示する", async () => {
 		const root = await boot("", fakeApi());
 		expect(root.textContent).toContain("alice");

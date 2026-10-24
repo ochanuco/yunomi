@@ -20,7 +20,22 @@ export const startApp = (
 ): (() => void) => {
 	const nav = h("nav", { class: "main-nav" });
 	const view = h("main", {});
-	root.replaceChildren(h("header", {}, h("h1", {}, "Yunomi Admin"), nav), view);
+	const badge = h("span", { class: "env-badge", hidden: true });
+	root.replaceChildren(
+		h("header", {}, h("h1", {}, "Yunomi Admin"), badge, nav),
+		view,
+	);
+	// dev と prod は同じ画面なので、見ている環境を取り違えないよう dev だけ色を変える。
+	void api.status().then(
+		({ env }) => {
+			const dev = env !== "production";
+			badge.textContent = dev ? "DEV" : "PROD";
+			badge.hidden = false;
+			document.documentElement.dataset.env = dev ? "dev" : "prod";
+			if (dev) document.title = `[DEV] ${document.title}`;
+		},
+		() => {},
+	);
 
 	let current: PageHandle | null = null;
 
