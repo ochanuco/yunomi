@@ -10,7 +10,9 @@ import {
 } from "./discord-adapter.ts";
 import { createEars } from "./ears.ts";
 import { createMessageHandler } from "./handler.ts";
+import { createHearing } from "./hearing.ts";
 import { DEFAULT_HEARTBEAT_PATH, startHeartbeat } from "./heartbeat.ts";
+import { createKukichaClient } from "./kukicha-client.ts";
 import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
@@ -27,6 +29,11 @@ if (!config.ok) {
 }
 const cfg = config.value;
 const logger = createLogger(cfg.logLevel);
+if (cfg.kukicha && !cfg.ownerUserId) {
+	logger.warn(
+		"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
+	);
+}
 
 const avatarDir = cfg.avatarDir ?? DEFAULT_AVATAR_DIR;
 const avatars = await loadAvatarStock(avatarDir);
@@ -60,10 +67,44 @@ const ochoko = cfg.ochoko
 		})
 	: null;
 
+const kukicha = cfg.kukicha
+	? createKukichaClient({
+			baseUrl: cfg.kukicha.url,
+			token: cfg.kukicha.token,
+			logger,
+		})
+	: null;
+
+const hear =
+	cfg.ownerUserId && kukicha
+		? createHearing({
+				kukicha,
+				client: yunomi,
+				partnerId: PARTNER_ID,
+				ownerUserId: cfg.ownerUserId,
+				displayNameOf: (guildId, userId) =>
+					discord.guilds.cache.get(guildId)?.members.cache.get(userId)
+						?.displayName ?? null,
+				channelOf: (channelId) => {
+					const channel = discord.channels.cache.get(channelId);
+					return channel?.isSendable() ? channel : null;
+				},
+				// VoiceManager は耳を受け取るので後で作る。発話が届く時点では作られている
+				voice: { apply: (d) => voice.apply(d) },
+				connectedChannelOf: (guildId) => voice.channelOf(guildId),
+				avatars,
+				logger,
+			})
+		: null;
+
 const ears = cfg.ownerUserId
 	? createEars({
 			ownerUserId: cfg.ownerUserId,
 			onUtterance: (u, where) => {
+				if (hear) {
+					void hear(u, where);
+					return;
+				}
 				logger.info("utterance heard", {
 					guild_id: where.guildId,
 					channel_id: where.channelId,

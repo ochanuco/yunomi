@@ -16,6 +16,7 @@ import {
 	type DiscordSent,
 	type DiscordVoiceConnection,
 	type DiscordVoiceStateUpdatedPayload,
+	type DiscordVoiceUtteranceEnvelope,
 	discordSentPathFor,
 	discordVoiceConnectionPathFor,
 	type GatewayResponse,
@@ -79,7 +80,7 @@ export class YunomiClient {
 	}
 
 	async send(
-		envelope: DiscordMessageCreatedEnvelope,
+		envelope: DiscordMessageCreatedEnvelope | DiscordVoiceUtteranceEnvelope,
 	): Promise<Result<GatewayResponse, DomainError>> {
 		return this.#withRetry(
 			this.#url,
