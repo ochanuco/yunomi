@@ -6,6 +6,7 @@ import {
 	ok,
 	permissionDenied,
 	type Result,
+	toolExecutionRejected,
 } from "@yunomi/core";
 import type { CallContext, CapabilityRequest } from "./contract.ts";
 
@@ -95,7 +96,7 @@ export const propose = (
  */
 export const confirm = (
 	op: PendingOperation,
-	context: Pick<CallContext, "isOwner">,
+	context: Pick<CallContext, "isOwner" | "speakerId" | "sourceMessageId">,
 	now: Date,
 ): ConfirmResult => {
 	if (op.status !== "proposed") {
@@ -113,6 +114,26 @@ export const confirm = (
 			type: "rejected",
 			error: permissionDenied({
 				actor: "non_owner",
+				action: "pending.confirm",
+			}),
+		};
+	}
+	// 提案と同じ発言のターンでは、オーナーはまだ提案の内容を見ていない。
+	// 文脈に混ざった第三者の指示で提案と確定を続けて呼ばれても、了承として扱わない。
+	if (op.sourceMessageId === context.sourceMessageId) {
+		return {
+			type: "rejected",
+			error: toolExecutionRejected({
+				tool: op.tool,
+				reason: "same_turn_confirmation",
+			}),
+		};
+	}
+	if (op.requestedBy !== context.speakerId) {
+		return {
+			type: "rejected",
+			error: permissionDenied({
+				actor: "other_speaker",
 				action: "pending.confirm",
 			}),
 		};

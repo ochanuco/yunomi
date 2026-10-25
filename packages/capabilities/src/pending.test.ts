@@ -45,8 +45,9 @@ const op = (overrides: Partial<PendingOperation> = {}): PendingOperation => ({
 	...overrides,
 });
 
-const owner = { isOwner: true };
-const guest = { isOwner: false };
+// 了承は提案（msg-1）の後に届いた発言から来る。
+const owner = { isOwner: true, speakerId: "owner-1", sourceMessageId: "msg-2" };
+const guest = { isOwner: false, speakerId: "guest", sourceMessageId: "msg-2" };
 
 describe("propose", () => {
 	it("request の内容を写し、期限を now + TTL にした proposed を作る", () => {
@@ -137,6 +138,29 @@ describe("confirm", () => {
 		if (result.type === "rejected") {
 			expect(result.error.type).toBe("PermissionDenied");
 		}
+	});
+
+	it("提案と同じ発言からの了承は same_turn_confirmation で rejected", () => {
+		const result = confirm(
+			op(),
+			{ ...owner, sourceMessageId: "msg-1" },
+			later(1000),
+		);
+		expect(result.type === "rejected" && result.error).toMatchObject({
+			type: "ToolExecutionRejected",
+			reason: "same_turn_confirmation",
+		});
+	});
+
+	it("提案した人と別の発言者の了承は PermissionDenied で rejected", () => {
+		const result = confirm(
+			op(),
+			{ ...owner, speakerId: "owner-2" },
+			later(1000),
+		);
+		expect(result.type === "rejected" && result.error.type).toBe(
+			"PermissionDenied",
+		);
 	});
 
 	it("proposed でなければ InvalidStateTransition で rejected", () => {
