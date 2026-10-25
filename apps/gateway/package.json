@@ -15,7 +15,7 @@
 		"@yunomi/core": "workspace:*",
 		"@yunomi/protocol": "workspace:*",
 		"discord.js": "^14.26.0",
-		"opusscript": "^0.0.8",
+		"opusscript": "^0.1.0",
 		"tsx": "^4.21.0",
 		"valibot": "^1.5.0"
 	},
