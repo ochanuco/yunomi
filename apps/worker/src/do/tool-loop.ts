@@ -1,8 +1,9 @@
-import type {
-	CapabilityGate,
-	PendingStore,
-	ToolCallRecord,
-	ToolDefinition,
+import {
+	type CapabilityGate,
+	extractUrls,
+	type PendingStore,
+	type ToolCallRecord,
+	type ToolDefinition,
 } from "@yunomi/capabilities";
 import { type TurnResponse, turnOutput } from "@yunomi/conversation";
 import {
@@ -64,6 +65,8 @@ export type ToolLoopArgs = {
 	speaker: { id: string; isOwner: boolean };
 	channelId: string;
 	messageId: string;
+	/** 新着メッセージの本文。web_fetch に渡せる URL の出所になる。 */
+	messageText: string;
 	replyToMessageId?: string | null;
 };
 
@@ -117,6 +120,7 @@ export const runToolLoop = async (
 	let model: ModelId | undefined;
 	let rounds = 0;
 	let closing = false;
+	const sourceUrls = new Set(extractUrls(args.messageText));
 
 	try {
 		for (;;) {
@@ -181,9 +185,11 @@ export const runToolLoop = async (
 						channelId: args.channelId,
 						sourceMessageId: args.messageId,
 						replyToMessageId: args.replyToMessageId ?? null,
+						sourceUrls: [...sourceUrls],
 						now: now(),
 					},
 				);
+				for (const url of extractUrls(handled.content)) sourceUrls.add(url);
 				toolCalls.push(handled.record);
 				results.push({
 					toolCallId: call.id,

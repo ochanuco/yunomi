@@ -10,6 +10,11 @@ export type ToolDefinition<TInput = unknown> = {
 	/** Partner の `capability_defaults` のキー。 */
 	readonly category: string;
 	readonly input: v.GenericSchema<unknown, TInput>;
+	/**
+	 * 入力のうち、出所を新着メッセージの本文かそのターンの道具の結果に縛る URL。
+	 * モデルが組み立てた URL で、文脈の情報を外へ送らせないため。
+	 */
+	boundUrl?(input: TInput): string;
 };
 
 export type CallContext = {
@@ -20,6 +25,8 @@ export type CallContext = {
 	readonly sourceMessageId: string;
 	/** sourceMessageId の返信先。返信でなければ null か省略。 */
 	readonly replyToMessageId?: string | null;
+	/** 新着メッセージの本文と、そのターンの道具の結果に現れた URL（`extractUrls` の結果）。省略は空と同じ。 */
+	readonly sourceUrls?: readonly string[];
 	readonly now: Date;
 };
 

