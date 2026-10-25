@@ -15,6 +15,6 @@ concurrency:
 
 jobs:
   ci:
-    uses: ochanuco/.github/.github/workflows/pnpm.yml@e5102a8ff65b3c15a2afa263d4970dbbe6538862 # v1.1.0
+    uses: ochanuco/.github/.github/workflows/pnpm.yml@737e6affb5e43803670afb13376dded4731e3388 # v1.5.0
     with:
       run: pnpm turbo typecheck lint test
