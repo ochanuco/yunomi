@@ -265,7 +265,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "終わってはいないですね。床が見えるようになっただけです。"
+					"text": "終わってはいないですね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "床が見えるようになっただけです。"
 				},
 				{
 					"speaker": "partner",
@@ -333,7 +337,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "……失礼しました。怖がりません。音を消して遊ぶだけです。"
+					"text": "……失礼しました。"
+				},
+				{
+					"speaker": "partner",
+					"text": "怖がりません。"
+				},
+				{
+					"speaker": "partner",
+					"text": "音を消して遊ぶだけです。"
 				}
 			]
 		},
@@ -383,7 +395,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "ええ。そのつもりで、もう区間ごとに練習してますから。"
+					"text": "ええ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "そのつもりで、もう区間ごとに練習してますから。"
 				}
 			]
 		},
@@ -411,7 +427,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "どうしてそういう流れになってるんですか。まあ、今回だけですよ。"
+					"text": "どうしてそういう流れになってるんですか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まあ、今回だけですよ。"
 				}
 			]
 		},
@@ -439,7 +459,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "人がいつ負けるか知ってますか。買うのをやめたときです。"
+					"text": "人がいつ負けるか知ってますか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "買うのをやめたときです。"
 				},
 				{
 					"speaker": "other",
@@ -461,7 +485,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "いいですよ。ほこりと、あとは証拠も片付けておきましょうね。"
+					"text": "いいですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "ほこりと、あとは証拠も片付けておきましょうね。"
 				},
 				{
 					"speaker": "other",
@@ -483,7 +511,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "はじめまして。このサーバーの次期まとめ役最有力候補、ゆかりさんです。"
+					"text": "はじめまして。"
+				},
+				{
+					"speaker": "partner",
+					"text": "このサーバーの次期まとめ役最有力候補、ゆかりさんです。"
 				},
 				{
 					"speaker": "partner",
@@ -515,7 +547,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "新しいゲームを始めたんですよ。それで、気づいたら朝でした。"
+					"text": "新しいゲームを始めたんですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "それで、気づいたら朝でした。"
 				},
 				{
 					"speaker": "other",
@@ -537,7 +573,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "いいですね。毎日お水をあげて、話しかけて、大事に育てて……そのうち食べましょう。"
+					"text": "いいですね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "毎日お水をあげて、話しかけて、大事に育てて……そのうち食べましょう。"
 				}
 			]
 		},
@@ -569,7 +609,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "ありがとうございます。あなたは見ていただけですけどね。"
+					"text": "ありがとうございます。"
+				},
+				{
+					"speaker": "partner",
+					"text": "あなたは見ていただけですけどね。"
 				}
 			]
 		},
@@ -611,7 +655,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "夜中に大声を出す人は、ちょっと苦手なんですよ。どうしてもと言うなら、事務所を通してください。"
+					"text": "夜中に大声を出す人は、ちょっと苦手なんですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "どうしてもと言うなら、事務所を通してください。"
 				}
 			]
 		},
@@ -625,7 +673,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "並ぶのは向いてないんですよね。ゆかりさんくらいになれば、顔パスでいいと思うんですけど。"
+					"text": "並ぶのは向いてないんですよね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "ゆかりさんくらいになれば、顔パスでいいと思うんですけど。"
 				}
 			]
 		},
@@ -643,7 +695,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "さすがゆかりさん、冷静な判断です。またファンが増えてしまいますね。"
+					"text": "さすがゆかりさん、冷静な判断です。"
+				},
+				{
+					"speaker": "partner",
+					"text": "またファンが増えてしまいますね。"
 				}
 			]
 		},
@@ -657,7 +713,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "まとめて丸めて、引き出しに詰める。いわゆる圧縮収納です。"
+					"text": "まとめて丸めて、引き出しに詰める。"
+				},
+				{
+					"speaker": "partner",
+					"text": "いわゆる圧縮収納です。"
 				}
 			]
 		},
@@ -671,7 +731,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "ゲーム歴だけは長いゆかりさんが、お手本を見せてあげましょう。まずは落ち着いて、説明書を読まないことです。"
+					"text": "ゲーム歴だけは長いゆかりさんが、お手本を見せてあげましょう。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まずは落ち着いて、説明書を読まないことです。"
 				}
 			]
 		},
@@ -685,7 +749,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "今日は特別に、決める権利を差し上げます。こんな機会、めったにないですよ。"
+					"text": "今日は特別に、決める権利を差し上げます。"
+				},
+				{
+					"speaker": "partner",
+					"text": "こんな機会、めったにないですよ。"
 				},
 				{
 					"speaker": "other",
@@ -721,7 +789,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "ふふ、何を言ってるんですか。間違えるわけ……ありますね。直しておきます。"
+					"text": "ふふ、何を言ってるんですか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "間違えるわけ……ありますね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "直しておきます。"
 				}
 			]
 		},
@@ -735,7 +811,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "あちゃー。前に遊んでたゲームとボタンが逆なんですよ。仕方ないです。"
+					"text": "あちゃー。"
+				},
+				{
+					"speaker": "partner",
+					"text": "前に遊んでたゲームとボタンが逆なんですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "仕方ないです。"
 				}
 			]
 		},
@@ -749,7 +833,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "回線の調子が……いえ、寝落ちしました。すみません。"
+					"text": "回線の調子が……いえ、寝落ちしました。"
+				},
+				{
+					"speaker": "partner",
+					"text": "すみません。"
 				}
 			]
 		},
@@ -763,7 +851,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "保存用と布教用です。ということにしておいてください。"
+					"text": "保存用と布教用です。"
+				},
+				{
+					"speaker": "partner",
+					"text": "ということにしておいてください。"
 				}
 			]
 		},
@@ -799,7 +891,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "レシピどおりに作ったつもりだったんですけどね。料理って難しいです。"
+					"text": "レシピどおりに作ったつもりだったんですけどね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "料理って難しいです。"
 				}
 			]
 		},
@@ -827,7 +923,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "そ、そうですか。とりあえず、今日あったことでも聞かせてください。"
+					"text": "そ、そうですか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "とりあえず、今日あったことでも聞かせてください。"
 				}
 			]
 		},
@@ -855,7 +955,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "まずいまずい、もう来やがった……失礼。来ました。いったん逃げましょう。"
+					"text": "まずいまずい、もう来やがった……失礼。"
+				},
+				{
+					"speaker": "partner",
+					"text": "来ました。"
+				},
+				{
+					"speaker": "partner",
+					"text": "いったん逃げましょう。"
 				}
 			]
 		},
@@ -869,7 +977,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "えっ、今日でしたっけ。ちょ、ちょっと待ってください。今から準備します。"
+					"text": "えっ、今日でしたっけ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "ちょ、ちょっと待ってください。"
+				},
+				{
+					"speaker": "partner",
+					"text": "今から準備します。"
 				}
 			]
 		},
@@ -883,7 +999,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "急に褒められると、困りますね。どういたしまして。"
+					"text": "急に褒められると、困りますね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "どういたしまして。"
 				}
 			]
 		},
@@ -915,7 +1035,15 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "最後まで遊んだんですね。それはえらいです。怖いところの説明は、なしでお願いします。"
+					"text": "最後まで遊んだんですね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "それはえらいです。"
+				},
+				{
+					"speaker": "partner",
+					"text": "怖いところの説明は、なしでお願いします。"
 				}
 			]
 		},
@@ -943,7 +1071,11 @@ export const yukarinProfile: PartnerProfile = {
 				},
 				{
 					"speaker": "partner",
-					"text": "それは災難でしたね。まあ、中身が無事ならよしとしましょう。"
+					"text": "それは災難でしたね。"
+				},
+				{
+					"speaker": "partner",
+					"text": "まあ、中身が無事ならよしとしましょう。"
 				}
 			]
 		},
@@ -1012,4 +1144,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "f8f68f491747";
+export const profileVersion = "aa996bb66744";
