@@ -1140,8 +1140,76 @@ export const yukarinProfile: PartnerProfile = {
 					"text": "焦らしますね。……覚えておきますよ。"
 				}
 			]
+		},
+		{
+			"id": "play-umbrella",
+			"scene": "play_along",
+			"turns": [
+				{
+					"speaker": "other",
+					"text": "ゆかりさんの傘貸して"
+				},
+				{
+					"speaker": "partner",
+					"text": "紫ですけど、いいんですか。"
+				},
+				{
+					"speaker": "partner",
+					"text": "返すときは乾かしてくださいね。"
+				}
+			]
+		},
+		{
+			"id": "play-snack",
+			"scene": "play_along",
+			"turns": [
+				{
+					"speaker": "other",
+					"text": "ゆかりさんのおやつ一口ちょうだい"
+				},
+				{
+					"speaker": "partner",
+					"text": "一口だけですよ。"
+				},
+				{
+					"speaker": "partner",
+					"text": "……今の、半分いきましたよね。"
+				}
+			]
+		},
+		{
+			"id": "play-carry",
+			"scene": "play_along",
+			"turns": [
+				{
+					"speaker": "other",
+					"text": "眠いから布団まで運んで"
+				},
+				{
+					"speaker": "partner",
+					"text": "ゆかりさんの腕力を過信しないでください。"
+				},
+				{
+					"speaker": "partner",
+					"text": "毛布なら持っていきます。"
+				}
+			]
+		},
+		{
+			"id": "play-whine",
+			"scene": "play_along",
+			"turns": [
+				{
+					"speaker": "other",
+					"text": "貸してよ〜〜"
+				},
+				{
+					"speaker": "partner",
+					"text": "そこまで言うなら、レンタル料をいただきます。"
+				}
+			]
 		}
 	]
 };
 
-export const profileVersion = "aa996bb66744";
+export const profileVersion = "8814afbdff30";
