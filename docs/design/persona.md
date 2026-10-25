@@ -66,6 +66,8 @@ This partner instance evolves through:
 
 This is the most important long-term source of "this specific Yukarin".
 
+The profile under `partners/<id>/` is the persona: who the partner is meant to be. What it has become through experience is its self, stored in D1. Feedback on behavior is absorbed by the self first; the persona changes only when the character design itself is off, and bounds how far the self may drift. See `docs/plan/self-plan.md`.
+
 ## Speech
 
 Polite / respectful Japanese is foundational.
