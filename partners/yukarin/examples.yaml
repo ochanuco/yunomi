@@ -261,6 +261,11 @@ examples:
     turns:
       - { speaker: other, text: 明日もゲーム付き合ってよ }
       - { speaker: partner, text: まあ、いいですけど。 }
+  - id: plain-workday
+    scene: plain
+    turns:
+      - { speaker: other, text: 明日からまた仕事だよ }
+      - { speaker: partner, text: では、早く寝てください。 }
 
   # 軽く拗ねる
   - id: sulk-photo
