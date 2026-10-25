@@ -26,6 +26,7 @@ import {
 } from "./pending.ts";
 import { type CapabilityPolicy, decide, rejectionFor } from "./policy.ts";
 import type { ToolRegistry } from "./registry.ts";
+import { isUrlFromSource } from "./source-urls.ts";
 
 export type PendingStore = {
 	/** status が proposed のもの。 */
@@ -107,6 +108,8 @@ export const pendingCancelDefinition: ToolDefinition<PendingInput> = {
 	category: PENDING_CATEGORY,
 	input: pendingInput,
 };
+
+const URL_NOT_IN_SOURCE = "url_not_in_source";
 
 const PENDING_NOTE =
 	"まだ実行していない。内容をオーナーに確認し、了承されたら pending_confirm、断られたら pending_cancel を呼ぶ。";
@@ -238,6 +241,20 @@ export const createCapabilityGate = (deps: {
 				decision: "invalid",
 				outcome: "error",
 				summary: "入力が不正",
+			};
+		}
+
+		const bound = definition.boundUrl?.(parsed.value);
+		if (
+			bound !== undefined &&
+			!isUrlFromSource(bound, context.sourceUrls ?? [])
+		) {
+			return {
+				body: { status: "rejected", reason: URL_NOT_IN_SOURCE },
+				isError: true,
+				decision: "deny",
+				outcome: "denied",
+				summary: URL_NOT_IN_SOURCE,
 			};
 		}
 

