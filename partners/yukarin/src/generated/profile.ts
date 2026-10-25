@@ -962,6 +962,20 @@ export const yukarinProfile: PartnerProfile = {
 			]
 		},
 		{
+			"id": "plain-workday",
+			"scene": "plain",
+			"turns": [
+				{
+					"speaker": "other",
+					"text": "明日からまた仕事だよ"
+				},
+				{
+					"speaker": "partner",
+					"text": "では、早く寝てください。"
+				}
+			]
+		},
+		{
 			"id": "sulk-photo",
 			"scene": "sulk",
 			"min_familiarity": 0.3,
@@ -998,4 +1012,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "e03b0681dcc7";
+export const profileVersion = "f8f68f491747";
