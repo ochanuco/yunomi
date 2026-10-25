@@ -426,10 +426,15 @@ describe("宛先のない発言への割り込み", () => {
 		expect(await interjectionAt(stub)).toBeNull();
 	});
 
-	it("割り込みから 30 分以内は Haiku を呼ばず interjection_cooldown、過ぎたら判定する", async () => {
+	it("ほかの人がいる場では、割り込みから 30 分以内は Haiku を呼ばず interjection_cooldown、過ぎたら判定する", async () => {
 		const { stub, fake, clock } = await setup("cooldown", {
 			script: [gateOk(true), llmOk(turnResponse()), gateOk(false, "相づち")],
 		});
+		const bob = { id: "u-cool-b", displayName: "bob", isBot: false };
+		const toOther = await stub.handleDiscordMessage(
+			free({ author: bob, mentionedUserIds: ["u-someone"] }),
+		);
+		expect(toOther.audit.reason).toBe("addressed_to_other");
 		await stub.handleDiscordMessage(free());
 
 		clock.now = plus(INTERJECTION_COOLDOWN_MS - 1000);
@@ -440,6 +445,22 @@ describe("宛先のない発言への割り込み", () => {
 		clock.now = plus(INTERJECTION_COOLDOWN_MS + 1000);
 		const after = await stub.handleDiscordMessage(free());
 		expect(after.audit.reason).toBe("gate_rejected");
+		expect(fake.requests).toHaveLength(3);
+	});
+
+	it("2 人きりの場では、割り込みから 30 分以内でもクールダウンせず判定する", async () => {
+		const { stub, fake, clock } = await setup("cooldown-solo", {
+			script: [gateOk(true), llmOk(turnResponse()), gateOk(false, "相づち")],
+		});
+		const notifier = { id: "b-cool", displayName: "茶畑", isBot: true };
+		await stub.handleDiscordMessage(
+			free({ author: notifier, content: "GPU 機が復帰しました" }),
+		);
+		await stub.handleDiscordMessage(free());
+
+		clock.now = plus(INTERJECTION_COOLDOWN_MS - 1000);
+		const within = await stub.handleDiscordMessage(free());
+		expect(within.audit.reason).toBe("gate_rejected");
 		expect(fake.requests).toHaveLength(3);
 	});
 
