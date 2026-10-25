@@ -19,6 +19,7 @@ export const EXAMPLE_SCENES = [
 	"flustered",
 	"plain",
 	"sulk",
+	"play_along",
 ] as const;
 
 export const conversationExampleSchema = v.object({
