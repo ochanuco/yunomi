@@ -112,6 +112,19 @@ const loadInterestOpinion = (deps: TurnDeps) =>
 
 type GateVerdict = { join: true } | { join: false; outcome: TurnOutcome };
 
+/** ゲートに見せる直近ログと、ゆかりと bot を除いた場の人数。 */
+const channelCrowd = (deps: TurnDeps, msg: InboundMessage) => {
+	const recent = deps.store
+		.recentMessages(msg.channelId, msg.messageId)
+		.slice(-GATE_RECENT_LIMIT);
+	const humans = new Set(
+		// 通知を流す bot を人と数えると、2 人きりの場を人どうしの会話と取り違える。
+		recent.filter((m) => !m.isPartner && !m.isBot).map((m) => m.authorId),
+	);
+	humans.add(msg.author.id);
+	return { recent, headcount: humans.size };
+};
+
 // 宛先のない発言に自分から入るかを Haiku に決めさせる。失敗は llm_health に数えず、黙る。
 const judgeInterjection = async (
 	deps: TurnDeps,
@@ -122,14 +135,7 @@ const judgeInterjection = async (
 	const minutesSince = (d: Date) =>
 		Math.max(0, Math.floor((now.getTime() - d.getTime()) / 60_000));
 	const last = deps.store.lastPartnerReplyAt(msg.channelId);
-	const recent = deps.store
-		.recentMessages(msg.channelId, msg.messageId)
-		.slice(-GATE_RECENT_LIMIT);
-	const humans = new Set(
-		// 通知を流す bot を人と数えると、2 人きりの場を人どうしの会話と取り違える。
-		recent.filter((m) => !m.isPartner && !m.isBot).map((m) => m.authorId),
-	);
-	humans.add(msg.author.id);
+	const { recent, headcount } = channelCrowd(deps, msg);
 	// 状態の seed は書き込みを伴うので、ゲートでは読むだけにして初期値で代える。
 	const state = deps.store.getState() ?? initialPartnerState(deps.profile, now);
 	// 関係の取得に失敗してもゲートは続ける（初めての相手として扱う）。
@@ -158,7 +164,7 @@ const judgeInterjection = async (
 		})),
 		minutesSincePartnerSpoke: last ? minutesSince(last) : null,
 		message: { speaker: msg.author.displayName, text: msg.content },
-		headcount: humans.size,
+		headcount,
 		state,
 		relationship: rel
 			? {
@@ -237,8 +243,10 @@ export const runTurn = async (
 			return ignoreOutcome(msg, "addressed_to_other");
 		}
 		const lastInterjection = store.lastInterjectionAt(msg.channelId);
+		// クールダウンは人どうしの会話に割り込みすぎないためのもので、2 人きりの場では話しかけを無視するだけになる。
 		if (
 			lastInterjection &&
+			channelCrowd(deps, msg).headcount > 1 &&
 			deps.now().getTime() - lastInterjection.getTime() <=
 				INTERJECTION_COOLDOWN_MS
 		) {
