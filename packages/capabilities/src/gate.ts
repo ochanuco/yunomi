@@ -109,7 +109,7 @@ export const pendingCancelDefinition: ToolDefinition<PendingInput> = {
 };
 
 const PENDING_NOTE =
-	"まだ実行していない。内容をオーナーに確認し、了承されたら pending_confirm、断られたら pending_cancel を呼ぶ。";
+	"まだ実行していない。内容をオーナーに確認し、次の発言で了承されたら pending_confirm、断られたら pending_cancel を呼ぶ。このターンの間は pending_confirm を受けない。";
 const EXPIRED_NOTE =
 	"期限が切れたので実行していない。必要ならもう一度提案する。";
 
@@ -322,12 +322,16 @@ export const createCapabilityGate = (deps: {
 
 		const verdict = confirm(op, context, now());
 		if (verdict.type === "rejected") {
+			const reason =
+				verdict.error.type === "ToolExecutionRejected"
+					? verdict.error.reason
+					: verdict.error.type;
 			return {
-				body: { status: "rejected", reason: verdict.error.type },
+				body: { status: "rejected", reason },
 				isError: true,
 				decision: "pending_confirm",
 				outcome: "error",
-				summary: verdict.error.type,
+				summary: reason,
 				pendingId,
 			};
 		}

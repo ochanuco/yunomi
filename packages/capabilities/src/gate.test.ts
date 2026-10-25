@@ -32,6 +32,10 @@ const context = (over: Partial<CallContext> = {}): CallContext => ({
 	...over,
 });
 
+/** 提案（msg-1）の後に届いたオーナーの発言。 */
+const nextTurn = (over: Partial<CallContext> = {}): CallContext =>
+	context({ sourceMessageId: "msg-2", ...over });
+
 const listInput = {
 	from: "2026-10-18T00:00:00+09:00",
 	to: "2026-10-19T00:00:00+09:00",
@@ -476,10 +480,10 @@ describe("pending_confirm", () => {
 		const { gate, calls } = setup();
 		const { id } = await propose(gate);
 		const input = { pending_id: id };
-		await gate.handle({ name: "pending_confirm", input }, context());
+		await gate.handle({ name: "pending_confirm", input }, nextTurn());
 		const again = await gate.handle(
 			{ name: "pending_confirm", input },
-			context(),
+			nextTurn(),
 		);
 		expect(again.isError).toBe(true);
 		expect(body(again.content)).toEqual({
@@ -487,6 +491,52 @@ describe("pending_confirm", () => {
 			reason: "InvalidStateTransition",
 		});
 		expect(calls).toHaveLength(1);
+	});
+
+	it("提案と同じ発言のターンでの了承は rejected で、実行せず保留も残す", async () => {
+		const { gate, calls, pending } = setup();
+		const { id } = await propose(gate, { sourceMessageId: "msg-1" });
+
+		const sameTurn = await gate.handle(
+			{ name: "pending_confirm", input: { pending_id: id } },
+			context({ sourceMessageId: "msg-1" }),
+		);
+		expect(sameTurn.isError).toBe(true);
+		expect(body(sameTurn.content)).toEqual({
+			status: "rejected",
+			reason: "same_turn_confirmation",
+		});
+		expect(sameTurn.record).toMatchObject({
+			decision: "pending_confirm",
+			outcome: "error",
+			summary: "same_turn_confirmation",
+			pendingId: id,
+		});
+		expect(calls).toHaveLength(0);
+		expect(pending.ops.get(id)?.status).toBe("proposed");
+
+		const later = await gate.handle(
+			{ name: "pending_confirm", input: { pending_id: id } },
+			nextTurn(),
+		);
+		expect(body(later.content).status).toBe("executed");
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.context.sourceMessageId).toBe("msg-1");
+	});
+
+	it("提案した人と別の発言者の了承は rejected", async () => {
+		const { gate, calls, pending } = setup();
+		const { id } = await propose(gate);
+		const res = await gate.handle(
+			{ name: "pending_confirm", input: { pending_id: id } },
+			nextTurn({ speakerId: "owner-2" }),
+		);
+		expect(body(res.content)).toEqual({
+			status: "rejected",
+			reason: "PermissionDenied",
+		});
+		expect(calls).toHaveLength(0);
+		expect(pending.ops.get(id)?.status).toBe("proposed");
 	});
 
 	it("存在しない id と、別チャンネルの保留は not_found", async () => {
@@ -517,7 +567,7 @@ describe("pending_confirm", () => {
 		now = new Date(T0.getTime() + PENDING_TTL_MS);
 		const res = await gate.handle(
 			{ name: "pending_confirm", input: { pending_id: id } },
-			context(),
+			nextTurn(),
 		);
 		expect(res.isError).toBe(true);
 		expect(body(res.content).status).toBe("expired");
@@ -567,7 +617,7 @@ describe("pending_confirm", () => {
 		});
 		const res = await later.handle(
 			{ name: "pending_confirm", input: { pending_id: id } },
-			context(),
+			nextTurn(),
 		);
 		expect(res.isError).toBe(true);
 		expect(pending.ops.get(id)?.status).toBe("failed");

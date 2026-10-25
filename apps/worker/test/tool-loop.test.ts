@@ -16,6 +16,7 @@ import { ok, validationFailed } from "@yunomi/core";
 import {
 	FakeLLMProvider,
 	HAIKU,
+	type LLMProvider,
 	ModelRouter,
 	SONNET,
 	type StepMessage,
@@ -355,6 +356,51 @@ describe("登録の提案・了承・取り消し", () => {
 			decision: "pending_confirm",
 			outcome: "ok",
 			pendingId: op.id,
+		});
+	});
+
+	it("提案と同じターンで pending_confirm を呼んでも実行されず、保留は残る", async () => {
+		const { stub, fake, calls, ops } = await setup("same-turn-confirm");
+		// 台本は前もって固定するので、2 往復目の pending_id は 1 往復目の結果から拾う。
+		const provider: LLMProvider = {
+			generate: (req) => fake.generate(req),
+			step: (req) => {
+				if (fake.stepRequests.length === 1) {
+					const pendingId = lastToolResults(req as StepRequest<unknown>)[0]
+						?.body.pending_id;
+					fake.enqueueStep(
+						toolUse([
+							{ name: "pending_confirm", input: { pending_id: pendingId } },
+						]),
+						final("入れておきました"),
+					);
+				}
+				return fake.step(req);
+			},
+		};
+		await runInDurableObject(stub, (o) => {
+			o.createRouter = () => new ModelRouter({ provider });
+		});
+		fake.enqueueStep(
+			toolUse([{ name: "calendar_create_event", input: createInput }]),
+		);
+		const res = await stub.handleDiscordMessage(ask("明日19時に歯医者入れて"));
+
+		expect(calls).toHaveLength(0);
+		const [op] = [...ops.values()];
+		expect(op?.status).toBe("proposed");
+		expect(res.audit.toolCalls).toMatchObject([
+			{ decision: "confirm", outcome: "pending", pendingId: op?.id },
+			{
+				decision: "pending_confirm",
+				outcome: "error",
+				summary: "same_turn_confirmation",
+				pendingId: op?.id,
+			},
+		]);
+		expect(lastToolResults(fake.stepRequests[2])[0]).toMatchObject({
+			isError: true,
+			body: { status: "rejected", reason: "same_turn_confirmation" },
 		});
 	});
 
