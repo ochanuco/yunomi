@@ -92,7 +92,7 @@ private repo の中身を残さないよう、Audit の summary には `owner/re
 - 非ゴール: 家電の操作（service call）、一覧にない entity の読み取り、履歴（`/api/history`）、天気の予報（`weather.get_forecasts`）、Home Assistant からのイベントをきっかけに話しかけること。
 - Done: `fetch` を差し替えたテストで、全 entity の成功、一部の 404、全部の 404、属性の絞り込み、`weather.*` の気温と湿度、401、5xx、タイムアウト、通信の失敗、Bearer ヘッダーの付与が扱える。ほかの道具の認証情報がない組み立てでも `home_state` が登録される。prod で「もう家？」に在宅状態つきで答えられる。
 
-`person.*` と `device_tracker.*` の属性には緯度・経度が入るため、adapter は上に挙げた項目以外の属性を返さない。読む entity を設定値で固定するのは、モデルが位置情報などの entity を名指しで読めないようにするためである。Audit の summary には読んだ entity の数と外した entity の数だけを書き、state は書かない。
+`person.*` と `device_tracker.*` の属性には緯度・経度が入るため、adapter は上に挙げた項目以外の属性を返さない。Companion アプリの住所センサー（属性に `iso_country_code` を持つもの）は state が番地までの住所なので、町名までに切り詰めて返す。`device_class` が `timestamp` の state（次のアラームなど）は UTC の文字列なので、日時に直して JST で渡す。読む entity を設定値で固定するのは、モデルが位置情報などの entity を名指しで読めないようにするためである。Audit の summary には読んだ entity の数と外した entity の数だけを書き、state は書かない。
 
 Home Assistant はログインの失敗が続くと送信元の IP を ban する（`http.ip_ban_enabled`）。cloudflared 経由では送信元がスマホアプリと同じ cloudflared のコンテナに見えるため、token の誤りで ban されるとスマホアプリも締め出される。token を登録したら、まず 1 回だけ呼んで 200 を確かめる。
 

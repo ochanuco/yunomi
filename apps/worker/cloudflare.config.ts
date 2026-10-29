@@ -52,7 +52,18 @@ export default defineConfig(({ mode }) => {
 				// home_state の呼び先と、読ませる entity。token は prod だけが secret で持つ。
 				HOME_ASSISTANT_URL: bindings.text("https://chanoma.chanu.co"),
 				HOME_ENTITY_IDS: bindings.text(
-					"person.chanu,sensor.pixel_8a_battery_level,sensor.pixel_8a_battery_state,weather.home",
+					[
+						"person.chanu",
+						"sensor.pixel_8a_battery_level",
+						"sensor.pixel_8a_battery_state",
+						"sensor.pixel_8a_next_alarm",
+						"binary_sensor.pixel_8a_interactive",
+						"sensor.pixel_8a_detected_activity",
+						"sensor.pixel_8a_sleep_duration",
+						"sensor.pixel_8a_do_not_disturb_sensor",
+						"sensor.pixel_8a_geocoded_location",
+						"weather.home",
+					].join(","),
 				),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
