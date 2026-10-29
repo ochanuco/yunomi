@@ -221,6 +221,8 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 | `GITHUB_DEFAULT_REPO` | var | `github_read` が repo を省略されたときに読む repo（`ochanuco/yunomi`） |
 | `CHATSUMI_ACCESS_CLIENT_ID` / `CHATSUMI_ACCESS_CLIENT_SECRET` | secret | 貼られた URL のページを読む（`web_fetch`）ための chatsumi の Cloudflare Access のサービストークン。2 つがそろっているときだけ登録する |
 | `CHATSUMI_URL` | var | chatsumi の origin（`https://chatsumi.chanu.co`） |
+| `HOME_ASSISTANT_TOKEN` | secret | 家の状態を読む（`home_state`）ための Home Assistant の long-lived access token。Yukarin 用の管理者でないユーザーで発行する |
+| `HOME_ASSISTANT_URL` / `HOME_ENTITY_IDS` | var | Home Assistant の origin（`https://chanoma.chanu.co`）と、`home_state` が読む entity ID（カンマ区切り）。Home Assistant には entity 単位の権限がないため、読める範囲はこの一覧で絞る |
 | `GOOGLE_CALENDAR_ID` | secret | 予定を読み書きするカレンダー。prod はオーナーのメインカレンダー（`primary`） |
 | `OWNER_DISCORD_USER_ID` | secret | 道具を使えるオーナーの Discord user id。それ以外の発言者の呼び出しは gate が拒否する |
 

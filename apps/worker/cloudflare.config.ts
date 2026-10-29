@@ -49,6 +49,11 @@ export default defineConfig(({ mode }) => {
 				GITHUB_DEFAULT_REPO: bindings.text("ochanuco/yunomi"),
 				// web_fetch の呼び先。サービストークンは prod だけが secret で持つ。
 				CHATSUMI_URL: bindings.text("https://chatsumi.chanu.co"),
+				// home_state の呼び先と、読ませる entity。token は prod だけが secret で持つ。
+				HOME_ASSISTANT_URL: bindings.text("https://chanoma.chanu.co"),
+				HOME_ENTITY_IDS: bindings.text(
+					"person.chanu,sensor.pixel_8a_battery_level,sensor.pixel_8a_battery_state,weather.home",
+				),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
@@ -65,7 +70,7 @@ export default defineConfig(({ mode }) => {
 				CF_ACCESS_CLIENT_ID: bindings.secret(),
 				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
 				AIVOICE_TOKEN: bindings.secret(),
-				// 道具（Google カレンダー、Google Places、GitHub、chatsumi）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
+				// 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
 				// 値を置かない dev で宣言すると deploy が通らない。
 				...(production
 					? {
@@ -77,6 +82,7 @@ export default defineConfig(({ mode }) => {
 							GITHUB_TOKEN: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_ID: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_SECRET: bindings.secret(),
+							HOME_ASSISTANT_TOKEN: bindings.secret(),
 							OWNER_DISCORD_USER_ID: bindings.secret(),
 						}
 					: {}),

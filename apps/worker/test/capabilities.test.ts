@@ -42,6 +42,12 @@ const chatsumiEnv = {
 	CHATSUMI_ACCESS_CLIENT_SECRET: "chatsumi-secret",
 } satisfies CapabilityEnv;
 
+const homeEnv = {
+	HOME_ASSISTANT_URL: "https://ha.example.test",
+	HOME_ASSISTANT_TOKEN: "ha-token",
+	HOME_ENTITY_IDS: "person.owner,weather.home",
+} satisfies CapabilityEnv;
+
 const inertStore: PendingStore = {
 	listOpen: async () => [],
 	get: async () => null,
@@ -146,6 +152,24 @@ describe("defaultCapabilities", () => {
 		expect(
 			defaultCapabilities({ CHATSUMI_URL: chatsumiEnv.CHATSUMI_URL }, baseDeps),
 		).toBeNull();
+	});
+
+	it("Home Assistant の URL・token・entity が揃えば、home_state だけを持つ（カレンダーの認証情報とは独立）", () => {
+		const caps = defaultCapabilities(homeEnv, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"home_state",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+	});
+
+	it.each([
+		["HOME_ASSISTANT_URL", { HOME_ASSISTANT_URL: "" }],
+		["HOME_ASSISTANT_TOKEN", { HOME_ASSISTANT_TOKEN: "" }],
+		["HOME_ENTITY_IDS", { HOME_ENTITY_IDS: "" }],
+		["HOME_ENTITY_IDS（形の崩れた ID だけ）", { HOME_ENTITY_IDS: "../config" }],
+	])("Home Assistant の %s が空なら home_state を作らない", (_, empty) => {
+		expect(defaultCapabilities({ ...homeEnv, ...empty }, baseDeps)).toBeNull();
 	});
 
 	it("Places の API キーが空文字なら null", () => {

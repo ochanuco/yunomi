@@ -20,6 +20,9 @@ const fullEnv: Required<CapabilityEnv> = {
 	CHATSUMI_URL: "https://chatsumi.example.test",
 	CHATSUMI_ACCESS_CLIENT_ID: "x",
 	CHATSUMI_ACCESS_CLIENT_SECRET: "x",
+	HOME_ASSISTANT_URL: "https://ha.example.test",
+	HOME_ASSISTANT_TOKEN: "x",
+	HOME_ENTITY_IDS: "person.x",
 	OWNER_DISCORD_USER_ID: "x",
 	DISCORD_BOT_TOKEN: "x",
 };
