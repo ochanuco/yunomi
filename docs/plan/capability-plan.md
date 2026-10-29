@@ -87,10 +87,10 @@ private repo の中身を残さないよう、Audit の summary には `owner/re
 
 ### CE10. 家の状態を読む（Home Assistant）
 
-- 技術範囲: `packages/capabilities` に道具 `home_state`（カテゴリ `home_read`、`auto`）と Home Assistant の REST API の adapter を足す。入力は取らず、Worker の設定値 `HOME_ENTITY_IDS`（カンマ区切りの entity ID）に並べた entity だけを読む。entity ごとに `GET ${HOME_ASSISTANT_URL}/api/states/{entity_id}` を並行に呼び、認証は secret `HOME_ASSISTANT_TOKEN`（long-lived access token）を `Authorization: Bearer` で送る。`HOME_ASSISTANT_URL` は var（`https://chanoma.chanu.co`）。返す項目は entity ごとに entity ID、`friendly_name`、state、`unit_of_measurement`、最終変化時刻（`last_changed`）。時刻は `toModelJson` を通して JST で渡す。404 の entity は結果から外し、外した entity ID を返す。待ち時間は 10 秒。URL・token・entity の一覧の 3 つがそろっているときだけ、ほかの道具とは独立に登録する。`TOOLS_BLOCK` への使い方の追記、`partners/yukarin/profile.yaml` の `capability_defaults` への `home_read: auto` の追加。
+- 技術範囲: `packages/capabilities` に道具 `home_state`（カテゴリ `home_read`、`auto`）と Home Assistant の REST API の adapter を足す。入力は取らず、Worker の設定値 `HOME_ENTITY_IDS`（カンマ区切りの entity ID）に並べた entity だけを読む。entity ごとに `GET ${HOME_ASSISTANT_URL}/api/states/{entity_id}` を並行に呼び、認証は secret `HOME_ASSISTANT_TOKEN`（long-lived access token）を `Authorization: Bearer` で送る。`HOME_ASSISTANT_URL` は var（`https://chanoma.chanu.co`）。返す項目は entity ごとに entity ID、`friendly_name`、state、`unit_of_measurement`、最終変化時刻（`last_changed`）。`weather.*` の state は天気の種類だけなので、気温（`temperature` と `temperature_unit`）と湿度（`humidity`）も返す。時刻は `toModelJson` を通して JST で渡す。404 の entity は結果から外し、外した entity ID を返す。待ち時間は 10 秒。URL・token・entity の一覧の 3 つがそろっているときだけ、ほかの道具とは独立に登録する。`TOOLS_BLOCK` への使い方の追記、`partners/yukarin/profile.yaml` の `capability_defaults` への `home_read: auto` の追加。
 - 失敗の扱い: 401 / 403、5xx、タイムアウト、通信の失敗は `ExternalServiceUnavailable` にする。全 entity が 404 のときも同じにする。
 - 非ゴール: 家電の操作（service call）、一覧にない entity の読み取り、履歴（`/api/history`）、天気の予報（`weather.get_forecasts`）、Home Assistant からのイベントをきっかけに話しかけること。
-- Done: `fetch` を差し替えたテストで、全 entity の成功、一部の 404、全部の 404、属性の絞り込み、401、5xx、タイムアウト、通信の失敗、Bearer ヘッダーの付与が扱える。ほかの道具の認証情報がない組み立てでも `home_state` が登録される。prod で「もう家？」に在宅状態つきで答えられる。
+- Done: `fetch` を差し替えたテストで、全 entity の成功、一部の 404、全部の 404、属性の絞り込み、`weather.*` の気温と湿度、401、5xx、タイムアウト、通信の失敗、Bearer ヘッダーの付与が扱える。ほかの道具の認証情報がない組み立てでも `home_state` が登録される。prod で「もう家？」に在宅状態つきで答えられる。
 
 `person.*` と `device_tracker.*` の属性には緯度・経度が入るため、adapter は上に挙げた項目以外の属性を返さない。読む entity を設定値で固定するのは、モデルが位置情報などの entity を名指しで読めないようにするためである。Audit の summary には読んだ entity の数と外した entity の数だけを書き、state は書かない。
 
@@ -115,8 +115,8 @@ Home Assistant はログインの失敗が続くと送信元の IP を ban す�
 | P02 | CE6 | Places API の有効化と API キー、割り当ての設定、prod での通しの確認 | なし（通しの確認は P01） | P01 と並行 | #161 |
 | H01 | CE7 | GitHub の Issue / PR を読む道具と adapter、組み立て、secret の登録 | C07 | - | #176 |
 | W01 | CE8 | URL のページを読む道具 `web_fetch` と chatsumi の adapter、組み立て、secret の登録 | C07 | - | #178 |
-| A01 | CE10 | 家の状態を読む道具 `home_state` と Home Assistant の adapter、組み立て | C07 | A02 と並行 | - |
-| A02 | CE10 | Home Assistant の token の発行、読む entity の選定、secret の登録、prod での通しの確認 | なし（通しの確認は A01） | A01 と並行 | - |
+| A01 | CE10 | 家の状態を読む道具 `home_state` と Home Assistant の adapter、組み立て | C07 | A02 と並行 | #213 |
+| A02 | CE10 | Home Assistant の token の発行、読む entity の選定、secret の登録、prod での通しの確認 | なし（通しの確認は A01） | A01 と並行 | #214 |
 
 C08 と P02 の Google Cloud の設定、A02 の Home Assistant の設定はオーナーが行う。yunomi の Issue はその進捗を追い、secret の登録と prod での通しの確認を Done とする。
 
