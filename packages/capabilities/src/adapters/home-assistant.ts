@@ -56,11 +56,43 @@ const text = (value: unknown): string | null =>
 const num = (value: unknown): number | null =>
 	typeof value === "number" && Number.isFinite(value) ? value : null;
 
+// 町名のあとの丁目・番地は数字で始まる。漢数字は町名にも使われる（三条など）ので区切りにしない。
+const TOWN_END = /[0-9０-９]/;
+
+/**
+ * Companion アプリの住所センサーの state は番地までの住所。属性には市区町村までしかないので、
+ * 住所の文字列から町名までを切り出し、丁目と番地は捨てる。切り出せなければ市区町村まで。
+ */
+const coarseAddress = (s: StateResponse): string | null => {
+	const area = text(s.attributes.administrative_area) ?? "";
+	const locality = text(s.attributes.locality) ?? "";
+	const prefix = `${area}${locality}`;
+	if (prefix === "") return null;
+	const at = s.state.indexOf(prefix);
+	if (at < 0) return prefix;
+	const rest = s.state.slice(at + prefix.length);
+	const end = rest.search(TOWN_END);
+	return prefix + (end < 0 ? rest : rest.slice(0, end));
+};
+
+const isGeocodedAddress = (s: StateResponse): boolean =>
+	"iso_country_code" in s.attributes;
+
+const stateOf = (s: StateResponse): string | Date | null => {
+	if (isGeocodedAddress(s)) return coarseAddress(s);
+	// 次のアラームなどの時刻は UTC の文字列で来るので、モデルに JST で渡るよう Date にする。
+	if (s.attributes.device_class === "timestamp") {
+		const at = new Date(s.state);
+		if (!Number.isNaN(at.getTime())) return at;
+	}
+	return s.state;
+};
+
 // person や device_tracker の属性には緯度・経度が入るので、返す属性を名指しで選ぶ。
 const toEntity = (s: StateResponse) => ({
 	entity_id: s.entity_id,
 	name: text(s.attributes.friendly_name),
-	state: s.state,
+	state: stateOf(s),
 	unit: text(s.attributes.unit_of_measurement),
 	last_changed: new Date(s.last_changed),
 	// weather の state は天気の種類だけで、気温と湿度は属性にしかない。

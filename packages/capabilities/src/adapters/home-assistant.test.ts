@@ -210,6 +210,114 @@ describe("home_state", () => {
 		});
 	});
 
+	it("住所センサーは町名までに切り詰め、番地や郵便番号を返さない", async () => {
+		const { adapter } = setup(
+			{
+				"sensor.phone_geocoded_location": json({
+					entity_id: "sensor.phone_geocoded_location",
+					state: "日本、〒100-0001 東京都千代田区千代田１丁目１−１",
+					attributes: {
+						administrative_area: "東京都",
+						locality: "千代田区",
+						thoroughfare: "１丁目",
+						postal_code: "100-0001",
+						iso_country_code: "JP",
+						location: [35.68, 139.75],
+					},
+					last_changed: "2026-10-30T02:00:00+00:00",
+				}),
+			},
+			["sensor.phone_geocoded_location"],
+		);
+		const out = successOf(await read(adapter));
+		expect(out.data).toMatchObject({
+			entities: [{ state: "東京都千代田区千代田" }],
+		});
+		const model = toModelJson(out.data);
+		for (const leak of ["１丁目", "100-0001", "35.68", "〒"]) {
+			expect(model).not.toContain(leak);
+		}
+	});
+
+	it.each([
+		[
+			"町名の後に数字がなければ、市区町村の後ろを全部",
+			"東京都千代田区丸の内",
+			"東京都千代田区丸の内",
+		],
+		[
+			"住所に市区町村が見つからなければ市区町村まで",
+			"Somewhere 1-1",
+			"東京都千代田区",
+		],
+	])("住所センサー: %s", async (_, address, expected) => {
+		const { adapter } = setup(
+			{
+				"sensor.phone_geocoded_location": json({
+					entity_id: "sensor.phone_geocoded_location",
+					state: address,
+					attributes: {
+						administrative_area: "東京都",
+						locality: "千代田区",
+						iso_country_code: "JP",
+					},
+					last_changed: "2026-10-30T02:00:00+00:00",
+				}),
+			},
+			["sensor.phone_geocoded_location"],
+		);
+		const out = successOf(await read(adapter));
+		expect(out.data).toMatchObject({ entities: [{ state: expected }] });
+	});
+
+	it("住所センサーに市区町村の属性がなければ state は null", async () => {
+		const { adapter } = setup(
+			{
+				"sensor.phone_geocoded_location": json({
+					entity_id: "sensor.phone_geocoded_location",
+					state: "日本、〒100-0001 東京都千代田区千代田１丁目１−１",
+					attributes: { iso_country_code: "JP" },
+					last_changed: "2026-10-30T02:00:00+00:00",
+				}),
+			},
+			["sensor.phone_geocoded_location"],
+		);
+		const out = successOf(await read(adapter));
+		expect(out.data).toMatchObject({ entities: [{ state: null }] });
+	});
+
+	it("timestamp の state はモデルに JST の書式で渡る", async () => {
+		const { adapter } = setup(
+			{
+				"sensor.phone_next_alarm": json({
+					entity_id: "sensor.phone_next_alarm",
+					state: "2026-10-29T22:30:00+00:00",
+					attributes: { device_class: "timestamp" },
+					last_changed: "2026-10-29T13:00:00+00:00",
+				}),
+			},
+			["sensor.phone_next_alarm"],
+		);
+		const model = JSON.parse(toModelJson(successOf(await read(adapter)).data));
+		expect(model.entities[0].state).toBe("2026-10-30 07:30 JST");
+	});
+
+	it("timestamp でも日時として読めなければ state はそのまま", async () => {
+		const { adapter } = setup(
+			{
+				"sensor.phone_next_alarm": json({
+					entity_id: "sensor.phone_next_alarm",
+					state: "unavailable",
+					attributes: { device_class: "timestamp" },
+					last_changed: "2026-10-29T13:00:00+00:00",
+				}),
+			},
+			["sensor.phone_next_alarm"],
+		);
+		const out = successOf(await read(adapter));
+		expect(out.data).toMatchObject({ entities: [{ state: "unavailable" }] });
+	});
+
 	it("日時はモデルに JST の書式で渡る", async () => {
 		const { adapter } = setup(allFound());
 		const model = JSON.parse(toModelJson(successOf(await read(adapter)).data));
