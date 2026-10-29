@@ -147,3 +147,4 @@ capability_defaults:
   attachment_read: auto
   github_read: auto
   web_read: auto
+  home_read: auto
