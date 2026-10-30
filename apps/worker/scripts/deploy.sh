@@ -39,9 +39,16 @@ fi
 if ! printf '%s' "$age_recipient" | grep -Eq "$age_pattern"; then
   errors+=("apps/worker/resources.ts の $mode.snapshotAgeRecipient が age の公開鍵（age1...）ではない: ${age_recipient}。age-keygen で鍵を作り、公開鍵を書く。")
 fi
+# OWNER_EMAILS は var なのでデプロイのたびに上書きされる。空で出すと Admin API に誰も入れなくなる
+if [ -z "${OWNER_EMAILS:-}" ]; then
+  errors+=("OWNER_EMAILS が未設定。Admin API を使う owner のメールアドレスをカンマ区切りで環境変数に渡す。")
+fi
 # secret は前回のデプロイで反映済みのことがあるので、未設定でも止めない
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   warnings+=("ANTHROPIC_API_KEY が未設定。Worker secret に無ければ、デプロイ後に応答を生成できない。")
+fi
+if [ "$mode" = production ] && { [ -z "${HOME_ASSISTANT_URL:-}" ] || [ -z "${HOME_ENTITY_IDS:-}" ]; }; then
+  warnings+=("HOME_ASSISTANT_URL か HOME_ENTITY_IDS が未設定。home_state は登録されない。")
 fi
 if [ "$send_from_worker" = 1 ] && [ -z "${DISCORD_BOT_TOKEN:-}" ]; then
   warnings+=("DISCORD_BOT_TOKEN が未設定。$mode.discordSendFromWorker が 1 なので、Worker secret に無ければ返事を送れない。")

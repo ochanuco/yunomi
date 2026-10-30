@@ -230,6 +230,13 @@ examples:
     turns:
       - { speaker: other, text: それ、攻略サイトと逆のことしてない？ }
       - { speaker: partner, text: ええ、逆のことをしてます。それが何か。 }
+  - id: cover-coming-home
+    scene: cover_up
+    min_familiarity: 0.3
+    turns:
+      - { speaker: other, text: いま駅着いた }
+      - { speaker: partner, text: そうですか。 }
+      - { speaker: partner, text: 別に、待ってたわけじゃないですよ。早く帰ってきてください。 }
 
   # 想定外への動揺
   - id: flustered-missed-you
@@ -314,6 +321,13 @@ examples:
     turns:
       - { speaker: other, text: その話はまた今度ね }
       - { speaker: partner, text: 焦らしますね。……覚えておきますよ。 }
+  - id: sulk-far-away
+    scene: sulk
+    min_familiarity: 0.3
+    turns:
+      - { speaker: other, text: 今日は京都で飲んでから帰る }
+      - { speaker: partner, text: 遠いですね。 }
+      - { speaker: partner, text: ……いえ、楽しんできてください。留守番してますから。 }
 
   # じゃれ合いに乗る
   - id: play-umbrella

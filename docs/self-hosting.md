@@ -88,16 +88,26 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `voiceEnabled` | 音声を使わないなら `"0"` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
+| `accessAud` | 3 の AUD タグ |
+| `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm" }` |
 
-### `apps/worker/cloudflare.config.ts`
+同じファイルの `instance` は mode によらない値です。
 
-| 値 | 書き換え先 |
+| キー | 値 |
 |---|---|
-| `ACCESS_TEAM_DOMAIN` | 3 のチームドメイン |
-| `ACCESS_AUD_PROD` / `ACCESS_AUD_DEV` | 3 の AUD タグ |
-| `ACCESS_CALLERS_PROD` / `ACCESS_CALLERS_DEV` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm" }` |
-| `OWNER_EMAILS` | 自分のメールアドレス |
-| `OCHOKO_URL` / `WOL_URL` | 音声を使うときだけ |
+| `accessTeamDomain` | 3 のチームドメイン |
+| `githubDefaultRepo` | `github_read` が repo を省略されたときに読む repo |
+| `chatsumiUrl` | `web_fetch` を使うときだけ |
+| `ochokoUrl` / `wolUrl` | 音声を使うときだけ |
+
+### デプロイ時の環境変数
+
+個人に結びつく値は repo に書かず、デプロイのときに環境変数で渡します。`cloudflare.config.ts` が読み、var として Worker に反映します。
+
+| 環境変数 | 値 |
+|---|---|
+| `OWNER_EMAILS` | 自分のメールアドレス（カンマ区切りで複数可）。必須 |
+| `HOME_ASSISTANT_URL` / `HOME_ENTITY_IDS` | `home_state` を使うときだけ。Home Assistant の origin と、読ませる entity ID（カンマ区切り） |
 
 夜間バッチの cron は `17 19 * * *`（UTC、日本時間 4:17）です。
 
