@@ -88,16 +88,23 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `voiceEnabled` | 音声を使わないなら `"0"` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
+| `accessAud` | 3 の AUD タグ |
+| `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm" }` |
+
+同じファイルの `instance` は mode によらない値です。
+
+| キー | 値 |
+|---|---|
+| `accessTeamDomain` | 3 のチームドメイン |
+| `githubDefaultRepo` | `github_read` が repo を省略されたときに読む repo |
+| `chatsumiUrl` | `web_fetch` を使うときだけ |
+| `ochokoUrl` / `wolUrl` | 音声を使うときだけ |
 
 ### `apps/worker/cloudflare.config.ts`
 
 | 値 | 書き換え先 |
 |---|---|
-| `ACCESS_TEAM_DOMAIN` | 3 のチームドメイン |
-| `ACCESS_AUD_PROD` / `ACCESS_AUD_DEV` | 3 の AUD タグ |
-| `ACCESS_CALLERS_PROD` / `ACCESS_CALLERS_DEV` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm" }` |
 | `OWNER_EMAILS` | 自分のメールアドレス |
-| `OCHOKO_URL` / `WOL_URL` | 音声を使うときだけ |
 
 夜間バッチの cron は `17 19 * * *`（UTC、日本時間 4:17）です。
 
