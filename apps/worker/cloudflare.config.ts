@@ -54,6 +54,8 @@ export default defineConfig(({ mode }) => {
 				HOME_ENTITY_IDS: bindings.text(
 					[
 						"person.chanu",
+						"sensor.home_chanu_distance",
+						"sensor.home_chanu_direction_of_travel",
 						"sensor.pixel_8a_battery_level",
 						"sensor.pixel_8a_battery_state",
 						"sensor.pixel_8a_next_alarm",
