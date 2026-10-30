@@ -100,11 +100,14 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `chatsumiUrl` | `web_fetch` を使うときだけ |
 | `ochokoUrl` / `wolUrl` | 音声を使うときだけ |
 
-### `apps/worker/cloudflare.config.ts`
+### デプロイ時の環境変数
 
-| 値 | 書き換え先 |
+個人に結びつく値は repo に書かず、デプロイのときに環境変数で渡します。`cloudflare.config.ts` が読み、var として Worker に反映します。
+
+| 環境変数 | 値 |
 |---|---|
-| `OWNER_EMAILS` | 自分のメールアドレス |
+| `OWNER_EMAILS` | 自分のメールアドレス（カンマ区切りで複数可）。必須 |
+| `HOME_ASSISTANT_URL` / `HOME_ENTITY_IDS` | `home_state` を使うときだけ。Home Assistant の origin と、読ませる entity ID（カンマ区切り） |
 
 夜間バッチの cron は `17 19 * * *`（UTC、日本時間 4:17）です。
 

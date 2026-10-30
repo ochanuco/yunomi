@@ -2,6 +2,14 @@ import { bindings, defineConfig, exports, triggers } from "cf/config";
 import { instance, resources } from "./resources.ts";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 
+// 個人に結びつく値（メールアドレス、自宅の Home Assistant）は公開 repo に書かず、
+// デプロイのときに環境変数で受け取る（.github/deploy/*.env.op）。
+const listFromEnv = (name: string): string[] =>
+	(process.env[name] ?? "")
+		.split(",")
+		.map((s) => s.trim())
+		.filter((s) => s !== "");
+
 export default defineConfig(({ mode }) => {
 	const production = mode === "production";
 	const local = mode === "local";
@@ -27,29 +35,14 @@ export default defineConfig(({ mode }) => {
 				// メンション判定と自己発言の除外に使う。
 				PARTNER_DISCORD_USER_ID: bindings.text(r.partnerDiscordUserId),
 				// Admin API を許可する owner の email。
-				OWNER_EMAILS: bindings.json(["teacatus@gmail.com"]),
+				OWNER_EMAILS: bindings.json(listFromEnv("OWNER_EMAILS")),
 				// github_read が repo を省略されたときに読む repo。
 				GITHUB_DEFAULT_REPO: bindings.text(instance.githubDefaultRepo),
 				// web_fetch の呼び先。サービストークンは prod だけが secret で持つ。
 				CHATSUMI_URL: bindings.text(instance.chatsumiUrl),
-				// home_state の呼び先と、読ませる entity。token は prod だけが secret で持つ。
-				HOME_ASSISTANT_URL: bindings.text("https://chanoma.chanu.co"),
-				HOME_ENTITY_IDS: bindings.text(
-					[
-						"person.chanu",
-						"sensor.home_chanu_distance",
-						"sensor.home_chanu_direction_of_travel",
-						"sensor.pixel_8a_battery_level",
-						"sensor.pixel_8a_battery_state",
-						"sensor.pixel_8a_next_alarm",
-						"binary_sensor.pixel_8a_interactive",
-						"sensor.pixel_8a_detected_activity",
-						"sensor.pixel_8a_sleep_duration",
-						"sensor.pixel_8a_do_not_disturb_sensor",
-						"sensor.pixel_8a_geocoded_location",
-						"weather.home",
-					].join(","),
-				),
+				// home_state の呼び先と、読ませる entity。空なら home_state を登録しない。token は prod だけが secret で持つ。
+				HOME_ASSISTANT_URL: bindings.text(process.env.HOME_ASSISTANT_URL ?? ""),
+				HOME_ENTITY_IDS: bindings.text(process.env.HOME_ENTITY_IDS ?? ""),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
