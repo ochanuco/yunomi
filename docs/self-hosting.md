@@ -107,7 +107,6 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | 環境変数 | 値 |
 |---|---|
 | `OWNER_EMAILS` | 自分のメールアドレス（カンマ区切りで複数可）。必須 |
-| `HOME_ASSISTANT_URL` / `HOME_ENTITY_IDS` | `home_state` を使うときだけ。Home Assistant の origin と、読ませる entity ID（カンマ区切り） |
 
 夜間バッチの cron は `17 19 * * *`（UTC、日本時間 4:17）です。
 
@@ -120,7 +119,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 | `ANTHROPIC_API_KEY` | 必須。ないと応答を生成できない |
 | `DISCORD_BOT_TOKEN` | `discordSendFromWorker` が `"1"` のとき必須 |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
-| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`HOME_ASSISTANT_URL`、`HOME_ENTITY_IDS`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
 
 ```sh
 cd apps/worker

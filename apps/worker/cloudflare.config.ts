@@ -2,8 +2,8 @@ import { bindings, defineConfig, exports, triggers } from "cf/config";
 import { instance, resources } from "./resources.ts";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 
-// 個人に結びつく値（メールアドレス、自宅の Home Assistant）は公開 repo に書かず、
-// デプロイのときに環境変数で受け取る（.github/deploy/*.env.op）。
+// 個人に結びつく値は公開 repo に書かず、デプロイのときに環境変数で受け取る（.github/deploy/*.env.op）。
+// var は cf deploy が値を表示し、長い値は途中で切れて Actions のマスクが効かない。長くなりうる値は secret にする。
 const listFromEnv = (name: string): string[] =>
 	(process.env[name] ?? "")
 		.split(",")
@@ -40,9 +40,6 @@ export default defineConfig(({ mode }) => {
 				GITHUB_DEFAULT_REPO: bindings.text(instance.githubDefaultRepo),
 				// web_fetch の呼び先。サービストークンは prod だけが secret で持つ。
 				CHATSUMI_URL: bindings.text(instance.chatsumiUrl),
-				// home_state の呼び先と、読ませる entity。空なら home_state を登録しない。token は prod だけが secret で持つ。
-				HOME_ASSISTANT_URL: bindings.text(process.env.HOME_ASSISTANT_URL ?? ""),
-				HOME_ENTITY_IDS: bindings.text(process.env.HOME_ENTITY_IDS ?? ""),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
@@ -72,6 +69,9 @@ export default defineConfig(({ mode }) => {
 							CHATSUMI_ACCESS_CLIENT_ID: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_SECRET: bindings.secret(),
 							HOME_ASSISTANT_TOKEN: bindings.secret(),
+							// 自宅の Home Assistant の origin と、home_state が読む entity ID（カンマ区切り）。
+							HOME_ASSISTANT_URL: bindings.secret(),
+							HOME_ENTITY_IDS: bindings.secret(),
 							OWNER_DISCORD_USER_ID: bindings.secret(),
 						}
 					: {}),
