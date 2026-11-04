@@ -130,15 +130,11 @@ scripts/deploy.sh production
 `deploy.sh` は次の順に実行します。
 
 1. `CLOUDFLARE_API_TOKEN` と、`resources.ts` のホスト名・D1 id・公開鍵を確かめる。足りないものがあれば、すべてを直し方と一緒に示して止まる。secret が未設定のときは警告だけを出す
-2. `development` のときだけ D1 migration を適用する
+2. 未適用の D1 migration を適用する。`production` では適用前の Time Travel bookmark を取り、適用後に行が減ったテーブルがあれば止まる
 3. Admin Web をビルドして Worker に埋め込み、`cf deploy` する
 4. `https://<host>/health` が応答するまで確かめる
 
-`production` の D1 migration は自動では適用しません。初回と、migration が増えたときに手で適用します。
-
-```sh
-pnpm exec cf d1 migrations apply <D1 の UUID> --dir migrations --mode production
-```
+止まったときは、Job Summary に出た復元コマンド（`cf d1 time-travel restore <D1 の UUID> --bookmark <bookmark> --force`）で D1 を戻し、Worker を前のコミットにロールバックします。
 
 ## 7. Gateway を動かす
 
