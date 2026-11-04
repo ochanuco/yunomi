@@ -77,10 +77,17 @@ function counts(driver) {
 		"SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations' ORDER BY name",
 	).map((r) => r.name);
 	if (tables.length === 0) return {};
-	const sql = tables
-		.map((t) => `SELECT '${t}' AS t, count(*) AS n FROM "${t}"`)
-		.join(" UNION ALL ");
-	return Object.fromEntries(rows(driver, sql).map((r) => [r.t, Number(r.n)]));
+	// D1 は UNION の項数を強く制限するので、1 行に並べたスカラー副問い合わせで数える（列数の上限 100 に収まるよう 50 ずつ）
+	const result = {};
+	for (let k = 0; k < tables.length; k += 50) {
+		const sql = `SELECT ${tables
+			.slice(k, k + 50)
+			.map((t) => `(SELECT count(*) FROM "${t}") AS "${t}"`)
+			.join(", ")}`;
+		for (const [t, n] of Object.entries(rows(driver, sql)[0]))
+			result[t] = Number(n);
+	}
+	return result;
 }
 
 function summary(lines) {
