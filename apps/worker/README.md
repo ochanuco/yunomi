@@ -260,7 +260,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
 `scripts/deploy.sh <development|production>` の流れ:
 
 1. `resources.ts` から D1 id と `snapshotAgeRecipient` を読む。D1 id がプレースホルダのままなら #7 を案内して失敗し、recipient が age の公開鍵の形式でなければ失敗する。
-2. `cf d1 migrations apply <id> --dir migrations`（remote）。development のときだけ実行し、production のデプロイでは適用しない
+2. `cf d1 migrations apply <id> --dir migrations`（remote）。production では前後を `scripts/d1-guard.mjs` が見張る: 未適用の migration があれば適用前の Time Travel bookmark と復元コマンドを Job Summary に出し、適用後に行が減ったテーブルがあれば Worker を出さずに止める。行を消す migration は `-- deploy: allow-row-loss <table>` を本文に書く
 3. `cf deploy --mode <mode>`。`ANTHROPIC_API_KEY` が環境にあれば `--secrets-file`（権限 600 の一時 `.env`、終了時に削除）で渡す。`cf workers secrets update` は `--text` しか持たず値が argv に載るため使わない。
 4. `https://<host>/health` を最大 10 回（6 秒間隔）確認する。
 
@@ -275,7 +275,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
 
 ## デプロイ（prod）
 
-`.github/workflows/deploy.yml` は main への push で動く。承認が要るのは、前回の記録がない・ロールバック・`apps/worker/migrations/` の変更を含むときだけで、Environment `production-approval` で止まる。何が出るかと承認の要否は、run の `plan` ジョブの Job Summary に出る。手動実行（入力 `ref`、既定 `main`）はロールバック用で、main か main 上のコミット SHA に限る。共有 workflow（`ochanuco/.github` の `deploy.yml`）を `apps/worker` で呼び、`op run` 経由で `scripts/deploy.sh production` を実行する。typecheck / test は走らせない（main は `CI` を通っている前提）。production の D1 migration はデプロイでは適用しないので、migration を含む PR ごとに手で `cf d1 migrations apply` を実行する。
+`.github/workflows/deploy.yml` は main への push で動く。承認が要るのは、前回の記録がない・ロールバック・追加だけでない D1 migration（`DROP` や `DELETE`、テーブルの作り直しなど）を含むときだけで、Environment `production-approval` で止まる。何が出るかと承認の要否は、run の `plan` ジョブの Job Summary に出る。手動実行（入力 `ref`、既定 `main`）はロールバック用で、main か main 上のコミット SHA に限る。共有 workflow（`ochanuco/.github` の `deploy.yml`）を `apps/worker` で呼び、`op run` 経由で `scripts/deploy.sh production` を実行する。typecheck / test は走らせない（main は `CI` を通っている前提）。production の D1 migration はデプロイが適用する。
 
 #### 事前に人手で用意するもの
 

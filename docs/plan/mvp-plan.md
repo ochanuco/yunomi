@@ -60,7 +60,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 
 - 技術範囲: prod 用の Worker / D1 / DO namespace / Discord bot application / secret、prod deploy workflow（GitHub Environment で保護）、Cloudflare Access（Admin 用 app と Gateway/`ykm` 用 service token）、Home Gateway の Docker 運用。
 - 非ゴール: staging、snapshot による prod→dev seed（Goal 2）、バックアップ。
-- Done: dev と prod が別の D1・別の Discord bot を使う。main へのマージで prod にデプロイされる。前回の記録がない、ロールバック、migration を含むときだけ、Environment `production-approval` の承認で止まる。
+- Done: dev と prod が別の D1・別の Discord bot を使う。main へのマージで prod にデプロイされる。前回の記録がない、ロールバック、追加系でない migration を含むときだけ、Environment `production-approval` の承認で止まる。
 
 ## Issue 一覧
 

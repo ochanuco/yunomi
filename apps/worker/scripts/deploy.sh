@@ -62,9 +62,15 @@ if [ ${#errors[@]} -gt 0 ]; then
   exit 1
 fi
 
-# production の D1 migration はデプロイでは適用せず、migration を含む PR ごとに手で適用する
-if [ "$mode" = development ]; then
-  pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
+# production では scripts/d1-guard.mjs が適用前の Time Travel bookmark を取り、適用後に行が減っていたら Worker を出さずに止める
+if [ "$mode" = production ]; then
+  guard_state=$(mktemp)
+  node scripts/d1-guard.mjs before --driver cf --db "$d1_id" --dir migrations --state "$guard_state"
+fi
+pnpm exec cf d1 migrations apply "$d1_id" --dir migrations --mode "$mode"
+if [ "$mode" = production ]; then
+  node scripts/d1-guard.mjs after --state "$guard_state"
+  rm -f "$guard_state"
 fi
 
 # admin 画面は Worker のソースに埋め込むので、admin をビルドしてから埋め込みを生成する
