@@ -523,7 +523,7 @@ export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
  * 会話本文（recent_messages）、audit、KPI、履歴テーブル、secret は含めない。
  * 行は partner_id を持たない（Snapshot 全体の partner_id に従う）。
  */
-export const SNAPSHOT_SCHEMA_VERSION = 1;
+export const SNAPSHOT_SCHEMA_VERSION = 2;
 
 /** R2 の customMetadata。一覧はこの値から組み立てる。 */
 export type SnapshotSummary = {
@@ -544,6 +544,7 @@ export type SnapshotRestoreCounts = {
 	open_loops: number;
 	interest_states: number;
 	opinion_states: number;
+	work_notes: number;
 	relationships: number;
 };
 
@@ -555,101 +556,101 @@ export type SnapshotRestoreResponse = {
 
 const int = v.pipe(v.number(), v.integer());
 
-export const SnapshotSchema = v.strictObject({
-	schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+const snapshotD1V1 = {
+	entities: v.array(
+		v.strictObject({
+			id: str,
+			kind: str,
+			display_name: str,
+			created_at: str,
+		}),
+	),
+	external_identities: v.array(
+		v.strictObject({ provider: str, external_id: str, entity_id: str }),
+	),
+	facts: v.array(
+		v.strictObject({
+			id: str,
+			subject_entity_id: str,
+			predicate: str,
+			object_type: str,
+			object_value: str,
+			object_display: nullable(str),
+			confidence: num,
+			importance: num,
+			source: str,
+			observed_at: str,
+			valid_from: str,
+			valid_to: nullable(str),
+			decay_policy: str,
+			superseded_by: nullable(str),
+		}),
+	),
+	memory_candidates: v.array(
+		v.strictObject({
+			id: str,
+			subject_entity_id: nullable(str),
+			subject_text: nullable(str),
+			predicate: str,
+			object_type: str,
+			object_value: str,
+			confidence: num,
+			importance: num,
+			source: str,
+			status: v.picklist(["pending", "promoted", "conflict", "rejected"]),
+			conflict_fact_id: nullable(str),
+			expires_at: str,
+			created_at: str,
+			source_event_id: str,
+		}),
+	),
+	open_loops: v.array(
+		v.strictObject({
+			id: str,
+			entity_id: str,
+			channel_id: str,
+			summary: str,
+			importance: num,
+			due_at: nullable(str),
+			due_confidence: nullable(num),
+			follow_up_interval_hours: nullable(num),
+			status: v.picklist(["open", "resolved", "dropped"]),
+			source_message_id: str,
+			created_at: str,
+			updated_at: str,
+			resolved_at: nullable(str),
+			last_followed_up_at: nullable(str),
+		}),
+	),
+	interest_states: v.array(
+		v.strictObject({
+			topic: str,
+			score: num,
+			baseline: num,
+			learned_delta: num,
+			summary: str,
+			updated_at: str,
+			source: interestOpinionSource,
+		}),
+	),
+	opinion_states: v.array(
+		v.strictObject({
+			topic: str,
+			stance: str,
+			confidence: num,
+			stability: num,
+			reasons: str,
+			source_memory_ids: str,
+			updated_at: str,
+		}),
+	),
+};
+
+const snapshotHeader = {
 	snapshot_id: str,
 	partner_id: str,
 	env: str,
 	created_at: str,
-	d1: v.strictObject({
-		entities: v.array(
-			v.strictObject({
-				id: str,
-				kind: str,
-				display_name: str,
-				created_at: str,
-			}),
-		),
-		external_identities: v.array(
-			v.strictObject({ provider: str, external_id: str, entity_id: str }),
-		),
-		facts: v.array(
-			v.strictObject({
-				id: str,
-				subject_entity_id: str,
-				predicate: str,
-				object_type: str,
-				object_value: str,
-				object_display: nullable(str),
-				confidence: num,
-				importance: num,
-				source: str,
-				observed_at: str,
-				valid_from: str,
-				valid_to: nullable(str),
-				decay_policy: str,
-				superseded_by: nullable(str),
-			}),
-		),
-		memory_candidates: v.array(
-			v.strictObject({
-				id: str,
-				subject_entity_id: nullable(str),
-				subject_text: nullable(str),
-				predicate: str,
-				object_type: str,
-				object_value: str,
-				confidence: num,
-				importance: num,
-				source: str,
-				status: v.picklist(["pending", "promoted", "conflict", "rejected"]),
-				conflict_fact_id: nullable(str),
-				expires_at: str,
-				created_at: str,
-				source_event_id: str,
-			}),
-		),
-		open_loops: v.array(
-			v.strictObject({
-				id: str,
-				entity_id: str,
-				channel_id: str,
-				summary: str,
-				importance: num,
-				due_at: nullable(str),
-				due_confidence: nullable(num),
-				follow_up_interval_hours: nullable(num),
-				status: v.picklist(["open", "resolved", "dropped"]),
-				source_message_id: str,
-				created_at: str,
-				updated_at: str,
-				resolved_at: nullable(str),
-				last_followed_up_at: nullable(str),
-			}),
-		),
-		interest_states: v.array(
-			v.strictObject({
-				topic: str,
-				score: num,
-				baseline: num,
-				learned_delta: num,
-				summary: str,
-				updated_at: str,
-				source: interestOpinionSource,
-			}),
-		),
-		opinion_states: v.array(
-			v.strictObject({
-				topic: str,
-				stance: str,
-				confidence: num,
-				stability: num,
-				reasons: str,
-				source_memory_ids: str,
-				updated_at: str,
-			}),
-		),
-	}),
 	do: v.strictObject({
 		state: nullable(PartnerStateViewSchema),
 		relationships: v.array(
@@ -666,9 +667,42 @@ export const SnapshotSchema = v.strictObject({
 			}),
 		),
 	}),
-});
+};
+
+/**
+ * 古い schema_version も復元できるよう、版ごとの形を受け付ける。
+ * v1 は work_notes を持たない。
+ */
+export const SnapshotSchema = v.variant("schema_version", [
+	v.strictObject({
+		schema_version: v.literal(1),
+		...snapshotHeader,
+		d1: v.strictObject(snapshotD1V1),
+	}),
+	v.strictObject({
+		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+		...snapshotHeader,
+		d1: v.strictObject({
+			...snapshotD1V1,
+			work_notes: v.array(
+				v.strictObject({
+					id: str,
+					entity_id: str,
+					kind: v.picklist(["decided", "done"]),
+					summary: str,
+					created_at: str,
+				}),
+			),
+		}),
+	}),
+]);
 
 export type Snapshot = v.InferOutput<typeof SnapshotSchema>;
+/** 新しく作る Snapshot の形。復元は Snapshot（古い版を含む）を受け付ける。 */
+export type CurrentSnapshot = Extract<
+	Snapshot,
+	{ schema_version: typeof SNAPSHOT_SCHEMA_VERSION }
+>;
 
 export const SnapshotSummarySchema: v.GenericSchema<SnapshotSummary> = v.object(
 	{ id: str, created_at: str, size: num, schema_version: num, env: str },
@@ -689,6 +723,7 @@ export const SnapshotRestoreResponseSchema: v.GenericSchema<SnapshotRestoreRespo
 			open_loops: num,
 			interest_states: num,
 			opinion_states: num,
+			work_notes: num,
 			relationships: num,
 		}),
 	});
