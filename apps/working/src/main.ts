@@ -83,6 +83,7 @@ const orca = createOrcaCli({
 	bin: cfg.orcaBin,
 	exec: spawnExec,
 	env,
+	cwd: cfg.workDir,
 	seatsRepo: cfg.seatsRepo,
 	seatsDir: cfg.seatsDir,
 	specDir: join(cfg.stateDir, "specs"),
@@ -102,17 +103,20 @@ const standupDeps = {
 };
 
 // start.sh は受付と orca serve を同時に起動するので、serve が受け付けるまで待ってから席の準備をする
+logger.info("discord connected", { bot_user_id: me.value.id });
 const ready = await orca.waitReady(ORCA_READY_TIMEOUT_MS);
 if (!ready.ok) {
 	logger.error("orca serve not ready", { reason: ready.error.reason });
 	process.exit(1);
 }
+logger.info("orca serve ready");
 const prepared = await orca.prepare(seats.orca());
 if (!prepared.ok) {
 	logger.error("orca prepare failed", { reason: prepared.error.reason });
 	process.exit(1);
 }
 await seats.setOrca(prepared.value);
+logger.info("orca prepared", { run_id: prepared.value.runId });
 
 const intake = createIntake({
 	discord,
@@ -145,6 +149,7 @@ const intake = createIntake({
 	logger,
 });
 await intake.reconcile();
+logger.info("seats reconciled", { seats: seats.all().length });
 
 // 席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次の check で受け取れる
 let stopped = false;

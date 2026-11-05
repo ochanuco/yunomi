@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Exec } from "./exec.ts";
@@ -50,7 +50,9 @@ const setup = (table: Parameters<typeof fakeExec>[0]) => {
 		bin: "orca-ide",
 		exec,
 		env: { HOME: "/h" },
+		cwd: root,
 		seatsRepo,
+		sleep: async () => {},
 		seatsDir: join(root, "ws"),
 		specDir: join(root, "specs"),
 		logger: silentLogger,
@@ -88,6 +90,7 @@ describe("waitReady", () => {
 			bin: "orca-ide",
 			exec,
 			env: {},
+			cwd: "/work",
 			seatsRepo: "/s",
 			seatsDir: "/w",
 			specDir: "/tmp",
@@ -102,6 +105,8 @@ describe("waitReady", () => {
 			value: undefined,
 		});
 		expect(exec).toHaveBeenCalledTimes(4);
+		// 席の元のリポジトリは prepare まで無いので、orca-ide は起動時からある場所で動かす
+		expect(exec.mock.calls.every(([, , o]) => o.cwd === "/work")).toBe(true);
 	});
 
 	it("期限までに ready にならなければ、最後の理由で失敗する", async () => {
@@ -139,6 +144,14 @@ describe("createOrcaCli", () => {
 			expect.arrayContaining(["--id", "run1", "--from", "rx"]),
 		);
 		expect(t.argsOf("orchestration run-create")).toEqual([]);
+	});
+
+	it("席の元のリポジトリが無ければ、Orca に触らず失敗する", async () => {
+		const t = setup({});
+		rmSync(join(t.seatsRepo, ".git"), { recursive: true });
+		const r = await t.orca.prepare({ runId: null, reception: null });
+		expect(!r.ok && r.error.reason).toContain("init-seats-repo.sh");
+		expect(t.exec).not.toHaveBeenCalled();
 	});
 
 	it("Run を引き継げなければ作り直す", async () => {
