@@ -164,6 +164,11 @@ export type OrcaCliOptions = {
 	bin: string;
 	exec: Exec;
 	env: Record<string, string>;
+	/**
+	 * orca-ide を動かす作業ディレクトリ。受付の起動時からあるディレクトリにする。
+	 * 席の元のリポジトリは prepare で作るので、空の volume ではそれより前に cwd にできない。
+	 */
+	cwd: string;
 	/** 席の worktree の元にする空の git リポジトリ。 */
 	seatsRepo: string;
 	/** Orca が席の worktree を作る場所（realpath）。 */
@@ -192,7 +197,7 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 		const command = args.slice(0, 2).join(" ");
 		const out = await opts.exec(opts.bin, [...args, "--json"], {
 			stdin: "",
-			cwd: opts.seatsRepo,
+			cwd: opts.cwd,
 			timeoutMs,
 			env: opts.env,
 		});
@@ -220,45 +225,18 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 	const ignore = v.unknown();
 	const asCoordinator = () => ["--from", reception ?? "", "--run", runId ?? ""];
 
-	const git = (args: readonly string[]) =>
-		opts.exec("git", args, {
-			stdin: "",
-			cwd: opts.seatsRepo,
-			timeoutMs: 30_000,
-			env: opts.env,
-		});
-
-	/** 席の元にする空の git リポジトリ。席の中で clone したものは .gitignore で無視する。 */
+	/** 席の元のリポジトリを Orca に登録する。リポジトリは start.sh が serve より先に作っておく。 */
 	const ensureSeatsRepo = async (): Promise<Result<string, OrcaError>> => {
-		await mkdir(opts.seatsRepo, { recursive: true });
 		const hasGit = await stat(join(opts.seatsRepo, ".git")).then(
 			() => true,
 			() => false,
 		);
 		if (!hasGit) {
-			await writeFile(join(opts.seatsRepo, ".gitignore"), "/*\n!/.gitignore\n");
-			for (const args of [
-				["init", "-q", "-b", "main"],
-				["add", ".gitignore"],
-				[
-					"-c",
-					"user.name=yunomi-working",
-					"-c",
-					"user.email=yunomi-working@localhost",
-					"commit",
-					"-qm",
-					"席の元",
-				],
-			]) {
-				const r = await git(args);
-				if (r.code !== 0) {
-					return err({
-						type: "OrcaFailed",
-						command: `git ${args[0]}`,
-						reason: r.stderr.slice(0, 300),
-					});
-				}
-			}
+			return err({
+				type: "OrcaFailed",
+				command: "repo list",
+				reason: `${opts.seatsRepo} に git リポジトリが無い（start.sh の init-seats-repo.sh が作る）`,
+			});
 		}
 		const repos = await call(["repo", "list"], reposSchema);
 		if (!repos.ok) return repos;
@@ -320,6 +298,21 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 	const sleep =
 		opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
+	const createReception = () =>
+		call(
+			[
+				"terminal",
+				"create",
+				"--worktree",
+				`path:${opts.seatsRepo}`,
+				"--title",
+				RECEPTION_TITLE,
+				"--command",
+				"sleep infinity",
+			],
+			terminalSchema,
+		);
+
 	return {
 		waitReady: async (timeoutMs) => {
 			const deadline = Date.now() + timeoutMs;
@@ -327,9 +320,11 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			for (;;) {
 				const r = await call(["status"], statusSchema, 10_000);
 				if (r.ok && r.value.runtime?.state === "ready") return ok(undefined);
-				last = r.ok
+				const reason = r.ok
 					? `state ${r.value.runtime?.state ?? "unknown"}`
 					: r.error.reason;
+				if (reason !== last) log.info("waiting for orca serve", { reason });
+				last = reason;
 				if (Date.now() >= deadline) {
 					return err({ type: "OrcaFailed", command: "status", reason: last });
 				}
@@ -355,19 +350,7 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 					}
 				}
 			}
-			const created = await call(
-				[
-					"terminal",
-					"create",
-					"--worktree",
-					`path:${opts.seatsRepo}`,
-					"--title",
-					RECEPTION_TITLE,
-					"--command",
-					"sleep infinity",
-				],
-				terminalSchema,
-			);
+			const created = await createReception();
 			if (!created.ok) return created;
 			reception = created.value.terminal.handle;
 			if (prev.runId) {

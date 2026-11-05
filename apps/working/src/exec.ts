@@ -37,5 +37,7 @@ export const spawnExec: Exec = (bin, args, opts) =>
 			resolve({ code: null, stdout, stderr: String(e) }),
 		);
 		child.on("close", (code) => resolve({ code, stdout, stderr }));
+		// 標準入力を読まずに終わる子に書くと EPIPE になる。拾わないと受付ごと落ちる
+		child.stdin.on("error", () => {});
 		child.stdin.end(opts.stdin);
 	});
