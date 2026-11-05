@@ -168,6 +168,7 @@ export const fakeOrca = (seatsDir = "/seats") => {
 		return h;
 	};
 	const orca: Orca = {
+		waitReady: vi.fn(async () => ok(undefined)),
 		prepare: vi.fn(async () => ok({ runId: "run1", reception: "rx" })),
 		startSeat: vi.fn(async (input) => {
 			calls.push({ op: "startSeat", args: input });

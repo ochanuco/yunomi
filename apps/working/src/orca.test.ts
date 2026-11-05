@@ -62,6 +62,61 @@ const setup = (table: Parameters<typeof fakeExec>[0]) => {
 	return { orca, exec, argsOf, seatsRepo };
 };
 
+describe("waitReady", () => {
+	const statuses = (states: (string | null)[]) => {
+		let i = 0;
+		return fakeExec({
+			"status --json": () => {
+				const state = states[Math.min(i++, states.length - 1)];
+				return state === null
+					? {
+							code: 1,
+							stdout: {
+								ok: false,
+								error: {
+									code: "runtime_unavailable",
+									message: "This terminal could not connect to Orca.",
+								},
+							},
+						}
+					: { stdout: { ok: true, result: { runtime: { state } } } };
+			},
+		});
+	};
+	const orcaWith = (exec: Exec) =>
+		createOrcaCli({
+			bin: "orca-ide",
+			exec,
+			env: {},
+			seatsRepo: "/s",
+			seatsDir: "/w",
+			specDir: "/tmp",
+			logger: silentLogger,
+			sleep: async () => {},
+		});
+
+	it("serve がつながらない間と ready でない間は待ち、ready になったら返す", async () => {
+		const exec = statuses([null, null, "starting", "ready"]);
+		expect(await orcaWith(exec).waitReady(60_000)).toEqual({
+			ok: true,
+			value: undefined,
+		});
+		expect(exec).toHaveBeenCalledTimes(4);
+	});
+
+	it("期限までに ready にならなければ、最後の理由で失敗する", async () => {
+		const r = await orcaWith(statuses([null])).waitReady(0);
+		expect(r).toEqual({
+			ok: false,
+			error: {
+				type: "OrcaFailed",
+				command: "status",
+				reason: "This terminal could not connect to Orca.",
+			},
+		});
+	});
+});
+
 describe("createOrcaCli", () => {
 	it("prepare は前の受付の端末を閉じ、新しい受付の端末で Run を引き継ぐ", async () => {
 		const t = setup({
