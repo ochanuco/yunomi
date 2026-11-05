@@ -10,7 +10,8 @@ import {
 } from "@yunomi/core";
 import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { facts, memoryCandidates } from "./db/schema.ts";
+import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
+import { WORK_NOTE_PREDICATE, WORK_NOTE_PROMPT_LIMIT } from "./work-notes.ts";
 
 export const PROMPT_FACT_LIMIT = 30;
 export const PROMPT_EPISODE_LIMIT = 30;
@@ -69,7 +70,10 @@ export type MemoryRepo = {
 		ctx: MemoryWriteContext,
 		candidates: CandidateInput[],
 	): Promise<CandidateOutcome[]>;
-	/** 続く事実（重要度順）のあとに出来事（新しい順）を並べて返す。 */
+	/**
+	 * 続く事実（重要度順）のあとに出来事（新しい順）を並べて返す。
+	 * 出来事には Working が残した1行（work_notes）も混ぜ、facts の出来事と合わせて新しい順にする。
+	 */
 	topFacts(partnerId: string, entityId: string): Promise<PromptFact[]>;
 };
 
@@ -237,7 +241,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 				observedAt: facts.observedAt,
 			};
 			// episodic 以外の値は standard として扱う。
-			const [lasting, episodes] = await db.batch([
+			const [lasting, episodes, notes] = await db.batch([
 				db
 					.select(columns)
 					.from(facts)
@@ -250,6 +254,21 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 					.where(and(current, eq(facts.decayPolicy, DECAY_POLICY.episode)))
 					.orderBy(desc(facts.observedAt))
 					.limit(PROMPT_EPISODE_LIMIT),
+				db
+					.select({
+						kind: workNotes.kind,
+						summary: workNotes.summary,
+						createdAt: workNotes.createdAt,
+					})
+					.from(workNotes)
+					.where(
+						and(
+							eq(workNotes.partnerId, partnerId),
+							eq(workNotes.entityId, entityId),
+						),
+					)
+					.orderBy(desc(workNotes.createdAt), desc(workNotes.id))
+					.limit(WORK_NOTE_PROMPT_LIMIT),
 			]);
 			const promptFact =
 				(kind: MemoryKind) =>
@@ -263,9 +282,19 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 							: r.objectValue),
 					observedAt: new Date(r.observedAt),
 				});
+			const workEpisodes = notes.map(
+				(n): PromptFact => ({
+					kind: "episode",
+					predicate: WORK_NOTE_PREDICATE[n.kind],
+					object: n.summary,
+					observedAt: new Date(n.createdAt),
+				}),
+			);
 			return [
 				...lasting.map(promptFact("lasting")),
-				...episodes.map(promptFact("episode")),
+				...[...episodes.map(promptFact("episode")), ...workEpisodes].sort(
+					(a, b) => b.observedAt.getTime() - a.observedAt.getTime(),
+				),
 			];
 		},
 	};

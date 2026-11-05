@@ -64,6 +64,13 @@
       "when": 1792519899909,
       "tag": "0008_bent_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793864676505,
+      "tag": "0009_yielding_psynapse",
+      "breakpoints": true
     }
   ]
 }

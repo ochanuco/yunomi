@@ -57,12 +57,13 @@ Worker は、`/health` 以外へのリクエストに `Cf-Access-Jwt-Assertion` 
    - 自分のメールアドレスを許可する（Admin Web 用）
    - Service Auth で、次の 2 つの service token を許可する
    - `/health` を bypass する（`deploy.sh` が認証なしで確認する）
-4. service token を 2 つ作る
+4. service token を作る
    - Gateway 用
    - `ykm`（CLI）用
+   - Working 用（仕事の Yukarin が記憶を読み書きする）
 
 JWT にメールアドレスがあれば `OWNER_EMAILS` と照合し、owner として扱います。
-service token の JWT は `common_name`（service token の Client ID）を `ACCESS_CALLERS` で `gateway` か `ykm` に引きます。
+service token の JWT は `common_name`（service token の Client ID）を `ACCESS_CALLERS` で `gateway`・`ykm`・`working` のいずれかに引きます。
 
 ## 4. Discord bot を作る
 

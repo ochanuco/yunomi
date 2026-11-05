@@ -5,7 +5,7 @@
 - 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）、`--mode local` でローカル専用（`yunomi-local`、ドメインなし）に切り替わる。local は deploy しない。workers.dev と preview URL は無効。
 - `cf dev` / `cf build` の委譲先は `wrangler`（この package の devDependency）。Vite は使わない。
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
-- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` に引く。`POST /v1/interfaces/discord/events`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/sent`、`POST /v1/partners/:partnerId/discord/voice-connection` は `gateway` のみ。
+- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` / `working` に引く。`POST /v1/interfaces/discord/events`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/sent`、`POST /v1/partners/:partnerId/discord/voice-connection` は `gateway` のみ。
 - ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
 - Worker 名・ホスト・D1 database id は `resources.ts` に集約し、`cloudflare.config.ts` と `scripts/deploy.sh` が読む。`cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
@@ -134,7 +134,16 @@ LLM 障害は `degradedMode` / `systemStress` に自動で反映する（`applyL
 
 ## Memory
 
-LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。候補の `kind`（`lasting` / `episode`）は Fact の `decay_policy`（`standard` / `episodic`）に写す。prompt には話者の現行 Fact のうち、`standard` を importance 降順・observed_at 降順で上位 12 件、`episodic` を observed_at 降順で上位 8 件入れる。`episodic` は聞いた日を添え、JST の暦日で 3 日以上たったものは「前に聞いた話」に回す。書き込みは次のターンが読めるよう応答前に完了させる。
+LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。候補の `kind`（`lasting` / `episode`）は Fact の `decay_policy`（`standard` / `episodic`）に写す。prompt には話者の現行 Fact のうち、`standard` を importance 降順・observed_at 降順で上位 `PROMPT_FACT_LIMIT`（30）件、`episodic` を observed_at 降順で上位 `PROMPT_EPISODE_LIMIT`（30）件入れる。`episodic` は聞いた日を添え、JST の暦日で 3 日以上たったものは「前に聞いた話」に回す。書き込みは次のターンが読めるよう応答前に完了させる。
+
+## Working の記憶
+
+Working（仕事）の Yukarin は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。相手は `discord_user_id` で既存の entity を引き、Talking で話したことのない相手は 404（`unknown_entity`）にする。`entities` / `external_identities` には書かない。
+
+- `GET ?discord_user_id=...`: `facts`（続く事実）/ `episodes`（できごと。仕事の1行を含む）/ `open_loops`（未決）を、Talking の prompt と同じ選び方と順で返す。時刻は `toModelJson` で `YYYY-MM-DD HH:mm JST` にする。
+- `POST { discord_user_id, kind: "decided" | "done", summary }`: 決まったこと・終わったことを1行（改行なし、200 字まで）で `work_notes` に残す。
+
+Talking の prompt では、`work_notes` の新しい `WORK_NOTE_PROMPT_LIMIT`（10）件を `仕事で決めたこと` / `仕事で終えたこと` の出来事として、facts の出来事と合わせて新しい順に並べる。出来事と同じく 3 日以上たったものは「前に聞いた話」に回る。
 
 ## Open Loop
 
