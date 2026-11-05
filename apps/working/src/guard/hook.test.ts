@@ -62,49 +62,49 @@ describe("classify: ToolSearch と MCP の道具", () => {
 	it("ToolSearch は道具の説明を読み込むだけなので通す", () => {
 		expect(free("ToolSearch")).toBeNull();
 	});
-	it("chimera の読み取りと絵を描く・加工する道具は通す", () => {
-		for (const name of [
-			"get_generation",
-			"list_catalog",
-			"get_catalog_pose",
-			"create_request",
-			"derive_request",
-			"plain_render",
-			"redraw_generation",
-			"deliver_generation",
-			"dof_generation",
-			"lens_generation",
-			"stage_generation",
-		]) {
-			expect(free(`mcp__claude_ai_chimera__${name}`)).toBeNull();
-		}
-	});
-	it("chimera の持ち主が判断する道具と、分類していない道具は止める", () => {
-		for (const name of [
-			"set_evaluation",
-			"set_decision",
-			"record_publication",
-			"promote_to_pose",
-			"promote_to_profile",
-			"set_pose_reference",
-		]) {
-			expect(free(`mcp__claude_ai_chimera__${name}`)).toContain("判断");
-		}
-		expect(free("mcp__claude_ai_chimera__create_experiment")).not.toBeNull();
-	});
-	it("ほかのコネクタは読み取りも止め、未知の MCP の道具も止める", () => {
+	it("MCP の読み取りと生成は、どのサーバーの道具でも通す", () => {
 		for (const tool of [
+			"mcp__claude_ai_chimera__get_generation",
+			"mcp__claude_ai_chimera__list_catalog",
+			"mcp__claude_ai_chimera__create_request",
+			"mcp__claude_ai_chimera__derive_request",
+			"mcp__claude_ai_chimera__plain_render",
+			"mcp__claude_ai_chimera__redraw_generation",
+			"mcp__claude_ai_chimera__deliver_generation",
+			"mcp__claude_ai_chimera__dof_generation",
+			"mcp__claude_ai_chimera__set_evaluation",
+			"mcp__claude_ai_chimera__record_publication",
+			"mcp__claude_ai_chimera__promote_to_pose",
 			"mcp__claude_ai_Gmail__search_threads",
-			"mcp__claude_ai_Gmail__send_message",
+			"mcp__claude_ai_Gmail__get_thread",
+			"mcp__claude_ai_Gmail__create_draft",
+			"mcp__claude_ai_Gmail__untrash_message",
 			"mcp__claude_ai_Google_Drive__read_file_content",
+			"mcp__claude_ai_Google_Drive__get_file_permissions",
 			"mcp__claude_ai_Google_Calendar__list_events",
 			"mcp__claude_ai_Google_Sheets__get_values",
-			"mcp__claude_ai_Claude_Docs__read",
 			"mcp__claude_ai_Cloudflare_Developer_Platform__workers_list",
-			"mcp__posthog__exec",
-			"mcp__someone__get_thing",
 		]) {
-			expect(free(tool)).not.toBeNull();
+			expect(free(tool), tool).toBeNull();
+		}
+	});
+	it("送信・削除・共有・公開・デプロイなど、取り消せないか外に届く MCP の操作は止める", () => {
+		for (const tool of [
+			"mcp__claude_ai_Gmail__send_message",
+			"mcp__claude_ai_Gmail__reply",
+			"mcp__claude_ai_Gmail__forward",
+			"mcp__claude_ai_Gmail__trash_thread",
+			"mcp__claude_ai_Gmail__delete_draft",
+			"mcp__claude_ai_Google_Drive__share_file",
+			"mcp__claude_ai_Google_Drive__trash_file",
+			"mcp__claude_ai_Google_Calendar__delete_event",
+			"mcp__claude_ai_Google_Calendar__respond_to_event",
+			"mcp__claude_ai_Cloudflare_Developer_Platform__d1_database_delete",
+			"mcp__claude_ai_Claude_Docs__delete",
+			"mcp__posthog__exec",
+			"mcp__someone__deploy_site",
+		]) {
+			expect(free(tool), tool).not.toBeNull();
 		}
 	});
 });

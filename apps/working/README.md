@@ -100,7 +100,7 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `yunomi-memory read` と `yunomi-memory write --kind … --summary …`
 - `orca orchestration ask` / `send` / `check`（宛先を変える `--to` などを付けないもの）と `orca skills get`
 - `ToolSearch`（道具の説明を読み込むだけ）
-- chimera（`mcp__claude_ai_chimera__*`）の読み取り（`get_*` / `list_*`）と、絵を描く・加工する道具（`create_request`、`derive_request`、`plain_render`、`redraw_generation`、`deliver_generation` など）
+- MCP の道具（ログインしたアカウントのコネクタを含む）のうち、下で止めるもの以外。読み取りや生成（chimera の `create_request`・`plain_render`、Gmail の下書きなど）
 
 止める操作:
 
@@ -112,9 +112,7 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `mise use --global`・`mise settings set`（`--local` を除く）・`mise implode`・`mise self-update`
 - 秘密情報の読み出し（`printenv`、トークンの変数、`~/.claude`・`~/.config`・`STATE_DIR` など）
 - 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
-- chimera の持ち主が判断する道具（`set_evaluation`、`set_decision`、`record_publication`、`promote_to_pose`、`promote_to_profile`、`set_pose_reference`）と、上で通す以外の chimera の道具
-- ログインしたアカウントのほかのコネクタ（Gmail、Google Drive・Calendar・Sheets・Docs、Cloudflare など）。メールやカレンダーは私的な情報なので、読み取りも聞く
-- そのほかの MCP の道具
+- MCP の道具のうち、名前に取り消せないか外に届く動詞（`send`、`reply`、`forward`、`respond`、`post`、`publish`、`deploy`、`release`、`share`、`invite`、`delete`、`trash`、`remove`、`destroy`、`purge`、`drop`、`revoke`、`transfer`、`merge`、`execute`、`exec`）が入っているもの。サーバー（コネクタ）では分けない
 
 Bash 以外の道具の許可は、道具の名前と引数（キーの順によらない JSON）が同じ操作に 1 回だけ効く。
 
