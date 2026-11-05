@@ -20,6 +20,8 @@ export type MessageLike = {
 	/** Discord の補完は bot 本人ではなく bot の管理ロールを選ぶことがあり、それも partner 宛てとみなす。 */
 	mentionsBotRole: boolean;
 	replyToMessageId: string | null;
+	/** チャンネルが属するカテゴリ。スレッドなら親チャンネルのカテゴリ。カテゴリ外なら null。 */
+	categoryId: string | null;
 	/** 作者がいま入っている VC。入っていなければ null。 */
 	authorVoiceChannelId: string | null;
 	attachments: readonly {

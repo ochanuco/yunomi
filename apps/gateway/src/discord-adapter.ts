@@ -7,6 +7,12 @@ const mentionsBotRole = (m: Message): boolean => {
 	return botRoleId !== undefined && m.mentions.roles.has(botRoleId);
 };
 
+const categoryIdOf = (m: Message): string | null => {
+	const channel = m.channel;
+	if (channel.isThread()) return channel.parent?.parentId ?? null;
+	return "parentId" in channel ? (channel.parentId ?? null) : null;
+};
+
 /**
  * 中継するのは guild のテキストを送れるチャンネルの発言。DM は対象外。
  * VC のテキストチャット（GuildVoice）も通常のチャンネルと同じに扱う。
@@ -30,6 +36,7 @@ export const toMessageLike = (m: Message): MessageLike => ({
 	mentionedUserIds: [...m.mentions.users.keys()],
 	mentionsBotRole: mentionsBotRole(m),
 	replyToMessageId: m.reference?.messageId ?? null,
+	categoryId: categoryIdOf(m),
 	authorVoiceChannelId: m.member?.voice.channelId ?? null,
 	attachments: [...m.attachments.values()].map((a) => ({
 		name: a.name,

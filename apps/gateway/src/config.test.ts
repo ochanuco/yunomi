@@ -17,6 +17,8 @@ describe("loadConfig", () => {
 				devCaller: false,
 				avatarDir: null,
 				ownerUserId: null,
+				workCategoryIds: new Set(),
+				workingUrl: null,
 				logLevel: "info",
 			},
 		});
@@ -84,5 +86,18 @@ describe("loadConfig", () => {
 		const urlOnly = loadConfig({ ...base, KUKICHA_URL: "http://x:1" });
 		expect(!urlOnly.ok && urlOnly.error.join("\n")).toMatch(/KUKICHA_TOKEN/);
 		expect(loadConfig({ ...base, KUKICHA_TOKEN: "tok" }).ok).toBe(false);
+	});
+
+	it("仕事カテゴリはカンマ区切りで読み、WORKING_URL は任意", () => {
+		const r = loadConfig({
+			...base,
+			WORK_CATEGORY_IDS: "10, 20,,",
+			WORKING_URL: "http://working.lan:8080/inbox",
+		});
+		expect(r.ok && r.value).toMatchObject({
+			workCategoryIds: new Set(["10", "20"]),
+			workingUrl: "http://working.lan:8080/inbox",
+		});
+		expect(loadConfig({ ...base, WORKING_URL: "nope" }).ok).toBe(false);
 	});
 });

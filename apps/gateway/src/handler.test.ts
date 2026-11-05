@@ -14,11 +14,15 @@ const message: MessageLike = {
 	mentionedUserIds: [],
 	mentionsBotRole: false,
 	replyToMessageId: null,
+	categoryId: null,
 	authorVoiceChannelId: null,
 	attachments: [],
 };
 
-const setup = (send: (e: unknown) => Promise<unknown>) => {
+const setup = (
+	send: (e: unknown) => Promise<unknown>,
+	extra: Partial<Parameters<typeof createMessageHandler>[0]> = {},
+) => {
 	const voice = { apply: vi.fn(async (_d: unknown) => {}) };
 	const channel = {
 		lastMessageId: "3" as string | null | undefined,
@@ -45,6 +49,7 @@ const setup = (send: (e: unknown) => Promise<unknown>) => {
 		voice,
 		avatars,
 		logger,
+		...extra,
 	});
 	return { avatars, channel, client, handle, logger, voice };
 };
@@ -360,6 +365,75 @@ describe("createMessageHandler", () => {
 				"avatar send failed",
 				expect.objectContaining({ message_id: "3" }),
 			);
+		});
+	});
+
+	describe("カテゴリでの振り分け", () => {
+		const work = new Set(["work"]);
+		const forwardOk = () => ({
+			forward: vi.fn(async (_e: unknown) => ok(undefined) as never),
+		});
+
+		it("仕事カテゴリの発言は Working に転送し、Worker には送らない", async () => {
+			const working = forwardOk();
+			const { channel, client, handle } = setup(
+				async () => ok({ action: "reply", content: "やあ" }),
+				{ workCategoryIds: work, working },
+			);
+			await handle({ ...message, categoryId: "work" }, channel);
+			expect(working.forward).toHaveBeenCalledTimes(1);
+			expect(working.forward.mock.calls[0]?.[0]).toMatchObject({
+				payload: { message_id: "3", channel_id: "2" },
+			});
+			expect(client.send).not.toHaveBeenCalled();
+			expect(channel.send).not.toHaveBeenCalled();
+		});
+
+		it("雑談カテゴリとカテゴリ外の発言は今までどおり Worker に送る", async () => {
+			for (const categoryId of ["chat", null]) {
+				const working = forwardOk();
+				const { channel, client, handle } = setup(
+					async () => ok({ action: "reply", content: "やあ" }),
+					{ workCategoryIds: work, working },
+				);
+				await handle({ ...message, categoryId }, channel);
+				expect(working.forward).not.toHaveBeenCalled();
+				expect(client.send).toHaveBeenCalledTimes(1);
+				expect(channel.send).toHaveBeenCalledTimes(1);
+			}
+		});
+
+		it("転送先が未設定なら仕事カテゴリの発言は捨てる", async () => {
+			const { channel, client, handle } = setup(
+				async () => ok({ action: "reply", content: "やあ" }),
+				{ workCategoryIds: work, working: null },
+			);
+			await handle({ ...message, categoryId: "work" }, channel);
+			expect(client.send).not.toHaveBeenCalled();
+			expect(channel.send).not.toHaveBeenCalled();
+		});
+
+		it("転送に失敗しても落ちず、雑談カテゴリの発言は Worker に届く", async () => {
+			const working = {
+				forward: vi.fn(
+					async (_e: unknown) =>
+						err({ type: "ExternalServiceUnavailable" }) as never,
+				),
+			};
+			const { channel, client, handle, logger } = setup(
+				async () => ok({ action: "reply", content: "やあ" }),
+				{ workCategoryIds: work, working },
+			);
+			await expect(
+				handle({ ...message, categoryId: "work" }, channel),
+			).resolves.toBeUndefined();
+			expect(logger.warn).toHaveBeenCalledWith(
+				"working forward failed",
+				expect.objectContaining({ message_id: "3" }),
+			);
+			await handle({ ...message, categoryId: "chat" }, channel);
+			expect(client.send).toHaveBeenCalledTimes(1);
+			expect(channel.send).toHaveBeenCalledTimes(1);
 		});
 	});
 });

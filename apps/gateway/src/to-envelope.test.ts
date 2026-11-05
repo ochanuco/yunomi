@@ -18,6 +18,7 @@ const msg = (over: Partial<MessageLike> = {}): MessageLike => ({
 	mentionedUserIds: [],
 	mentionsBotRole: false,
 	replyToMessageId: null,
+	categoryId: null,
 	authorVoiceChannelId: null,
 	attachments: [],
 	...over,
