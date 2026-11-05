@@ -149,6 +149,7 @@ const setup = (reply?: (prompt: string) => string) => {
 		claude: c.runner,
 		sessions,
 		botUserId: BOT,
+		ownerUserIds: new Set(["u1"]),
 		workTextChannelId: TEXT,
 		workForumChannelId: FORUM,
 		newSessionId: () => `s${++n}`,
@@ -230,6 +231,43 @@ describe("仕事テキストチャンネルの依頼", () => {
 			FORUM,
 			expect.objectContaining({ name: "請求書を整理して" }),
 		);
+	});
+});
+
+describe("発言者の絞り込み", () => {
+	const stranger = { id: "u2", display_name: "よその人", is_bot: false };
+	const otherBot = { id: "b2", display_name: "別の bot", is_bot: true };
+
+	it("持ち主以外の人と別の bot の依頼・フォーラムの投稿・投稿内の返事は無視する", async () => {
+		const { d, c, sessions, intake } = setup();
+		d.channels.set("t1", {
+			id: "t1",
+			name: "x",
+			parentId: FORUM,
+			appliedTagIds: [],
+			availableTags: [],
+		});
+		d.channels.set("t2", {
+			id: "t2",
+			name: "y",
+			parentId: FORUM,
+			appliedTagIds: [],
+			availableTags: [],
+		});
+		await sessions.set("t2", "s-old");
+		for (const author of [stranger, otherBot]) {
+			await intake.handle(envelope({ author }));
+			await intake.handle(
+				envelope({ author, channel_id: "t1", message_id: "t1", mentions: [] }),
+			);
+			await intake.handle(
+				envelope({ author, channel_id: "t2", message_id: "r", mentions: [] }),
+			);
+		}
+		expect(d.api.createForumPost).not.toHaveBeenCalled();
+		expect(c.runner.run).not.toHaveBeenCalled();
+		expect(c.runner.summarize).not.toHaveBeenCalled();
+		expect(d.sent).toEqual([]);
 	});
 });
 

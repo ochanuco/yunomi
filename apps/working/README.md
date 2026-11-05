@@ -33,7 +33,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 仕事フォーラムに人が直接投稿したときは、その投稿で作業を始める。
 - 投稿内の返事は、投稿に対応するセッションに `claude -p --resume` で渡す。セッションが見つからなければ、投稿のやりとり（最大 100 件）を読ませて新しいセッションで続ける。
 - 返事は同じ投稿に書く。同じ投稿への発言は 1 件ずつ順に処理する。
-- Yukarin 自身の発言は無視する。
+- `WORKING_OWNER_DISCORD_USER_IDS` に入っている人の発言だけを扱う。Yukarin 自身、ほかの人、ほかの bot の発言は、依頼・フォーラムの投稿・投稿内の返事のどれでも無視する。
 
 ### タグ
 
@@ -51,6 +51,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | `WORKING_TOKEN` | はい | gateway と共有するトークン |
 | `WORK_TEXT_CHANNEL_ID` | はい | 依頼を受ける仕事テキストチャンネル |
 | `WORK_FORUM_CHANNEL_ID` | はい | 投稿を立てる仕事フォーラム |
+| `WORKING_OWNER_DISCORD_USER_IDS` | はい | 作業を頼める人の Discord ユーザー ID（カンマ区切り） |
 | `PORT` | いいえ | 待ち受けるポート。既定は `8080` |
 | `STATE_DIR` | いいえ | 対応表の置き場所。既定は `~/state` |
 | `WORK_DIR` | いいえ | Claude CLI の作業ディレクトリ。既定は `~/work` |

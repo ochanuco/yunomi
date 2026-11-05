@@ -15,6 +15,7 @@ const envSchema = v.object({
 	WORKING_TOKEN: nonEmpty,
 	WORK_TEXT_CHANNEL_ID: nonEmpty,
 	WORK_FORUM_CHANNEL_ID: nonEmpty,
+	WORKING_OWNER_DISCORD_USER_IDS: nonEmpty,
 	PORT: v.optional(positiveInt),
 	STATE_DIR: v.optional(nonEmpty),
 	WORK_DIR: v.optional(nonEmpty),
@@ -30,6 +31,8 @@ export type WorkingConfig = {
 	sharedToken: string;
 	workTextChannelId: string;
 	workForumChannelId: string;
+	/** この人たちの発言だけで作業する。ほかの人と bot は無視する。 */
+	ownerUserIds: ReadonlySet<string>;
 	port: number;
 	/** 投稿とセッションの対応を置くディレクトリ。volume に載せる。 */
 	stateDir: string;
@@ -64,6 +67,11 @@ export const loadConfig = (
 		sharedToken: e.WORKING_TOKEN,
 		workTextChannelId: e.WORK_TEXT_CHANNEL_ID,
 		workForumChannelId: e.WORK_FORUM_CHANNEL_ID,
+		ownerUserIds: new Set(
+			e.WORKING_OWNER_DISCORD_USER_IDS.split(",")
+				.map((id) => id.trim())
+				.filter((id) => id !== ""),
+		),
 		port: e.PORT ?? 8080,
 		stateDir: e.STATE_DIR ?? `${home}/state`,
 		workDir: e.WORK_DIR ?? `${home}/work`,

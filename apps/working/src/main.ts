@@ -49,6 +49,7 @@ const intake = createIntake({
 	botUserId: me.value.id,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,
+	ownerUserIds: cfg.ownerUserIds,
 	newSessionId: randomUUID,
 	logger,
 });

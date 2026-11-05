@@ -7,6 +7,7 @@ const base = {
 	WORKING_TOKEN: "shared",
 	WORK_TEXT_CHANNEL_ID: "100",
 	WORK_FORUM_CHANNEL_ID: "200",
+	WORKING_OWNER_DISCORD_USER_IDS: "300, 400,",
 };
 
 describe("loadConfig", () => {
@@ -18,6 +19,7 @@ describe("loadConfig", () => {
 				sharedToken: "shared",
 				workTextChannelId: "100",
 				workForumChannelId: "200",
+				ownerUserIds: new Set(["300", "400"]),
 				port: 8080,
 				stateDir: "/home/w/state",
 				workDir: "/home/w/work",
@@ -40,5 +42,8 @@ describe("loadConfig", () => {
 		const r = loadConfig({ DISCORD_TOKEN: "t" });
 		expect(r.ok).toBe(false);
 		expect(!r.ok && r.error.join("\n")).toContain("WORK_FORUM_CHANNEL_ID");
+		expect(!r.ok && r.error.join("\n")).toContain(
+			"WORKING_OWNER_DISCORD_USER_IDS",
+		);
 	});
 });

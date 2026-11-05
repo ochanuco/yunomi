@@ -25,6 +25,8 @@ export type IntakeDeps = {
 	claude: ClaudeRunner;
 	sessions: SessionStore;
 	botUserId: string;
+	/** この人たちの発言だけで作業する。 */
+	ownerUserIds: ReadonlySet<string>;
 	workTextChannelId: string;
 	workForumChannelId: string;
 	newSessionId: () => string;
@@ -253,6 +255,14 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		handle: async (envelope) => {
 			const p = envelope.payload;
 			if (p.author.id === deps.botUserId) return;
+			// 持ち主以外の人やほかの bot の発言で Claude CLI を動かさない
+			if (p.author.is_bot || !deps.ownerUserIds.has(p.author.id)) {
+				log.debug("message from non-owner ignored", {
+					message_id: p.message_id,
+					author_id: p.author.id,
+				});
+				return;
+			}
 
 			if (p.channel_id === deps.workTextChannelId) {
 				if (!(await isAddressed(p))) return;
