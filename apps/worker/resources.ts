@@ -26,6 +26,7 @@ const ACCESS_DEV = {
 	accessCallers: {
 		"96068ba533c2ad93dabb8eb2ced3d1c1.access": "gateway",
 		"c12627e314018b2f83b122b99b4a7ec3.access": "ykm",
+		"fdd31f1945edf0b63cef30ac1191660d.access": "working",
 	},
 } as const;
 
@@ -51,6 +52,7 @@ export const resources = {
 		accessCallers: {
 			"e94ca29e08b39e259ad9ec9805c54f3d.access": "gateway",
 			"d0ed22fcaa637deaa1a682d71691615d.access": "ykm",
+			"36adffb09774cc32ffc95a99c53d0165.access": "working",
 		},
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
 		partnerDiscordUserId: "1558613526585671773",
