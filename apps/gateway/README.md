@@ -45,6 +45,7 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。VC のテキストチャット（GuildVoice）は通常のチャンネルと同じに中継し、作者が入っている VC を `author_voice_channel_id` に載せる（guild の voice state キャッシュから読む）。
 - 発言のチャンネルの親カテゴリ（スレッドなら親チャンネルのカテゴリ）が `WORK_CATEGORY_IDS` に含まれるときは、Worker に送らず、Worker へ送るのと同じ envelope を `WORKING_URL` に `Authorization: Bearer <WORKING_TOKEN>` 付きで POST する。Talking は返事をしない。転送は 1 回だけ試し（タイムアウト 10 秒）、失敗は warn ログを残して捨てる。それ以外のカテゴリとカテゴリ外の発言は今までどおり Worker に送る。
 - typing は出さない。Worker が REST で出す。
+- `WORKING_URL` があれば、同じ受付の `/seats/summary` を 1 分おきに読み、作業中の席があれば bot のステータスに「作業中 N件」を出す。0 件や読めないときは消す。
 - `ignore` は何もしない。`ack`（Worker が送信まで済ませた）は、`voice` があるときだけ VC を操作する。
 - `reply` と `ack` に `avatar: { emotion }` があれば、返事のテキストを送り終えたあとに、その感情の表情画像からランダムに 1 枚を同じチャンネルへ添付で貼る。分割された返事でも 1 回だけ。`reply` を途中までしか送れなかったときは貼らない。画像の無い感情は何もしない。
 - Worker が `DISCORD_SEND_FROM_WORKER=1` と `DISCORD_BOT_TOKEN` の両方を持つまで、Worker は `reply` を返す。互換のため、`reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。

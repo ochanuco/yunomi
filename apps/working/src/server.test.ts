@@ -32,6 +32,7 @@ const start = async () => {
 	const server = createWorkingServer({
 		sharedToken: "secret",
 		accept,
+		seatSummary: () => ({ working: 2 }),
 		logger: silentLogger,
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -73,5 +74,18 @@ describe("createWorkingServer", () => {
 		expect((await post(`${base}/other`, envelope, "secret")).status).toBe(404);
 		expect((await fetch(`${base}/healthz`)).status).toBe(200);
 		expect(accept).not.toHaveBeenCalled();
+	});
+
+	it("席の数は共有トークン付きの GET にだけ JSON で返す", async () => {
+		const { base } = await start();
+		const res = await fetch(`${base}/seats/summary`, {
+			headers: { authorization: "Bearer secret" },
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ working: 2 });
+		expect((await fetch(`${base}/seats/summary`)).status).toBe(401);
+		expect((await post(`${base}/seats/summary`, {}, "secret")).status).toBe(
+			405,
+		);
 	});
 });

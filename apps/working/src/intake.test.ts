@@ -58,6 +58,7 @@ const setup = async (
 	const seats = await openSeatStore(stateDir);
 	const ledger = createLedger(guardDirOf(stateDir));
 	let g = 0;
+	const timers = new Set<() => void>();
 	const deps: IntakeDeps = {
 		discord: d.api,
 		orca: o.orca,
@@ -84,6 +85,10 @@ const setup = async (
 		sleepAfterMs: 2 * 60 * 60_000,
 		newGrantId: () => `g${++g}`,
 		now: () => new Date(clock),
+		every: (_ms, fn) => {
+			timers.add(fn);
+			return () => timers.delete(fn);
+		},
 		logger: silentLogger,
 	};
 	return {
@@ -97,6 +102,10 @@ const setup = async (
 		intake: createIntake(deps),
 		advance: (ms: number) => {
 			clock += ms;
+		},
+		/** 入力中の表示のタイマーを 1 回分進める。 */
+		tick: () => {
+			for (const fn of timers) fn();
 		},
 	};
 };
@@ -864,5 +873,135 @@ describe("席の返事の添付", () => {
 		// 席が覚える質問は添付の行を外した本文
 		expect(s.seats.get("p1")?.question).toBe(posted[1]?.content);
 		expect(chimera).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("作業中かを Discord で見せる", () => {
+	it("席の Claude が動いている間だけ、投稿に入力中の表示を送り続ける", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		expect(s.d.typing).toEqual(["p1"]);
+		s.tick();
+		s.tick();
+		expect(s.d.typing).toEqual(["p1", "p1", "p1"]);
+
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか",
+			}),
+		);
+		s.tick();
+		expect(s.d.typing).toHaveLength(3);
+
+		await s.intake.handle(say("p1", "A で"));
+		expect(s.d.typing).toHaveLength(4);
+	});
+
+	it("依頼メッセージのリアクションを受付・作業中・決めてほしいで付け替え、新しい返事に移す", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		expect(s.d.reactionsOn("p1", "p1")).toEqual(["⏳"]);
+
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか",
+			}),
+		);
+		expect(s.d.reactionsOn("p1", "p1")).toEqual(["❓"]);
+
+		const answer = say("p1", "A で");
+		await s.intake.handle(answer);
+		expect(s.d.reactionsOn("p1", "p1")).toEqual([]);
+		expect(s.d.reactionsOn("p1", answer.payload.message_id)).toEqual(["⏳"]);
+	});
+
+	it("仕事チャンネルの依頼には受付の絵文字を先に付け、完了で ✅ にする", async () => {
+		const s = await setup();
+		const req = envelope({});
+		await s.intake.handle(req);
+		expect(s.d.reactionsOn(TEXT, req.payload.message_id)).toEqual(["⏳"]);
+
+		const seat = s.seats.get("thread1");
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat?.dispatchId ?? "",
+				body: "整理しました\n状態: 完了",
+			}),
+		);
+		expect(s.d.reactionsOn(TEXT, req.payload.message_id)).toEqual(["✅"]);
+		expect(s.d.panelIn("thread1")).toBe("状態: 完了");
+	});
+
+	it("順番待ちの席は受付のまま待たせる", async () => {
+		const s = await setup({ seatLimit: 1 });
+		await openPost(s);
+		s.d.addThread("p2", "二つ目");
+		await s.intake.handle(say("p2", "こっちも", { first: true }));
+		expect(s.d.reactionsOn("p2", "p2")).toEqual(["👀"]);
+		expect(s.d.panelIn("p2")).toBe("状態: 受付");
+		expect(s.d.typing).not.toContain("p2");
+	});
+
+	it("状態の欄に状態・経過時間・いまやっていることを書き、経過時間だけの変化は 5 分おきに書き換える", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		expect(s.d.panelIn("p1")).toBe("状態: 作業中（1分未満）");
+
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "status",
+				dispatchId: seat.dispatchId,
+				body: "誤字を探しています",
+			}),
+		);
+		expect(s.d.panelIn("p1")).toBe(
+			"状態: 作業中（1分未満）\nいまやっていること: 誤字を探しています",
+		);
+
+		const edits = vi.mocked(s.d.api.editMessage);
+		const before = edits.mock.calls.length;
+		s.advance(3 * 60_000);
+		await s.intake.refreshPanels();
+		expect(edits.mock.calls.length).toBe(before);
+
+		s.advance(2 * 60_000);
+		await s.intake.refreshPanels();
+		expect(s.d.panelIn("p1")).toBe(
+			"状態: 作業中（5分）\nいまやっていること: 誤字を探しています",
+		);
+		await s.intake.refreshPanels();
+		expect(edits.mock.calls.length).toBe(before + 1);
+
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか",
+			}),
+		);
+		expect(s.d.panelIn("p1")).toBe("状態: 決めてほしい");
+	});
+
+	it("作業中の席の数を数える。朝会と待っている席は数えない", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		s.d.addThread("p2", "二つ目");
+		await s.intake.handle(say("p2", "こっちも", { first: true }));
+		await s.intake.startStandup("朝会");
+		expect(s.intake.summary()).toEqual({ working: 2 });
+
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか",
+			}),
+		);
+		expect(s.intake.summary()).toEqual({ working: 1 });
 	});
 });

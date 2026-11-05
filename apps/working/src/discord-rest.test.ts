@@ -194,4 +194,48 @@ describe("createDiscordRest", () => {
 			"ExternalServiceUnavailable",
 		);
 	});
+
+	it("入力中・リアクション・書き換えは本文を読まずに成否だけ返し、絵文字は URL に符号化する", async () => {
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				new Response(null, { status: 204 }),
+		);
+		const api = createDiscordRest({ token: "tok", fetch });
+		expect((await api.typing("t1")).ok).toBe(true);
+		expect((await api.addReaction("c1", "m1", "👀")).ok).toBe(true);
+		expect((await api.removeReaction("c1", "m1", "👀")).ok).toBe(true);
+		expect((await api.editMessage("t1", "m2", "状態: 作業中")).ok).toBe(true);
+		const calls = fetch.mock.calls.map(([url, init]) => [init?.method, url]);
+		expect(calls).toEqual([
+			["POST", "https://discord.com/api/v10/channels/t1/typing"],
+			[
+				"PUT",
+				"https://discord.com/api/v10/channels/c1/messages/m1/reactions/%F0%9F%91%80/@me",
+			],
+			[
+				"DELETE",
+				"https://discord.com/api/v10/channels/c1/messages/m1/reactions/%F0%9F%91%80/@me",
+			],
+			["PATCH", "https://discord.com/api/v10/channels/t1/messages/m2"],
+		]);
+		expect(JSON.parse(String(fetch.mock.calls[3]?.[1]?.body))).toEqual({
+			content: "状態: 作業中",
+			allowed_mentions: { parse: [] },
+		});
+	});
+
+	it("書き換える前提のメッセージは分けずに 1 件だけ送り、ID を返す", async () => {
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				json({ id: "m9" }),
+		);
+		const api = createDiscordRest({ token: "tok", fetch });
+		expect(await api.createMessage("t1", "a".repeat(2500))).toEqual({
+			ok: true,
+			value: { id: "m9" },
+		});
+		expect(fetch).toHaveBeenCalledTimes(1);
+		const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+		expect(body.content).toHaveLength(2000);
+	});
 });

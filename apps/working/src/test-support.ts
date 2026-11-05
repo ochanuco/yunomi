@@ -81,7 +81,13 @@ export const fakeDiscord = () => {
 	}[] = [];
 	const posts: { name: string; content: string; tagIds: string[] }[] = [];
 	const history = new Map<string, PostedMessage[]>();
+	/** `${channelId}/${messageId}` ごとの bot のリアクション。 */
+	const reactions = new Map<string, string[]>();
+	/** 書き換える前提で送ったメッセージの、いまの本文。 */
+	const edited = new Map<string, { channelId: string; content: string }>();
+	const typing: string[] = [];
 	let nextThread = 1;
+	let nextMessage = 1;
 	const api: DiscordApi = {
 		me: async () => ok({ id: BOT }),
 		getChannel: vi.fn(async (id: string) => {
@@ -135,7 +141,40 @@ export const fakeDiscord = () => {
 			if (ch) channels.set(threadId, { ...ch, appliedTagIds: tagIds });
 			return ok(undefined);
 		},
+		createMessage: async (channelId, content) => {
+			const id = `panel${nextMessage++}`;
+			edited.set(id, { channelId, content });
+			return ok({ id });
+		},
+		editMessage: vi.fn(
+			async (channelId: string, messageId: string, content: string) => {
+				edited.set(messageId, { channelId, content });
+				return ok(undefined);
+			},
+		),
+		typing: async (channelId) => {
+			typing.push(channelId);
+			return ok(undefined);
+		},
+		addReaction: async (channelId, messageId, emoji) => {
+			const key = `${channelId}/${messageId}`;
+			reactions.set(key, [...(reactions.get(key) ?? []), emoji]);
+			return ok(undefined);
+		},
+		removeReaction: async (channelId, messageId, emoji) => {
+			const key = `${channelId}/${messageId}`;
+			reactions.set(
+				key,
+				(reactions.get(key) ?? []).filter((e) => e !== emoji),
+			);
+			return ok(undefined);
+		},
 	};
+	const reactionsOn = (channelId: string, messageId: string) =>
+		reactions.get(`${channelId}/${messageId}`) ?? [];
+	const panelIn = (channelId: string) =>
+		[...edited.values()].filter((m) => m.channelId === channelId).at(-1)
+			?.content ?? null;
 	const addThread = (id: string, name: string) =>
 		channels.set(id, {
 			id,
@@ -155,6 +194,9 @@ export const fakeDiscord = () => {
 		posts,
 		history,
 		refuseSendTo,
+		typing,
+		reactionsOn,
+		panelIn,
 		addThread,
 		tagsOf,
 		sentTo,

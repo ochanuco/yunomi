@@ -1,5 +1,5 @@
 import { generateDependencyReport } from "@discordjs/voice";
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
 import { loadConfig } from "./config.ts";
 import {
@@ -17,6 +17,7 @@ import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
 import { createVoiceStateHandler } from "./voice-state.ts";
+import { startWorkActivity } from "./work-activity.ts";
 import { createWorkingClient } from "./working-client.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
@@ -153,6 +154,16 @@ discord.once(Events.ClientReady, (c) => {
 		path: process.env.HEARTBEAT_FILE ?? DEFAULT_HEARTBEAT_PATH,
 		isReady: () => discord.isReady(),
 	});
+	if (working) {
+		startWorkActivity({
+			working,
+			setActivity: (text) => {
+				if (text === null) c.user.setPresence({ activities: [] });
+				else c.user.setActivity(text, { type: ActivityType.Custom });
+			},
+			logger,
+		});
+	}
 });
 
 discord.on(Events.MessageCreate, (message) => {

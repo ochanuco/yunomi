@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as v from "valibot";
+import { WORK_STATUSES, type WorkStatus } from "./work-status.ts";
 
 /**
  * 席の状態。
@@ -44,7 +45,24 @@ export type Seat = {
 	background: boolean;
 	/** 席の Claude が最後に送った途中経過。持ち主に「いまやっていること」として返す。 */
 	lastStatus: string | null;
+	/** 受付の絵文字を付けた、持ち主の最新の依頼メッセージ。 */
+	request: MessageRef | null;
+	/** request に bot が付けているリアクション。 */
+	reaction: string | null;
+	/** 投稿の先頭近くに置いた状態の欄。 */
+	panelId: string | null;
+	/** 状態の欄に最後に書いた本文。同じ内容なら書き換えない。 */
+	panelText: string | null;
+	panelAt: Date | null;
+	/** 投稿に出している状態と、その状態になった時刻。経過時間を数える。 */
+	label: SeatLabel | null;
+	labelSince: Date | null;
 };
+
+export type MessageRef = { channelId: string; messageId: string };
+
+/** 投稿に出す状態。受付は席ができて Claude が動き出すまで。 */
+export type SeatLabel = "受付" | WorkStatus;
 
 const dateSchema = v.pipe(
 	v.nullable(v.number()),
@@ -66,6 +84,16 @@ const seatSchema = v.object({
 	standup: v.boolean(),
 	background: v.optional(v.boolean(), false),
 	last_status: v.optional(v.nullable(v.string()), null),
+	request: v.optional(
+		v.nullable(v.object({ channel_id: v.string(), message_id: v.string() })),
+		null,
+	),
+	reaction: v.optional(v.nullable(v.string()), null),
+	panel_id: v.optional(v.nullable(v.string()), null),
+	panel_text: v.optional(v.nullable(v.string()), null),
+	panel_at: v.optional(dateSchema, null),
+	label: v.optional(v.nullable(v.picklist(["受付", ...WORK_STATUSES])), null),
+	label_since: v.optional(dateSchema, null),
 });
 
 const fileSchema = v.object({
@@ -100,6 +128,13 @@ export const newSeat = (threadId: string, standup = false): Seat => ({
 	standup,
 	background: false,
 	lastStatus: null,
+	request: null,
+	reaction: null,
+	panelId: null,
+	panelText: null,
+	panelAt: null,
+	label: null,
+	labelSince: null,
 });
 
 /**
@@ -145,6 +180,18 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 				standup: s.standup,
 				background: s.background,
 				lastStatus: s.last_status,
+				request: s.request
+					? {
+							channelId: s.request.channel_id,
+							messageId: s.request.message_id,
+						}
+					: null,
+				reaction: s.reaction,
+				panelId: s.panel_id,
+				panelText: s.panel_text,
+				panelAt: s.panel_at,
+				label: s.label,
+				labelSince: s.label_since,
 			});
 		}
 	}
@@ -172,6 +219,18 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 						standup: s.standup,
 						background: s.background,
 						last_status: s.lastStatus,
+						request: s.request
+							? {
+									channel_id: s.request.channelId,
+									message_id: s.request.messageId,
+								}
+							: null,
+						reaction: s.reaction,
+						panel_id: s.panelId,
+						panel_text: s.panelText,
+						panel_at: s.panelAt?.getTime() ?? null,
+						label: s.label,
+						label_since: s.labelSince?.getTime() ?? null,
 					},
 				]),
 			),

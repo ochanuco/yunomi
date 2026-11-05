@@ -49,4 +49,31 @@ describe("createWorkingClient", () => {
 		}).forward(envelope);
 		expect(!r2.ok && r2.error.type).toBe("ExternalServiceUnavailable");
 	});
+
+	it("席の数は同じ受付の /seats/summary から Bearer 付きで読み、形が違えば err で返す", async () => {
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				Response.json({ working: 3 }),
+		);
+		const client = createWorkingClient({
+			url: "http://w:8080/events",
+			token: "secret",
+			fetch,
+		});
+		expect(await client.seatSummary()).toEqual({
+			ok: true,
+			value: { working: 3 },
+		});
+		const [url, init] = fetch.mock.calls[0] ?? [];
+		expect(String(url)).toBe("http://w:8080/seats/summary");
+		expect(init?.headers).toMatchObject({ authorization: "Bearer secret" });
+
+		const bad = createWorkingClient({
+			url: "http://w/events",
+			token: "secret",
+			fetch: vi.fn(async () => Response.json({ working: "x" })),
+		});
+		const r = await bad.seatSummary();
+		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
+	});
 });

@@ -98,6 +98,30 @@ export type DiscordApi = {
 		threadId: string,
 		tagIds: string[],
 	) => Promise<Result<void, DomainError>>;
+	/** 分けずに 1 件だけ送る。書き換える前提のメッセージに使う。 */
+	createMessage: (
+		channelId: string,
+		content: string,
+	) => Promise<Result<{ id: string }, DomainError>>;
+	editMessage: (
+		channelId: string,
+		messageId: string,
+		content: string,
+	) => Promise<Result<void, DomainError>>;
+	/** 入力中の表示を出す。Discord は約 10 秒で消すので、続けるなら送り直す。 */
+	typing: (channelId: string) => Promise<Result<void, DomainError>>;
+	/** bot 自身のリアクションを付ける。 */
+	addReaction: (
+		channelId: string,
+		messageId: string,
+		emoji: string,
+	) => Promise<Result<void, DomainError>>;
+	/** bot 自身のリアクションを外す。 */
+	removeReaction: (
+		channelId: string,
+		messageId: string,
+		emoji: string,
+	) => Promise<Result<void, DomainError>>;
 };
 
 export type DiscordRestOptions = {
@@ -325,6 +349,43 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 			const r = await call("PATCH", `/channels/${threadId}`, null, {
 				applied_tags: tagIds,
 			});
+			return r.ok ? ok(undefined) : r;
+		},
+		createMessage: async (channelId, content) =>
+			callJson("POST", `/channels/${channelId}/messages`, sentSchema, {
+				content: content.slice(0, MESSAGE_LIMIT),
+				allowed_mentions: noMentions,
+			}),
+		editMessage: async (channelId, messageId, content) => {
+			const r = await call(
+				"PATCH",
+				`/channels/${channelId}/messages/${messageId}`,
+				null,
+				{
+					content: content.slice(0, MESSAGE_LIMIT),
+					allowed_mentions: noMentions,
+				},
+			);
+			return r.ok ? ok(undefined) : r;
+		},
+		typing: async (channelId) => {
+			const r = await call("POST", `/channels/${channelId}/typing`, null);
+			return r.ok ? ok(undefined) : r;
+		},
+		addReaction: async (channelId, messageId, emoji) => {
+			const r = await call(
+				"PUT",
+				`/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`,
+				null,
+			);
+			return r.ok ? ok(undefined) : r;
+		},
+		removeReaction: async (channelId, messageId, emoji) => {
+			const r = await call(
+				"DELETE",
+				`/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`,
+				null,
+			);
 			return r.ok ? ok(undefined) : r;
 		},
 	};
