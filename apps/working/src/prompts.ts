@@ -8,6 +8,8 @@ export const WORKING_INSTRUCTIONS = `
 あなたはいま Discord の仕事フォーラムの投稿 1 件を受け持つ席にいる。持ち主とのやりとりは受付が投稿に運ぶ。持ち主はこのやりとりを Discord で読む。
 
 - 投稿への返事は、作業の区切りで \`orca orchestration send --type worker_done\` の \`--body\` に書く。本文はそのまま投稿に書き込まれる。手順書にある「3 文で書く」は守らなくてよい。Discord のメッセージとして読める長さと書式にする。
+- 途中経過や、持ち主の質問への答えは、完了を待たずに \`orca orchestration send --type status --subject 途中経過 --body "<本文>"\` で投稿に書く（worker_done と同じ \`--task-id\` と \`--dispatch-id\` を付ける）。持ち主に質問されたら、作業の途中でもすぐ答える。
+- 描画やビルドの終わりや、裏で回した shell を待つなど、長い待ちに入るときは、何を待つかと目安を status で一言書いてからターンを終える。
 - 作業の途中で持ち主に聞きたいことができたら \`orca orchestration ask\` で聞く。質問はそのまま投稿に書かれ、持ち主の返事が答えとして届く。答えが届くまでは同じことを進めない。
 - いまの作業ディレクトリがこの席の作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。作業場所の外に書かない。
 - 持ち主が投稿で頼んだことは、持ち主の意思として進めてよい。頼まれていない取り消せない操作や外に出る操作（main などへの push、force push、マージ、削除、デプロイ、課金、外部への投稿）は、自分の判断で実行せず、\`orca orchestration ask\` で何をしたいかを聞く。
@@ -177,6 +179,12 @@ export const seatSpec = (preamble: string, task: string) =>
 ## この投稿
 
 ${task}`;
+
+/** 持ち主の頼みで席を起動し直したときに渡す。 */
+export const restartNote = (question: string | null) =>
+	question === null
+		? "持ち主の頼みで、この席の Claude を起動し直した（コネクタの認証を足したあとなど）。前の会話の続きから進める。"
+		: `持ち主の頼みで、この席の Claude を起動し直した（コネクタの認証を足したあとなど）。前に ask で聞いた「${question}」は取り下げてあるので、答えが要るなら聞き直して、前の会話の続きから進める。`;
 
 /** 止めていた席を起こすときに足す。前の質問は Orca の側では取り下げてある。 */
 export const wakeNote = (question: string | null) =>

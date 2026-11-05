@@ -14,6 +14,8 @@ export type OrcaError =
 export type SeatMessage = {
 	id: string;
 	type: string;
+	/** 送り手。Dispatch を付けずに送られた status などは、席の端末の handle で引き当てる。 */
+	from: string;
 	subject: string;
 	body: string;
 	dispatchId: string | null;
@@ -128,6 +130,7 @@ const messagesSchema = v.object({
 			v.object({
 				id: v.string(),
 				type: v.string(),
+				from: v.optional(v.nullish(v.string())),
 				subject: v.optional(v.nullish(v.string())),
 				body: v.optional(v.nullish(v.string())),
 				payload: v.optional(
@@ -618,6 +621,7 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 				(r.value.messages ?? []).map((m) => ({
 					id: m.id,
 					type: m.type,
+					from: m.from ?? "",
 					subject: m.subject ?? "",
 					body: m.body ?? "",
 					dispatchId: m.payload?.dispatchId ?? null,

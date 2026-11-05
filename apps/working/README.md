@@ -43,6 +43,8 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | 新しい投稿（仕事チャンネルの依頼から立てたものも） | 席を作り（`worker-start`）、依頼を渡す。タグは `作業中` |
 | 投稿への返事 | その席に渡す（`send`）。作業中なら席のターンの終わりに届く |
 | 席の質問（`ask`）、取り消せない操作で止まったとき | 投稿に書いてタグを `決めてほしい` にし、返事を答えとして返す（`reply`） |
+| 席の途中経過（`send --type status`） | そのまま投稿に書く。状態とタグは変えない |
+| 投稿に「起動し直して」と書く | 席の Claude を止め、同じ worktree で `--continue` で起こす（コネクタの認証を足したあとなどに使う） |
 | 席の完了報告（`worker_done`） | 投稿に書いてタグを `完了` にし、記憶に 1 行残し、席を閉じる |
 | 完了のあとにまた書く | 同じ投稿に新しい席を作り、これまでのやりとり（最大 100 件）を渡す |
 | Mac でやる必要がある | 席が申し送り issue を書いて報告する。タグを `引き継ぎ` にし、席を閉じる |
@@ -58,6 +60,8 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 席は投稿ごとに作る。`worktree create` で `seat-<投稿の ID>` の worktree を作り、その realpath を Claude CLI の信頼済みの場所（`.claude.json` の `projects[<realpath>].hasTrustDialogAccepted`）に登録してから、その worktree に `claude --permission-mode auto` の端末を作り、15 秒待ってから `worker-start --terminal` で依頼を渡す。待つのは、claude.ai のコネクタ（chimera など）が Claude の起動から遅れて読み込まれ、すぐに渡すと最初のターンに間に合わないため。信頼していない場所の Claude は確認の画面で止まり、Orca は席を始めない。登録は Claude CLI と同じ `.claude.json.lock` のロックを取って書くので、動いている席の Claude の書き込みと混ざらない。10 秒より古いロック（落ちたプロセスの残り）は外して進む。hook は worktree の名前から投稿を引く。Mac の Orca から接続すると、同じ席と Claude の画面が見える。
 - 席を始められなかったときは、止まった所（作業場所の確認、Claude の起動、Orca の席の作成など）を短く投稿に書く。
 - 受付は `orchestration check --wait` で席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次に起動したときに受け取る。
+- 席の Claude が `worker_done` を送らずにターンを終えたとき、Orca の知らせ（escalation）に付く端末の末尾に裏で動いている shell やタスク（「1 shell still running」など）が出ていれば、待っているだけとみなして投稿に書かない。それ以外は「作業が途中で止まりました」と書いて `決めてほしい` にする。
+- 「起動し直して」「再起動して」（全角・末尾の句点は許す）だけの返事は、席の Claude への返事にせず起動し直す。席が無ければふつうの返事として扱う。
 - 同時に Claude を動かしておく席は `SEAT_LIMIT`（既定は 6）まで。上限を超えた投稿には「順番待ち」と書き、空いたら古い順に始める。止めた席と順番待ちの席は数えない。
 - `決めてほしい` のまま `SEAT_SLEEP_AFTER_MINUTES`（既定は 120 分）たった席は、Claude だけ止める（worktree と会話は残す）。返事が来たら、その worktree で `claude --permission-mode auto --continue` の端末を作って `worker-start --terminal` で渡し、前の会話のまま起こす。
 - 席を閉じるときは、席の Claude を止め、worktree を消す。席の Claude には、完了にする前に commit と push を済ませるよう指示してある。

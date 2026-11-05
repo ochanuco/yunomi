@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { ok } from "@yunomi/core";
 import { describe, expect, it } from "vitest";
@@ -54,8 +54,7 @@ const setup = async () => {
 	});
 	const runHook = (threadId: string, input: Record<string, unknown>) => {
 		const seatDir = join(seatsDir, `seat-${threadId}`);
-		return spawnSync(process.execPath, [HOOK], {
-			input: JSON.stringify({ ...input, cwd: seatDir }),
+		const child = spawn(process.execPath, [HOOK], {
 			env: {
 				PATH: process.env.PATH ?? "",
 				HOME: join(root, "home"),
@@ -63,16 +62,26 @@ const setup = async () => {
 				[GUARD_ENV.seatsDir]: seatsDir,
 				CLAUDE_PROJECT_DIR: seatDir,
 			},
-			encoding: "utf8",
 		});
+		let stdout = "";
+		child.stdout.setEncoding("utf8").on("data", (c: string) => {
+			stdout += c;
+		});
+		child.stdin.end(JSON.stringify({ ...input, cwd: seatDir }));
+		return new Promise<{ status: number | null; stdout: string }>(
+			(res, rej) => {
+				child.on("error", rej);
+				child.on("close", (status) => res({ status, stdout }));
+			},
+		);
 	};
 	/** PreToolUse の答え。hook が何も返さなければ auto モードに任せる（pass）。 */
-	const tool = (
+	const tool = async (
 		threadId: string,
 		tool_name: string,
 		tool_input: Record<string, unknown>,
 	) => {
-		const r = runHook(threadId, {
+		const r = await runHook(threadId, {
 			hook_event_name: "PreToolUse",
 			tool_name,
 			tool_input,
@@ -82,18 +91,20 @@ const setup = async () => {
 		return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision as string;
 	};
 	/** auto モードが止めたときに Claude CLI が呼ぶ PermissionDenied。 */
-	const denied = (
+	const denied = async (
 		threadId: string,
 		tool_name: string,
 		tool_input: Record<string, unknown>,
 	) =>
-		runHook(threadId, {
-			hook_event_name: "PermissionDenied",
-			tool_name,
-			tool_input,
-			tool_use_id: "u1",
-			reason: "main への push は持ち主の確認が要る",
-		}).status;
+		(
+			await runHook(threadId, {
+				hook_event_name: "PermissionDenied",
+				tool_name,
+				tool_input,
+				tool_use_id: "u1",
+				reason: "main への push は持ち主の確認が要る",
+			})
+		).status;
 	const bash = (threadId: string, command: string) =>
 		tool(threadId, "Bash", { command });
 	const open = async (threadId: string) => {
@@ -104,11 +115,12 @@ const setup = async () => {
 	return { d, o, seats, intake, root, seatsDir, bash, tool, denied, open };
 };
 
-describe("席の Claude の操作と hook", () => {
+// 1 回の hook は node の起動と TypeScript の型の除去から始まる。CI ではほかのパッケージのテストと CPU を取り合い、1 回で 0.5 秒ほどかかる
+describe("席の Claude の操作と hook", { timeout: 20_000 }, () => {
 	it("秘密に触らない操作は hook では決めず、auto モードに任せる", async () => {
 		const s = await setup();
 		await s.open("p1");
-		for (const [name, input] of [
+		const cases = [
 			["Bash", { command: "git push -u origin HEAD:dev/x" }],
 			["Bash", { command: 'orca orchestration ask --question "どうしますか"' }],
 			["ToolSearch", { query: "chimera", max_results: 5 }],
@@ -116,18 +128,23 @@ describe("席の Claude の操作と hook", () => {
 			["mcp__claude_ai_chimera__list_catalog", {}],
 			["mcp__claude_ai_Gmail__search_threads", { query: "x" }],
 			["Write", { file_path: join(s.seatsDir, "seat-p1", "a.ts") }],
-		] as const) {
-			expect(s.tool("p1", name, input), name).toBe("pass");
-		}
+		] as const;
+		// どれも hook が何も記録しない操作なので、並べて起動しても答えは順によらない
+		const answers = await Promise.all(
+			cases.map(([name, input]) => s.tool("p1", name, input)),
+		);
+		cases.forEach(([name], i) => {
+			expect(answers[i], name).toBe("pass");
+		});
 	});
 
 	it("秘密情報の読み出しと、許可の記録の書き換えは hook で止める", async () => {
 		const s = await setup();
 		await s.open("p1");
-		expect(s.bash("p1", "printenv")).toBe("deny");
-		expect(s.bash("p1", "cat ~/.claude/.credentials.json")).toBe("deny");
+		expect(await s.bash("p1", "printenv")).toBe("deny");
+		expect(await s.bash("p1", "cat ~/.claude/.credentials.json")).toBe("deny");
 		expect(
-			s.tool("p1", "Write", {
+			await s.tool("p1", "Write", {
 				file_path: join(s.root, "state", "guard", "grants", "p1.json"),
 			}),
 		).toBe("deny");
@@ -138,7 +155,7 @@ describe("席の Claude の操作と hook", () => {
 		const seat = await s.open("p1");
 		await s.open("p2");
 		const input = { command: "git push origin HEAD:main", description: "push" };
-		expect(s.denied("p1", "Bash", input)).toBe(0);
+		expect(await s.denied("p1", "Bash", input)).toBe(0);
 		await s.intake.onSeatMessage(
 			seatMessage({
 				type: "question",
@@ -152,9 +169,9 @@ describe("席の Claude の操作と hook", () => {
 		expect(asked).toContain("auto モードが止めた");
 
 		await s.intake.handle(say("p1", "許可"));
-		expect(s.bash("p2", "git push origin HEAD:main")).toBe("pass");
-		expect(s.bash("p1", "git push origin HEAD:main")).toBe("allow");
-		expect(s.bash("p1", "git push origin HEAD:main")).toBe("pass");
+		expect(await s.bash("p2", "git push origin HEAD:main")).toBe("pass");
+		expect(await s.bash("p1", "git push origin HEAD:main")).toBe("allow");
+		expect(await s.bash("p1", "git push origin HEAD:main")).toBe("pass");
 	});
 
 	it("Bash 以外の道具も、許可は引数のキーの順によらず 1 回だけ効く", async () => {
@@ -165,7 +182,7 @@ describe("席の Claude の操作と hook", () => {
 			subject: "見積もり",
 			body: "送ります",
 		};
-		s.denied("p1", "mcp__claude_ai_Gmail__send_message", input);
+		await s.denied("p1", "mcp__claude_ai_Gmail__send_message", input);
 		await s.intake.onSeatMessage(
 			seatMessage({
 				type: "question",
@@ -182,18 +199,18 @@ describe("席の Claude の操作と hook", () => {
 			subject: "見積もり",
 			to: "a@example.com",
 		};
-		expect(s.tool("p1", "mcp__claude_ai_Gmail__send_message", reordered)).toBe(
-			"allow",
-		);
-		expect(s.tool("p1", "mcp__claude_ai_Gmail__send_message", input)).toBe(
-			"pass",
-		);
+		expect(
+			await s.tool("p1", "mcp__claude_ai_Gmail__send_message", reordered),
+		).toBe("allow");
+		expect(
+			await s.tool("p1", "mcp__claude_ai_Gmail__send_message", input),
+		).toBe("pass");
 	});
 
 	it("hook が止めた秘密の読み出しも、許可の後に 1 回だけ通す", async () => {
 		const s = await setup();
 		const seat = await s.open("p1");
-		expect(s.bash("p1", "gh auth status --show-token")).toBe("deny");
+		expect(await s.bash("p1", "gh auth status --show-token")).toBe("deny");
 		await s.intake.onSeatMessage(
 			seatMessage({
 				type: "question",
@@ -202,7 +219,7 @@ describe("席の Claude の操作と hook", () => {
 			}),
 		);
 		await s.intake.handle(say("p1", "許可"));
-		expect(s.bash("p1", "gh auth status --show-token")).toBe("allow");
-		expect(s.bash("p1", "gh auth status --show-token")).toBe("deny");
+		expect(await s.bash("p1", "gh auth status --show-token")).toBe("allow");
+		expect(await s.bash("p1", "gh auth status --show-token")).toBe("deny");
 	});
 });
