@@ -43,6 +43,10 @@ const CLAUDE_ENV_KEYS = [
 	"GIT_AUTHOR_EMAIL",
 	"GIT_COMMITTER_NAME",
 	"GIT_COMMITTER_EMAIL",
+	// Working の記憶の口（Worker の /v1/partners/:partnerId/working/memory）を呼ぶ
+	"YUNOMI_URL",
+	"CF_ACCESS_CLIENT_ID",
+	"CF_ACCESS_CLIENT_SECRET",
 ] as const;
 
 export const claudeEnv = (

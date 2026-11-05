@@ -12,3 +12,6 @@ services:
     image: ghcr.io/ochanuco/yunomi-gateway:sha-0000000
     restart: unless-stopped
     env_file: .env.prod
+    # Working 受付（apps/working/compose.example.yaml）に WORKING_URL=http://host.docker.internal:8180/events で届く
+    extra_hosts:
+      - host.docker.internal:host-gateway

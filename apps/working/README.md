@@ -8,6 +8,7 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | --- | --- |
 | `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、`gh` を入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
 | `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、system prompt として標準出力に出す |
+| `compose.example.yaml` | 常駐させるときの compose の雛形 |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Claude CLI で作業する |
 | `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
 | `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
@@ -94,11 +95,46 @@ Bash は道具の名前と引数で読むので、書き方を変えれば抜け
 | `HANDOFF_DIR` | いいえ | `prompt.md` と `issue-template.md` の置き場所。既定は `~/handoff` |
 | `GH_TOKEN` | いいえ | Claude CLI の `gh` と `git push` が使う書き込みトークン |
 | `GIT_AUTHOR_NAME` など | いいえ | Claude CLI の commit の作者。`GIT_AUTHOR_*` と `GIT_COMMITTER_*` を渡す |
+| `YUNOMI_URL` | いいえ | Worker の URL。Claude CLI が Working の記憶の口（`/v1/partners/:partnerId/working/memory`）を呼ぶ |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | いいえ | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる |
 | `CLAUDE_BIN` | いいえ | Claude CLI のパス。既定は `claude` |
 | `CLAUDE_TIMEOUT_MS` | いいえ | 1 回の作業の上限。既定は 30 分 |
 | `LOG_LEVEL` | いいえ | `debug` / `info` / `warn` / `error`。既定は `info` |
 
 bot には仕事フォーラムでの投稿の作成・メッセージ送信・スレッドの管理（タグの付け替え）と、メッセージ履歴を読む権限が要る。
+
+## 配備
+
+main への push で `.github/workflows/working-image.yml` が `ghcr.io/ochanuco/yunomi-working:main` と `:sha-<short>` を公開する。PR ではビルドだけ確かめる。
+
+gateway と同じホストに、gateway とは別の compose project で置く（`compose.example.yaml`）。gateway を更新しても Working の作業は止まらない。
+
+- 受付は docker0 のゲートウェイ（`172.17.0.1:8180`）にだけ公開する。gateway は `extra_hosts: host.docker.internal:host-gateway` を足し、`WORKING_URL=http://host.docker.internal:8180/events` で送る。
+- `restart: unless-stopped` で、ホストの再起動後も受付と `orca serve` が上がる。
+- volume は 4 つ（上の表）。コンテナを作り直しても、ログイン・pairing・投稿との対応・作業用の clone が残る。
+
+### 初回だけ人が行うこと
+
+#### Claude CLI のログイン
+
+```sh
+docker exec -it <コンテナ名> claude   # /login で表示された URL を開いて承認し、/exit
+docker exec <コンテナ名> claude auth status
+```
+
+ログイン情報は `yunomi-working-claude` の volume に残る。期限が切れたら同じ手順でやり直す。
+
+#### Mac の Orca との pairing
+
+`--pairing-address` は Mac から届くホストのアドレスとポートにする。コンテナのログに出る pairing URL を Mac の Orca に渡す。
+
+```sh
+code=$(docker logs <コンテナ名> 2>&1 | grep '^Pairing URL:' | tail -1 | sed 's/^Pairing URL: //')
+orca environment add --name working --pairing-code "$code"   # Mac で実行する
+orca status --environment working   # runtimeConnectionState: connected
+```
+
+pairing のコードは端末の認証情報なので、ログや Issue に貼らない。pairing 済みの端末は `yunomi-working-orca` の volume に残る。
 
 ## 試し方
 
