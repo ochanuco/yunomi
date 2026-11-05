@@ -327,6 +327,31 @@ importers:
         specifier: ^4.149.0
         version: 4.151.1(@cloudflare/workers-types@5.20261010.1)(@types/node@24.19.2)
 
+  apps/working:
+    dependencies:
+      '@yunomi/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@yunomi/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      tsx:
+        specifier: ^4.21.0
+        version: 4.23.15
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   evals:
     dependencies:
       '@yunomi/conversation':

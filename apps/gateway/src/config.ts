@@ -18,6 +18,7 @@ const envSchema = v.pipe(
 		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
 		WORKING_URL: v.optional(v.pipe(v.string(), v.url())),
+		WORKING_TOKEN: v.optional(nonEmpty),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -32,6 +33,10 @@ const envSchema = v.pipe(
 	v.check(
 		(e) => Boolean(e.KUKICHA_URL) === Boolean(e.KUKICHA_TOKEN),
 		"KUKICHA_URL と KUKICHA_TOKEN は両方指定する",
+	),
+	v.check(
+		(e) => Boolean(e.WORKING_URL) === Boolean(e.WORKING_TOKEN),
+		"WORKING_URL と WORKING_TOKEN は両方指定する",
 	),
 );
 
@@ -52,8 +57,8 @@ export type GatewayConfig = {
 	ownerUserId: string | null;
 	/** この Discord カテゴリの発言は Worker に送らず Working へ回す。 */
 	workCategoryIds: ReadonlySet<string>;
-	/** Working 受付の URL。未設定なら仕事カテゴリの発言は捨てる。 */
-	workingUrl: string | null;
+	/** Working 受付の URL と共有トークン。未設定なら仕事カテゴリの発言は捨てる。 */
+	working: { url: string; token: string } | null;
 	logLevel: LogLevel;
 };
 
@@ -101,7 +106,10 @@ export const loadConfig = (
 				.map((id) => id.trim())
 				.filter((id) => id !== ""),
 		),
-		workingUrl: e.WORKING_URL ?? null,
+		working:
+			e.WORKING_URL && e.WORKING_TOKEN
+				? { url: e.WORKING_URL, token: e.WORKING_TOKEN }
+				: null,
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };

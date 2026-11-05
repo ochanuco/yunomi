@@ -18,7 +18,7 @@ describe("loadConfig", () => {
 				avatarDir: null,
 				ownerUserId: null,
 				workCategoryIds: new Set(),
-				workingUrl: null,
+				working: null,
 				logLevel: "info",
 			},
 		});
@@ -88,16 +88,22 @@ describe("loadConfig", () => {
 		expect(loadConfig({ ...base, KUKICHA_TOKEN: "tok" }).ok).toBe(false);
 	});
 
-	it("仕事カテゴリはカンマ区切りで読み、WORKING_URL は任意", () => {
+	it("仕事カテゴリはカンマ区切りで読み、WORKING_URL と WORKING_TOKEN は組で任意", () => {
 		const r = loadConfig({
 			...base,
 			WORK_CATEGORY_IDS: "10, 20,,",
 			WORKING_URL: "http://working.lan:8080/inbox",
+			WORKING_TOKEN: "shared",
 		});
 		expect(r.ok && r.value).toMatchObject({
 			workCategoryIds: new Set(["10", "20"]),
-			workingUrl: "http://working.lan:8080/inbox",
+			working: { url: "http://working.lan:8080/inbox", token: "shared" },
 		});
-		expect(loadConfig({ ...base, WORKING_URL: "nope" }).ok).toBe(false);
+		expect(
+			loadConfig({ ...base, WORKING_URL: "nope", WORKING_TOKEN: "shared" }).ok,
+		).toBe(false);
+		expect(loadConfig({ ...base, WORKING_URL: "http://w/inbox" }).ok).toBe(
+			false,
+		);
 	});
 });
