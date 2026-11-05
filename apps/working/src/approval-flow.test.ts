@@ -142,3 +142,46 @@ describe("席の Claude の取り消せない操作", () => {
 		expect(s.bash("p1", "git push origin main")).toBe("allow");
 	});
 });
+
+describe("Bash 以外の道具の許可", () => {
+	it("コネクタの道具を止めて投稿で聞き、許可の後に同じ引数なら 1 回だけ通す。キーの順が違っても同じ操作とみなす", async () => {
+		const s = await setup();
+		const seat = await s.open("p1");
+		const input = { query: "請求書", max_results: 5 };
+		expect(s.tool("p1", "mcp__claude_ai_Gmail__search_threads", input)).toBe(
+			"deny",
+		);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat?.dispatchId ?? null,
+				body: "メールを探してよいですか",
+			}),
+		);
+		expect(s.d.sentTo("p1").at(-1)).toContain(
+			"mcp__claude_ai_Gmail__search_threads",
+		);
+		await s.intake.handle(say("p1", "許可"));
+		const reordered = { max_results: 5, query: "請求書" };
+		expect(
+			s.tool("p1", "mcp__claude_ai_Gmail__search_threads", reordered),
+		).toBe("allow");
+		expect(s.tool("p1", "mcp__claude_ai_Gmail__search_threads", input)).toBe(
+			"deny",
+		);
+	});
+
+	it("ToolSearch と chimera の描く道具は聞かずに通し、評価は止める", async () => {
+		const s = await setup();
+		await s.open("p1");
+		expect(
+			s.tool("p1", "ToolSearch", { query: "chimera", max_results: 5 }),
+		).toBe("allow");
+		expect(
+			s.tool("p1", "mcp__claude_ai_chimera__create_request", { recipe: "x" }),
+		).toBe("allow");
+		expect(
+			s.tool("p1", "mcp__claude_ai_chimera__set_evaluation", { id: "g1" }),
+		).toBe("deny");
+	});
+});

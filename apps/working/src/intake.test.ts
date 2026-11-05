@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { openApprovalStore } from "./approval-store.ts";
 import { grantPathOf, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
-import { createIntake, type IntakeDeps } from "./intake.ts";
+import {
+	createIntake,
+	type IntakeDeps,
+	seatStartFailedText,
+} from "./intake.ts";
 import { silentLogger } from "./logger.ts";
 import { openSeatStore } from "./seat-store.ts";
 import {
@@ -549,5 +553,41 @@ describe("朝会の席", () => {
 		expect(s.standup).toEqual([{ text: "```json\n{}\n```", blocked: 1 }]);
 		expect(s.seats.get(id)).toBeNull();
 		expect(s.o.opsOf("removeWorktree")).toEqual([`/seats/seat-${id}`]);
+	});
+});
+
+describe("席を始められなかったとき", () => {
+	it("止まった所が分かる短い文を投稿に書き、Orca の理由の文は出さない", async () => {
+		const orca = fakeOrca();
+		vi.mocked(orca.orca.startSeat).mockResolvedValueOnce({
+			ok: false,
+			error: {
+				type: "OrcaFailed",
+				command: "orchestration worker-start",
+				reason:
+					"Error: start_failed: agent_readiness: Agent startup blocked: agent-trust-workspace /home/worker/x",
+			},
+		});
+		const s = await setup({ orca });
+		s.d.addThread("p1", "x");
+		await s.intake.handle(say("p1", "頼みます", { first: true }));
+		expect(s.d.sentTo("p1")).toEqual([
+			"席を始められませんでした（Claude の作業場所の確認で止まった）。返事をくれれば、もう一度始めます。",
+		]);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-decide"]);
+	});
+
+	it("理由ごとに文を分ける", () => {
+		const of = (type: "OrcaFailed" | "SeatTrustFailed", reason: string) =>
+			seatStartFailedText({ type, command: "c", reason });
+		expect(of("SeatTrustFailed", "lock")).toContain(
+			"Claude の作業場所を信頼済みにできなかった",
+		);
+		expect(
+			of("OrcaFailed", "start_failed: agent_readiness: timeout"),
+		).toContain("Claude が起動しきらなかった");
+		expect(of("OrcaFailed", "selector_not_found")).toContain(
+			"Orca が席を作れなかった",
+		);
 	});
 });

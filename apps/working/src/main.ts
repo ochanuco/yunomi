@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { openApprovalStore } from "./approval-store.ts";
 import { childEnv, createSummarizer } from "./claude-cli.ts";
+import { claudeConfigPathOf, trustWorkspace } from "./claude-trust.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
 import { spawnExec } from "./exec.ts";
@@ -87,6 +88,7 @@ const orca = createOrcaCli({
 	seatsRepo: cfg.seatsRepo,
 	seatsDir: cfg.seatsDir,
 	specDir: join(cfg.stateDir, "specs"),
+	trust: (dir) => trustWorkspace(claudeConfigPathOf(process.env), dir),
 	logger,
 });
 const ORCA_READY_TIMEOUT_MS = 180_000;

@@ -56,6 +56,59 @@ describe("classify: Bash 以外の道具", () => {
 	});
 });
 
+describe("classify: ToolSearch と MCP の道具", () => {
+	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
+	const free = (tool: string) => classify({ tool, target: "{}" }, ctx);
+	it("ToolSearch は道具の説明を読み込むだけなので通す", () => {
+		expect(free("ToolSearch")).toBeNull();
+	});
+	it("chimera の読み取りと絵を描く・加工する道具は通す", () => {
+		for (const name of [
+			"get_generation",
+			"list_catalog",
+			"get_catalog_pose",
+			"create_request",
+			"derive_request",
+			"plain_render",
+			"redraw_generation",
+			"deliver_generation",
+			"dof_generation",
+			"lens_generation",
+			"stage_generation",
+		]) {
+			expect(free(`mcp__claude_ai_chimera__${name}`)).toBeNull();
+		}
+	});
+	it("chimera の持ち主が判断する道具と、分類していない道具は止める", () => {
+		for (const name of [
+			"set_evaluation",
+			"set_decision",
+			"record_publication",
+			"promote_to_pose",
+			"promote_to_profile",
+			"set_pose_reference",
+		]) {
+			expect(free(`mcp__claude_ai_chimera__${name}`)).toContain("判断");
+		}
+		expect(free("mcp__claude_ai_chimera__create_experiment")).not.toBeNull();
+	});
+	it("ほかのコネクタは読み取りも止め、未知の MCP の道具も止める", () => {
+		for (const tool of [
+			"mcp__claude_ai_Gmail__search_threads",
+			"mcp__claude_ai_Gmail__send_message",
+			"mcp__claude_ai_Google_Drive__read_file_content",
+			"mcp__claude_ai_Google_Calendar__list_events",
+			"mcp__claude_ai_Google_Sheets__get_values",
+			"mcp__claude_ai_Claude_Docs__read",
+			"mcp__claude_ai_Cloudflare_Developer_Platform__workers_list",
+			"mcp__posthog__exec",
+			"mcp__someone__get_thing",
+		]) {
+			expect(free(tool)).not.toBeNull();
+		}
+	});
+});
+
 describe("decide", () => {
 	it("許可は同じ操作に 1 回だけ使え、2 回目は止めて記録する", () => {
 		const dir = tempDir();

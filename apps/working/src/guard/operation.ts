@@ -11,6 +11,21 @@ export const absPath = (p: string, cwd: string, home: string): string => {
 	return isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
 };
 
+/**
+ * キーの順によらない JSON。Bash 以外の道具は引数の JSON を操作として許可と突き合わせるので、
+ * 同じ引数ならキーの並びが変わっても同じ操作とみなす。
+ */
+export const canonicalJson = (value: unknown): string => {
+	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+	if (typeof value === "object" && value !== null) {
+		const entries = Object.entries(value as Record<string, unknown>)
+			.filter(([, v]) => v !== undefined)
+			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+		return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+	}
+	return JSON.stringify(value) ?? "null";
+};
+
 export const operationOf = (
 	tool: string,
 	input: Record<string, unknown>,
@@ -26,7 +41,7 @@ export const operationOf = (
 		const dir = absPath(str(input.path) ?? cwd, cwd, home);
 		return { tool, target: `${dir} ${str(input.pattern) ?? ""}`.trim() };
 	}
-	return { tool, target: JSON.stringify(input) };
+	return { tool, target: canonicalJson(input) };
 };
 
 export const sameOperation = (a: Operation, b: Operation) =>

@@ -9,6 +9,51 @@ import {
 } from "./operation.ts";
 
 const READERS = new Set(["Read", "Glob", "Grep"]);
+/** 道具の説明を読み込むだけの道具。 */
+const LOADERS = new Set(["ToolSearch"]);
+
+const CHIMERA = "mcp__claude_ai_chimera__";
+/** chimera で絵を描く・加工する道具。生成し直せるので聞かずに通す。 */
+const CHIMERA_DRAW = new Set([
+	"create_request",
+	"derive_request",
+	"plain_render",
+	"redraw_generation",
+	"deliver_generation",
+	"dof_generation",
+	"lens_generation",
+	"lighting_generation",
+	"photo_generation",
+	"saturation_generation",
+	"stage_generation",
+]);
+/** chimera で持ち主の判断にあたる道具。評価や採用、公開の記録は持ち主が決める。 */
+const CHIMERA_JUDGEMENT = new Set([
+	"set_evaluation",
+	"set_decision",
+	"record_publication",
+	"promote_to_pose",
+	"promote_to_profile",
+	"set_pose_reference",
+]);
+
+const classifyMcp = (tool: string): string => {
+	if (!tool.startsWith(CHIMERA)) {
+		// claude.ai のコネクタはメール・カレンダー・ドライブなど私的な情報に届くので、読み取りも聞く
+		return tool.startsWith("mcp__claude_ai_")
+			? "ログインしたアカウントのコネクタ（私的な情報に届く）"
+			: "聞かずに使える MCP の道具に入っていない";
+	}
+	const name = tool.slice(CHIMERA.length);
+	if (CHIMERA_JUDGEMENT.has(name)) return "chimera の持ち主が判断する操作";
+	return "chimera のこの道具は聞かずに使える道具に入っていない";
+};
+
+const chimeraFree = (tool: string) => {
+	if (!tool.startsWith(CHIMERA)) return false;
+	const name = tool.slice(CHIMERA.length);
+	return /^(get|list)_/.test(name) || CHIMERA_DRAW.has(name);
+};
 const WRITERS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /** 聞かずに実行してよいかを、道具ごとに調べる。止めるときは理由を返す。 */
@@ -26,6 +71,8 @@ export const classify = (op: Operation, ctx: GuardContext): string | null => {
 			? null
 			: "作業場所の外への書き込み";
 	}
+	if (LOADERS.has(op.tool) || chimeraFree(op.tool)) return null;
+	if (op.tool.startsWith("mcp__")) return classifyMcp(op.tool);
 	return `${op.tool} は聞かずに使える道具に入っていない`;
 };
 

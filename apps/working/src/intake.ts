@@ -15,7 +15,7 @@ import type { Ledger, Pending } from "./guard/ledger.ts";
 import type { Operation } from "./guard/operation.ts";
 import { createKeyedQueue } from "./keyed-queue.ts";
 import type { Logger } from "./logger.ts";
-import type { Orca, SeatMessage } from "./orca.ts";
+import type { Orca, OrcaError, SeatMessage } from "./orca.ts";
 import {
 	fallbackTitle,
 	forumPostBody,
@@ -77,6 +77,22 @@ const RESTARTED_TEXT =
 	"受付を作り直したので、作業が途中で止まりました。返事をくれれば、そこから続けます。";
 const STANDUP_NO_ASK =
 	"朝会では持ち主に聞けない。聞きたいことは決めてほしいことに入れて、JSON で返す。";
+
+/**
+ * 席を始められなかったときに投稿に書く文。持ち主が次に何をすればよいか分かるよう、止まった所だけを短く書く。
+ * Orca の理由の文はパスや ID を含むので、そのまま出さない。
+ */
+export const seatStartFailedText = (error: OrcaError) => {
+	const where =
+		error.type === "SeatTrustFailed"
+			? "Claude の作業場所を信頼済みにできなかった"
+			: error.reason.includes("agent-trust-workspace")
+				? "Claude の作業場所の確認で止まった"
+				: error.reason.includes("agent_readiness")
+					? "Claude が起動しきらなかった"
+					: "Orca が席を作れなかった";
+	return `席を始められませんでした（${where}）。返事をくれれば、もう一度始めます。`;
+};
 
 const ALIVE = new Set(["working", "asking", "waiting"]);
 
@@ -272,7 +288,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				await deps.seats.delete(threadId);
 			}
 			if (!seat.standup) {
-				await deps.discord.send(threadId, FAILURE_TEXT);
+				await deps.discord.send(threadId, seatStartFailedText(r.error));
 				await setStatus(threadId, "決めてほしい");
 			}
 			return;
