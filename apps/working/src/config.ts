@@ -40,7 +40,7 @@ export type WorkingConfig = {
 	/** Claude CLI の作業ディレクトリ。セッションはこの場所に紐づくので変えない。 */
 	workDir: string;
 	personaScript: string;
-	/** Mac への引き継ぎの指示（prompt.md）と申し送りの雛形（issue-template.md）の置き場所。 */
+	/** Mac への引き継ぎの指示（prompt.md と issue-template.md）を置いたディレクトリ。 */
 	handoffDir: string;
 	claudeBin: string;
 	claudeTimeoutMs: number;

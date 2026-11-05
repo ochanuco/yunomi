@@ -1,0 +1,22 @@
+{
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "/usr/local/bin/node /opt/yunomi-guard/hook.ts",
+						"timeout": 30
+					}
+				]
+			}
+		]
+	},
+	"allowManagedHooksOnly": true,
+	"allowManagedPermissionRulesOnly": true,
+	"disableAllHooks": false,
+	"permissions": {
+		"disableBypassPermissionsMode": "disable"
+	}
+}

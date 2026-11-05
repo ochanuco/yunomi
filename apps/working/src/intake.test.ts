@@ -6,6 +6,7 @@ import type { ChannelInfo, DiscordApi, PostedMessage } from "./discord-rest.ts";
 import { createIntake } from "./intake.ts";
 import { silentLogger } from "./logger.ts";
 import type { SessionStore } from "./session-store.ts";
+import { memoryApprovals, tempLedger } from "./test-support.ts";
 
 const BOT = "bot";
 const TEXT = "text";
@@ -80,7 +81,7 @@ const fakeDiscord = () => {
 		),
 		send: async (channelId, content, replyTo) => {
 			sent.push({ channelId, content, ...(replyTo ? { replyTo } : {}) });
-			return ok(undefined);
+			return ok({ messageIds: [`sent${sent.length}`] });
 		},
 		setTags: async (threadId, tagIds) => {
 			const ch = channels.get(threadId);
@@ -148,6 +149,8 @@ const setup = (reply?: (prompt: string) => string) => {
 		discord: d.api,
 		claude: c.runner,
 		sessions,
+		approvals: memoryApprovals(),
+		ledger: tempLedger(),
 		botUserId: BOT,
 		ownerUserIds: new Set(["u1"]),
 		workTextChannelId: TEXT,

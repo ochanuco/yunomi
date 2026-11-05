@@ -3,12 +3,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createClaudeCli, READ_ONLY_POLICY } from "./claude-cli.ts";
+import { openApprovalStore } from "./approval-store.ts";
+import { claudeEnv, createClaudeCli, WORK_POLICY } from "./claude-cli.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
+import { guardDirOf } from "./guard/env.ts";
+import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
 import { createLogger } from "./logger.ts";
-import { systemPrompt } from "./prompts.ts";
+import { buildSystemPrompt } from "./prompts.ts";
 import { createWorkingServer } from "./server.ts";
 import { openSessionStore } from "./session-store.ts";
 
@@ -29,10 +32,10 @@ await mkdir(cfg.stateDir, { recursive: true });
 await mkdir(cfg.workDir, { recursive: true });
 await writeFile(
 	systemPromptFile,
-	systemPrompt({
+	buildSystemPrompt({
 		persona: persona.stdout,
 		handoffPrompt: await readFile(join(cfg.handoffDir, "prompt.md"), "utf8"),
-		handoffTemplate: await readFile(
+		issueTemplate: await readFile(
 			join(cfg.handoffDir, "issue-template.md"),
 			"utf8",
 		),
@@ -53,9 +56,15 @@ const intake = createIntake({
 		cwd: cfg.workDir,
 		systemPromptFile,
 		timeoutMs: cfg.claudeTimeoutMs,
-		policy: READ_ONLY_POLICY,
+		policy: WORK_POLICY,
+		env: claudeEnv(process.env, {
+			workDir: cfg.workDir,
+			stateDir: cfg.stateDir,
+		}),
 	}),
 	sessions: await openSessionStore(cfg.stateDir),
+	approvals: await openApprovalStore(cfg.stateDir),
+	ledger: createLedger(guardDirOf(cfg.stateDir)),
 	botUserId: me.value.id,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,
