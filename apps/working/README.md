@@ -8,6 +8,8 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | --- | --- |
 | `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）と Claude CLI を入れる。人格の元ファイルも入れる |
 | `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、system prompt として標準出力に出す |
+| `handoff/` | Mac への引き継ぎ。`prompt.md` と `issue-template.md` はイメージの `~/handoff` に入り、system prompt に入る |
+| `compose.example.yaml` | 常駐させるときの compose の雛形 |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Claude CLI で作業する |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
 
@@ -20,6 +22,7 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
 | `yunomi-working-state` | `/home/worker/state` | フォーラム投稿とセッションの対応（`threads.json`）、組み立てた system prompt |
+| `yunomi-working-work` | `/home/worker/work` | Claude CLI の作業ディレクトリ。作業用の clone |
 
 `CLAUDE_CONFIG_DIR` を `~/.claude` に向けているので、通常は `~/.claude.json` に置かれる設定も volume に入る。
 
@@ -32,6 +35,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 仕事テキストチャンネルで Yukarin 宛て（Yukarin か bot ロールへのメンション、Yukarin の発言への返信）の依頼が来たら、仕事フォーラムに投稿を立てる。件名は依頼の要約（Claude CLI の haiku で作り、失敗したら依頼の 1 行目）、本文は元の依頼と元メッセージへのリンク。テキストチャンネルには投稿へのリンクを返信で返す。
 - 仕事フォーラムに人が直接投稿したときは、その投稿で作業を始める。
 - 投稿内の返事は、投稿に対応するセッションに `claude -p --resume` で渡す。セッションが見つからなければ、投稿のやりとり（最大 100 件）を読ませて新しいセッションで続ける。
+- system prompt は `persona.sh` の出力、仕事のしかた、`handoff/prompt.md`、`handoff/issue-template.md` の順に並べる。起動のたびに `STATE_DIR/system-prompt.md` に書き直す。
 - 返事は同じ投稿に書く。同じ投稿への発言は 1 件ずつ順に処理する。
 - `WORKING_OWNER_DISCORD_USER_IDS` に入っている人の発言だけを扱う。Yukarin 自身、ほかの人、ほかの bot の発言は、依頼・フォーラムの投稿・投稿内の返事のどれでも無視する。
 
@@ -56,11 +60,53 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | `STATE_DIR` | いいえ | 対応表の置き場所。既定は `~/state` |
 | `WORK_DIR` | いいえ | Claude CLI の作業ディレクトリ。既定は `~/work` |
 | `PERSONA_SCRIPT` | いいえ | 人格を出力するスクリプト。既定は `~/bin/persona.sh` |
+| `HANDOFF_DIR` | いいえ | `prompt.md` と `issue-template.md` の置き場所。既定は `~/handoff` |
 | `CLAUDE_BIN` | いいえ | Claude CLI のパス。既定は `claude` |
 | `CLAUDE_TIMEOUT_MS` | いいえ | 1 回の作業の上限。既定は 30 分 |
 | `LOG_LEVEL` | いいえ | `debug` / `info` / `warn` / `error`。既定は `info` |
 
+次の変数は受付ではなく、コンテナの中の Claude CLI と道具が使う。
+
+| 変数 | 使うもの |
+| --- | --- |
+| `GH_TOKEN` | `gh` と `git push`（credential helper が `gh auth git-credential`）。GitHub の書き込みトークンはこのコンテナにだけ置く |
+| `YUNOMI_URL` | Worker の URL。Working の記憶の口（`/v1/partners/:partnerId/working/memory`）を呼ぶ |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる |
+
 bot には仕事フォーラムでの投稿の作成・メッセージ送信・スレッドの管理（タグの付け替え）と、メッセージ履歴を読む権限が要る。
+
+## 配備
+
+main への push で `.github/workflows/working-image.yml` が `ghcr.io/ochanuco/yunomi-working:main` と `:sha-<short>` を公開する。PR ではビルドだけ確かめる。
+
+gateway と同じホストに、gateway とは別の compose project で置く（`compose.example.yaml`）。gateway を更新しても Working の作業は止まらない。
+
+- 受付は docker0 のゲートウェイ（`172.17.0.1:8180`）にだけ公開する。gateway は `extra_hosts: host.docker.internal:host-gateway` を足し、`WORKING_URL=http://host.docker.internal:8180/events` で送る。
+- `restart: unless-stopped` で、ホストの再起動後も受付と `orca serve` が上がる。
+- volume は 4 つ（上の表）。コンテナを作り直しても、ログイン・pairing・投稿との対応・作業用の clone が残る。
+
+### 初回だけ人が行うこと
+
+#### Claude CLI のログイン
+
+```sh
+docker exec -it <コンテナ名> claude   # /login で表示された URL を開いて承認し、/exit
+docker exec <コンテナ名> claude auth status
+```
+
+ログイン情報は `yunomi-working-claude` の volume に残る。期限が切れたら同じ手順でやり直す。
+
+#### Mac の Orca との pairing
+
+`--pairing-address` は Mac から届くホストのアドレスとポートにする。コンテナのログに出る pairing URL を Mac の Orca に渡す。
+
+```sh
+code=$(docker logs <コンテナ名> 2>&1 | grep '^Pairing URL:' | tail -1 | sed 's/^Pairing URL: //')
+orca environment add --name working --pairing-code "$code"   # Mac で実行する
+orca status --environment working   # runtimeConnectionState: connected
+```
+
+pairing のコードは端末の認証情報なので、ログや Issue に貼らない。pairing 済みの端末は `yunomi-working-orca` の volume に残る。
 
 ## 試し方
 
@@ -76,6 +122,7 @@ docker run -d --name working \
   -v yunomi-working-claude:/home/worker/.claude \
   -v yunomi-working-orca:/home/worker/.config \
   -v yunomi-working-state:/home/worker/state \
+  -v yunomi-working-work:/home/worker/work \
   yunomi-working:spike \
   orca-ide serve --port 6768 --pairing-address 127.0.0.1:16768
 ```

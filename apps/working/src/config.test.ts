@@ -24,6 +24,7 @@ describe("loadConfig", () => {
 				stateDir: "/home/w/state",
 				workDir: "/home/w/work",
 				personaScript: "/home/w/bin/persona.sh",
+				handoffDir: "/home/w/handoff",
 				claudeBin: "claude",
 				claudeTimeoutMs: 1_800_000,
 				logLevel: "info",

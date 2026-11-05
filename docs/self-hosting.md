@@ -55,7 +55,7 @@ Worker は、`/health` 以外へのリクエストに `Cf-Access-Jwt-Assertion` 
 2. Worker のホスト名に self-hosted の Access application を作り、AUD タグを控える
 3. policy を設定する
    - 自分のメールアドレスを許可する（Admin Web 用）
-   - Service Auth で、次の 2 つの service token を許可する
+   - Service Auth で、次の service token を許可する
    - `/health` を bypass する（`deploy.sh` が認証なしで確認する）
 4. service token を作る
    - Gateway 用
@@ -90,7 +90,7 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
 | `accessAud` | 3 の AUD タグ |
-| `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm" }` |
+| `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm", "<Working 用 Client ID>": "working" }`。Working を動かさないなら `working` は省く |
 
 同じファイルの `instance` は mode によらない値です。
 
@@ -162,6 +162,8 @@ docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # リポジトリ�
 
 bot をメンションして、返事が来れば動いています。
 
+Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、`apps/working/README.md` の「配備」に従い、Gateway と同じホストに置きます。Gateway には `WORK_CATEGORY_IDS`・`WORKING_URL`・`WORKING_TOKEN` を足します。
+
 ## 8. `ykm` と Admin Web
 
 - Admin Web は `https://<host>/admin/` で開けます。Access で自分のメールアドレスでログインします
@@ -189,7 +191,7 @@ pnpm --filter @yunomi/worker dev
 
 - `.github/workflows/deploy*.yml`、`eval-nightly.yml`: 作者の 1Password と共有 workflow を使う
 - `.github/deploy/*.env.op`、`apps/gateway/*.env.op`: 作者の 1Password の参照
-- `.github/workflows/gateway-image.yml`: 作者の GHCR にイメージを公開する
+- `.github/workflows/gateway-image.yml`、`working-image.yml`: 作者の GHCR にイメージを公開する
 
 ## キャラクターを変える
 

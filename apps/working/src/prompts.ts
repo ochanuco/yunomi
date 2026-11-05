@@ -15,6 +15,19 @@ export const WORKING_INSTRUCTIONS = `
   - \`状態: 完了\`: 頼まれたことが終わった
 `;
 
+/** 人格、仕事のしかた、Mac への引き継ぎの指示、申し送りの雛形の順に並べる。 */
+export const systemPrompt = (input: {
+	persona: string;
+	handoffPrompt: string;
+	handoffTemplate: string;
+}) =>
+	[
+		input.persona.trimEnd(),
+		WORKING_INSTRUCTIONS.trim(),
+		input.handoffPrompt.trim(),
+		`### 申し送りの雛形\n\n\`\`\`markdown\n${input.handoffTemplate.trim()}\n\`\`\``,
+	].join("\n\n") + "\n";
+
 const clock = (now: Date) => `いま: ${formatJstForPrompt(now)}`;
 
 export const messageLink = (
