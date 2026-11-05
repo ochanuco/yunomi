@@ -84,7 +84,7 @@ describe("createClaudeCli", () => {
 		);
 	});
 
-	it("受付の秘密は Claude CLI に渡さない", () => {
+	it("受付の秘密と記憶の口の service token は Claude CLI に渡さない", () => {
 		const env = claudeEnv(
 			{
 				HOME: "/home/w",
@@ -102,9 +102,6 @@ describe("createClaudeCli", () => {
 			HOME: "/home/w",
 			PATH: "/bin",
 			GH_TOKEN: "gh",
-			YUNOMI_URL: "https://worker",
-			CF_ACCESS_CLIENT_ID: "id",
-			CF_ACCESS_CLIENT_SECRET: "secret",
 			YUNOMI_WORK_DIR: "/home/w/work",
 			YUNOMI_STATE_DIR: "/home/w/state",
 		});
@@ -126,6 +123,25 @@ describe("createClaudeCli", () => {
 			error: { type: "SessionNotFound", sessionId: "s1" },
 		});
 		expect(exec.mock.calls[0]?.[1]).toContain("--resume");
+	});
+
+	it("fork は --resume に --fork-session を足し、新しいセッション ID を返す", async () => {
+		const exec = execReturning(
+			0,
+			JSON.stringify({ result: "はい", session_id: "forked" }),
+		);
+		const r = await createClaudeCli({ ...opts, exec }).run({
+			prompt: "続き",
+			session: { kind: "fork", id: "standup" },
+			guard,
+		});
+		expect(r).toEqual({
+			ok: true,
+			value: { sessionId: "forked", text: "はい" },
+		});
+		const args = exec.mock.calls[0]?.[1] ?? [];
+		expect(args[args.indexOf("--resume") + 1]).toBe("standup");
+		expect(args).toContain("--fork-session");
 	});
 
 	it("異常終了とエラー結果は ClaudeFailed にする", async () => {

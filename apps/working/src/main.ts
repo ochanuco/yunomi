@@ -1,19 +1,29 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { openApprovalStore } from "./approval-store.ts";
-import { claudeEnv, createClaudeCli, WORK_POLICY } from "./claude-cli.ts";
+import {
+	claudeEnv,
+	createClaudeCli,
+	spawnExec,
+	WORK_POLICY,
+} from "./claude-cli.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
 import { createLogger } from "./logger.ts";
+import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
+import { credentialsPathOf } from "./memory-cli/cli.ts";
 import { buildSystemPrompt } from "./prompts.ts";
 import { createWorkingServer } from "./server.ts";
 import { openSessionStore } from "./session-store.ts";
+import { runStandup } from "./standup.ts";
+import { gatherStandupMaterials } from "./standup-materials.ts";
+import { startStandupTimer } from "./standup-timer.ts";
 
 const config = loadConfig(process.env);
 if (!config.ok) {
@@ -42,6 +52,27 @@ await writeFile(
 	}),
 );
 
+// yunomi-memory はこのファイルから接続情報を読む。Claude CLI の環境変数に service token を載せないため
+const credentialsPath = credentialsPathOf(cfg.stateDir);
+if (cfg.memory) {
+	await writeFile(
+		credentialsPath,
+		JSON.stringify({
+			url: cfg.memory.url,
+			client_id: cfg.memory.clientId,
+			client_secret: cfg.memory.clientSecret,
+			discord_user_id: cfg.ownerDiscordUserId,
+			partner_id: "yukarin",
+		}),
+		{ mode: 0o600 },
+	);
+} else {
+	await rm(credentialsPath, { force: true });
+	logger.warn("working memory disabled", {
+		reason: "YUNOMI_URL / CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET",
+	});
+}
+
 const discord = createDiscordRest({ token: cfg.discordToken, logger });
 const me = await discord.me();
 if (!me.ok) {
@@ -49,22 +80,29 @@ if (!me.ok) {
 	process.exit(1);
 }
 
+const env = claudeEnv(process.env, {
+	workDir: cfg.workDir,
+	stateDir: cfg.stateDir,
+});
+const claude = createClaudeCli({
+	bin: cfg.claudeBin,
+	cwd: cfg.workDir,
+	systemPromptFile,
+	timeoutMs: cfg.claudeTimeoutMs,
+	policy: WORK_POLICY,
+	env,
+});
+const sessions = await openSessionStore(cfg.stateDir);
+const approvals = await openApprovalStore(cfg.stateDir);
+const ledger = createLedger(guardDirOf(cfg.stateDir));
+const macState = openMacStateStore(cfg.stateDir);
+
 const intake = createIntake({
 	discord,
-	claude: createClaudeCli({
-		bin: cfg.claudeBin,
-		cwd: cfg.workDir,
-		systemPromptFile,
-		timeoutMs: cfg.claudeTimeoutMs,
-		policy: WORK_POLICY,
-		env: claudeEnv(process.env, {
-			workDir: cfg.workDir,
-			stateDir: cfg.stateDir,
-		}),
-	}),
-	sessions: await openSessionStore(cfg.stateDir),
-	approvals: await openApprovalStore(cfg.stateDir),
-	ledger: createLedger(guardDirOf(cfg.stateDir)),
+	claude,
+	sessions,
+	approvals,
+	ledger,
 	botUserId: me.value.id,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,
@@ -92,8 +130,51 @@ server.listen(cfg.port, () => {
 	});
 });
 
+const macStateServer = cfg.macState
+	? createMacStateServer({ token: cfg.macState.token, store: macState, logger })
+	: null;
+if (cfg.macState && macStateServer) {
+	const { port } = cfg.macState;
+	macStateServer.listen(port, () => {
+		logger.info("mac state intake ready", { port });
+	});
+}
+
+const standupTimer = cfg.standup.enabled
+	? startStandupTimer({
+			at: cfg.standup.at,
+			run: async () => {
+				await runStandup({
+					claude,
+					discord,
+					sessions,
+					approvals,
+					ledger,
+					workForumChannelId: cfg.workForumChannelId,
+					gather: () =>
+						gatherStandupMaterials({
+							exec: spawnExec,
+							env,
+							cwd: cfg.workDir,
+							claudeBin: cfg.claudeBin,
+							memoryBin: cfg.memoryBin,
+							githubOwner: cfg.standup.githubOwner,
+							macState,
+							now: () => new Date(),
+							logger,
+						}),
+					newSessionId: randomUUID,
+					logger,
+				});
+			},
+			logger,
+		})
+	: null;
+
 const shutdown = (signal: string) => {
 	logger.info("shutting down", { signal });
+	standupTimer?.stop();
+	macStateServer?.close();
 	server.close();
 	process.exit(0);
 };

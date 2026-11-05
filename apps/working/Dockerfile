@@ -36,6 +36,11 @@ COPY apps/working/src/guard/hook.ts apps/working/src/guard/decide.ts \
 	apps/working/src/guard/bash.ts apps/working/src/guard/shell.ts \
 	apps/working/src/guard/operation.ts /opt/yunomi-guard/
 
+# Working の記憶の口を呼ぶ CLI。接続情報は受付が STATE_DIR に書き、この CLI の中でだけ読む。
+COPY apps/working/src/memory-cli/cli.ts apps/working/src/memory-cli/bin.ts /opt/yunomi-memory/
+RUN printf '#!/bin/sh\nexec /usr/local/bin/node /opt/yunomi-memory/bin.ts "$@"\n' > /usr/local/bin/yunomi-memory \
+	&& chmod 755 /usr/local/bin/yunomi-memory
+
 # orca-ide の deb は Electron アプリ一式で、GUI 用ライブラリを依存に持つ。apt に解決させる。
 RUN arch="$(dpkg --print-architecture)" \
 	&& curl -fsSL -o /tmp/orca.deb \
@@ -67,7 +72,8 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build --chown=worker:worker /out /home/worker/app
 COPY --chown=worker:worker apps/working/start.sh /home/worker/bin/start.sh
 
-EXPOSE 8080
+# 8080 は gateway からの受付、8090 は Mac からの席の状態
+EXPOSE 8080 8090
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 	CMD ["curl", "-fsS", "http://127.0.0.1:8080/healthz"]
 # 引数（orca-ide serve …）を受付と並べて動かす。引数がなければ受付だけを動かす。

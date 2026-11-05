@@ -22,6 +22,7 @@ import {
 	recoveryPrompt,
 	replyPrompt,
 	requestPrompt,
+	standupFollowupNote,
 } from "./prompts.ts";
 import type { SessionStore } from "./session-store.ts";
 import {
@@ -216,10 +217,17 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			});
 		} else {
 			const known = deps.sessions.get(threadId);
+			const fork = known !== null && deps.sessions.isFork(threadId);
+			let prompt = first.prompt;
+			if (fork) {
+				// 朝会のセッションは決めてほしいことを何件も持っているので、どの件への返事かを先に伝える
+				const thread = await deps.discord.getChannel(threadId);
+				prompt = `${standupFollowupNote(thread.ok ? thread.value.name : null)}\n\n${prompt}`;
+			}
 			result = known
 				? await deps.claude.run({
-						prompt: first.prompt,
-						session: { kind: "resume", id: known },
+						prompt,
+						session: { kind: fork ? "fork" : "resume", id: known },
 						guard,
 					})
 				: { ok: false, error: { type: "SessionNotFound", sessionId: "" } };

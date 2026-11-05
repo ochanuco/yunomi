@@ -10,8 +10,11 @@ import type { ClaudeRunner } from "./claude-cli.ts";
 import type { ChannelInfo, DiscordApi, PostedMessage } from "./discord-rest.ts";
 import { createIntake } from "./intake.ts";
 import { silentLogger } from "./logger.ts";
-import type { SessionStore } from "./session-store.ts";
-import { memoryApprovals, tempLedger } from "./test-support.ts";
+import {
+	memoryApprovals,
+	memorySessions as memoryStore,
+	tempLedger,
+} from "./test-support.ts";
 
 const BOT = "bot";
 const TEXT = "text";
@@ -101,16 +104,6 @@ const fakeDiscord = () => {
 		},
 	};
 	return { api, channels, messages, sent, history, refuseSendTo };
-};
-
-const memoryStore = (): SessionStore => {
-	const m = new Map<string, string>();
-	return {
-		get: (id) => m.get(id) ?? null,
-		set: async (id, s) => {
-			m.set(id, s);
-		},
-	};
 };
 
 const fakeClaude = (

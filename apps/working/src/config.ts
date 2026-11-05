@@ -24,6 +24,17 @@ const envSchema = v.object({
 	CLAUDE_BIN: v.optional(nonEmpty),
 	CLAUDE_TIMEOUT_MS: v.optional(positiveInt),
 	LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
+	YUNOMI_URL: v.optional(v.pipe(v.string(), v.url())),
+	CF_ACCESS_CLIENT_ID: v.optional(nonEmpty),
+	CF_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
+	MEMORY_BIN: v.optional(nonEmpty),
+	MAC_STATE_TOKEN: v.optional(nonEmpty),
+	MAC_STATE_PORT: v.optional(positiveInt),
+	STANDUP_ENABLED: v.optional(v.picklist(["true", "false"])),
+	STANDUP_TIME: v.optional(
+		v.pipe(v.string(), v.regex(/^([01]\d|2[0-3]):[0-5]\d$/)),
+	),
+	STANDUP_GITHUB_OWNER: v.optional(nonEmpty),
 });
 
 export type WorkingConfig = {
@@ -34,6 +45,8 @@ export type WorkingConfig = {
 	workForumChannelId: string;
 	/** この人たちの発言だけで作業する。ほかの人と bot は無視する。 */
 	ownerUserIds: ReadonlySet<string>;
+	/** 記憶の持ち主。WORKING_OWNER_DISCORD_USER_IDS の先頭。 */
+	ownerDiscordUserId: string;
 	port: number;
 	/** 投稿とセッションの対応を置くディレクトリ。volume に載せる。 */
 	stateDir: string;
@@ -45,6 +58,16 @@ export type WorkingConfig = {
 	claudeBin: string;
 	claudeTimeoutMs: number;
 	logLevel: LogLevel;
+	/** Working の記憶の口。3 つそろったときだけ yunomi-memory が使える。 */
+	memory: { url: string; clientId: string; clientSecret: string } | null;
+	memoryBin: string;
+	/** Mac から席の状態を受ける口。トークンがなければ待ち受けない。 */
+	macState: { token: string; port: number } | null;
+	standup: {
+		enabled: boolean;
+		at: { hour: number; minute: number };
+		githubOwner: string;
+	};
 };
 
 export const loadConfig = (
@@ -65,16 +88,23 @@ export const loadConfig = (
 	}
 	const e = parsed.output;
 	const home = env.HOME ?? "/home/worker";
+	const owners = e.WORKING_OWNER_DISCORD_USER_IDS.split(",")
+		.map((id) => id.trim())
+		.filter((id) => id !== "");
+	const [owner] = owners;
+	if (owner === undefined) {
+		return err(["WORKING_OWNER_DISCORD_USER_IDS: ID が 1 つもない"]);
+	}
+	const [hour = 9, minute = 0] = (e.STANDUP_TIME ?? "09:00")
+		.split(":")
+		.map(Number);
 	return ok({
 		discordToken: e.DISCORD_TOKEN,
 		sharedToken: e.WORKING_TOKEN,
 		workTextChannelId: e.WORK_TEXT_CHANNEL_ID,
 		workForumChannelId: e.WORK_FORUM_CHANNEL_ID,
-		ownerUserIds: new Set(
-			e.WORKING_OWNER_DISCORD_USER_IDS.split(",")
-				.map((id) => id.trim())
-				.filter((id) => id !== ""),
-		),
+		ownerUserIds: new Set(owners),
+		ownerDiscordUserId: owner,
 		port: e.PORT ?? 8080,
 		stateDir: e.STATE_DIR ?? `${home}/state`,
 		workDir: e.WORK_DIR ?? `${home}/work`,
@@ -83,5 +113,22 @@ export const loadConfig = (
 		claudeBin: e.CLAUDE_BIN ?? "claude",
 		claudeTimeoutMs: e.CLAUDE_TIMEOUT_MS ?? 30 * 60_000,
 		logLevel: e.LOG_LEVEL ?? "info",
+		memory:
+			e.YUNOMI_URL && e.CF_ACCESS_CLIENT_ID && e.CF_ACCESS_CLIENT_SECRET
+				? {
+						url: e.YUNOMI_URL,
+						clientId: e.CF_ACCESS_CLIENT_ID,
+						clientSecret: e.CF_ACCESS_CLIENT_SECRET,
+					}
+				: null,
+		memoryBin: e.MEMORY_BIN ?? "yunomi-memory",
+		macState: e.MAC_STATE_TOKEN
+			? { token: e.MAC_STATE_TOKEN, port: e.MAC_STATE_PORT ?? 8090 }
+			: null,
+		standup: {
+			enabled: (e.STANDUP_ENABLED ?? "true") === "true",
+			at: { hour, minute },
+			githubOwner: e.STANDUP_GITHUB_OWNER ?? "ochanuco",
+		},
 	});
 };

@@ -21,14 +21,17 @@ export type ServerDeps = {
 	logger: Logger;
 };
 
-const authorized = (header: string | undefined, token: string): boolean => {
+export const authorized = (
+	header: string | undefined,
+	token: string,
+): boolean => {
 	if (!header?.startsWith("Bearer ")) return false;
 	const given = Buffer.from(header.slice("Bearer ".length));
 	const expected = Buffer.from(token);
 	return given.length === expected.length && timingSafeEqual(given, expected);
 };
 
-const readBody = (req: IncomingMessage): Promise<string | null> =>
+export const readBody = (req: IncomingMessage): Promise<string | null> =>
 	new Promise((resolve) => {
 		let size = 0;
 		const chunks: Buffer[] = [];
@@ -45,7 +48,7 @@ const readBody = (req: IncomingMessage): Promise<string | null> =>
 		req.on("error", () => resolve(null));
 	});
 
-const reply = (res: ServerResponse, status: number) => {
+export const reply = (res: ServerResponse, status: number) => {
 	res.writeHead(status).end();
 };
 

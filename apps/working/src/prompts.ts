@@ -13,6 +13,8 @@ export const WORKING_INSTRUCTIONS = `
 - push は \`git push -u origin HEAD:dev/<topic>\` のように、押し先のブランチを必ず書く。
 - それ以外の取り消せない操作や外に出る操作（main などへの push、force push、マージ、ブランチ・リポジトリ・リリースの削除、作業場所の外の削除、デプロイ、課金、Discord など外部への投稿、秘密情報の読み出し）は、実行しようとすると止められる。止められたら、別の書き方や別の道具で回避しない。止めた操作は受付が「決めてほしいこと」として投稿に書き添えるので、返事ではそれが何のために要るかを書く。
 - 持ち主が許可した操作は、書かれたとおり一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
+- 決まったこと（持ち主が決めたこと、方針）と終わったこと（片付いた作業）は、そのつど \`yunomi-memory write --kind decided --summary "<1行>"\` か \`--kind done\` で 1 件 1 行ずつ残す。会話のときの Yukarin も同じ記憶を読む。1 行は 200 字以内で、改行を入れない。秘密情報やトークンは書かない。
+- 前に決まったことや持ち主のことを確かめたいときは \`yunomi-memory read\` で読む。
 - 返事の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
   - \`状態: 決めてほしい\`: 相手の判断や情報を待っている
   - \`状態: 引き継ぎ\`: この環境ではできず、Mac の agent に任せたい
@@ -163,3 +165,40 @@ export const recoveryPrompt = (input: {
 ${lines.join("\n\n")}
 --- ここまで ---`;
 };
+
+/** 朝会の投稿への最初の返事に添える。朝会のセッションを分けて続けるので、どの件かを伝える。 */
+export const standupFollowupNote = (title: string | null) =>
+	`この投稿は朝会で立てた「${title ?? "（件名なし）"}」。ここからはこの件だけを扱う。以下はこの投稿への持ち主の返事。`;
+
+export const STANDUP_TITLE_LIMIT = 60;
+
+/** 朝会の指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
+export const standupPrompt = (input: { now: Date; materials: string }) =>
+	`${clock(input.now)}
+平日の朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
+
+- 材料: 記憶（memory）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR）。
+- 取り消せること（調べる、issue や PR にコメントする、dev/ ブランチで直して push する、yunomi-memory に残す）は、ここで済ませてよい。済ませたことは決めてほしいことに入れない。
+- 取り消せない操作は実行しない。要るなら決めてほしいことに入れ、何をしたいかを書く。
+- 決めてほしいことは、持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。無い日は 0 件でよい。
+- Claude CLI のログインの期限は受付が見るので入れない。
+- 1 件は 1 つの投稿になる。title は ${STANDUP_TITLE_LIMIT} 字以内の件名、body は投稿の本文（Discord で読める長さ。何を決めてほしいか、選択肢、関係する PR や issue の URL）。
+
+最後に、次の形の JSON を \`\`\`json のコードブロック 1 つで出す。ほかの文章は投稿されない。
+
+\`\`\`json
+{"decisions": [{"title": "件名", "body": "本文"}]}
+\`\`\`
+
+--- 材料 ---
+${input.materials}
+--- ここまで ---`;
+
+/** 受付が朝会の投稿の最後に足す。 */
+export const standupPostFooter = (day: string) =>
+	`\n\n（${day} の朝会から。この投稿に返事をすると続きをします）`;
+
+export const loginExpiryDecision = (expiresAt: Date) => ({
+	title: "Claude CLI のログインの更新",
+	body: `Working のコンテナの Claude CLI のログインが ${formatJstForPrompt(expiresAt)} に切れます。切れると仕事フォーラムの作業と朝会が止まります。\n\nコンテナで \`claude\` を開いて \`/login\` をやり直してください（README の「Claude CLI のログイン」）。`,
+});

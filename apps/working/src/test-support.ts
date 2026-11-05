@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApprovalRequest, ApprovalStore } from "./approval-store.ts";
 import { createLedger } from "./guard/ledger.ts";
+import type { SessionStore } from "./session-store.ts";
 
 export const memoryApprovals = (): ApprovalStore & {
 	all: Map<string, ApprovalRequest>;
@@ -24,3 +25,14 @@ export const tempDir = (prefix = "yunomi-working-") =>
 	mkdtempSync(join(tmpdir(), prefix));
 
 export const tempLedger = (dir = tempDir()) => createLedger(dir);
+
+export const memorySessions = (): SessionStore => {
+	const m = new Map<string, { id: string; fork: boolean }>();
+	return {
+		get: (id) => m.get(id)?.id ?? null,
+		isFork: (id) => m.get(id)?.fork ?? false,
+		set: async (id, s, fork = false) => {
+			m.set(id, { id: s, fork });
+		},
+	};
+};
