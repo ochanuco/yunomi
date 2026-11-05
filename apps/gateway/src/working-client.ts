@@ -9,6 +9,8 @@ import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
 
 export type WorkingClientOptions = {
 	url: string;
+	/** 受付と共有するトークン。Authorization: Bearer で送る。 */
+	token: string;
 	timeoutMs?: number;
 	fetch?: typeof fetch;
 };
@@ -33,7 +35,10 @@ export const createWorkingClient = (
 			try {
 				const res = await doFetch(opts.url, {
 					method: "POST",
-					headers: { "content-type": "application/json" },
+					headers: {
+						"content-type": "application/json",
+						authorization: `Bearer ${opts.token}`,
+					},
 					body: JSON.stringify(envelope),
 					signal: AbortSignal.timeout(timeoutMs),
 				});

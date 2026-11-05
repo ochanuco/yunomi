@@ -10,7 +10,11 @@ const envelope = {
 describe("createWorkingClient", () => {
 	it("envelope を JSON で設定された URL に POST する", async () => {
 		const fetch = vi.fn(async () => new Response(null, { status: 202 }));
-		const client = createWorkingClient({ url: "http://w/inbox", fetch });
+		const client = createWorkingClient({
+			url: "http://w/inbox",
+			token: "secret",
+			fetch,
+		});
 		expect(await client.forward(envelope)).toEqual({
 			ok: true,
 			value: undefined,
@@ -19,6 +23,7 @@ describe("createWorkingClient", () => {
 			"http://w/inbox",
 			expect.objectContaining({
 				method: "POST",
+				headers: expect.objectContaining({ authorization: "Bearer secret" }),
 				body: JSON.stringify(envelope),
 			}),
 		);
@@ -28,6 +33,7 @@ describe("createWorkingClient", () => {
 		const bad = vi.fn(async () => new Response(null, { status: 503 }));
 		const r1 = await createWorkingClient({
 			url: "http://w",
+			token: "secret",
 			fetch: bad,
 		}).forward(envelope);
 		expect(!r1.ok && r1.error.type).toBe("ExternalServiceUnavailable");
@@ -38,6 +44,7 @@ describe("createWorkingClient", () => {
 		});
 		const r2 = await createWorkingClient({
 			url: "http://w",
+			token: "secret",
 			fetch: down,
 		}).forward(envelope);
 		expect(!r2.ok && r2.error.type).toBe("ExternalServiceUnavailable");

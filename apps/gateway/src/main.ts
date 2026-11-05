@@ -60,9 +60,7 @@ const yunomi = new YunomiClient({
 	logger,
 });
 
-const working = cfg.workingUrl
-	? createWorkingClient({ url: cfg.workingUrl })
-	: null;
+const working = cfg.working ? createWorkingClient(cfg.working) : null;
 if (cfg.workCategoryIds.size > 0 && !working) {
 	logger.warn("WORK_CATEGORY_IDS is set but WORKING_URL is not; dropping");
 }
