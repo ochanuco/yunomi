@@ -338,3 +338,20 @@ export const opinionChanges = sqliteTable(
 		index("opinion_changes_day").on(t.partnerId, t.lifestyleDay, t.topic),
 	],
 );
+
+// Working（仕事）の Yukarin が残す、決まったこと・終わったことの1行。
+// facts は (subject, predicate) ごとに現行1件なので、同じ種類の行を何件も持てるよう別の表にする。
+export const workNotes = sqliteTable(
+	"work_notes",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		entityId: text("entity_id")
+			.notNull()
+			.references(() => entities.id),
+		kind: text("kind", { enum: ["decided", "done"] }).notNull(),
+		summary: text("summary").notNull(),
+		createdAt: text("created_at").notNull(),
+	},
+	(t) => [index("work_notes_entity").on(t.partnerId, t.entityId, t.createdAt)],
+);

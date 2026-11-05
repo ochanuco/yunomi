@@ -27,6 +27,7 @@ import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
 import { createSnapshot } from "./snapshot.ts";
 import { purgeExpiredSnapshots } from "./snapshot-store.ts";
+import { handleWorkingMemory, WORKING_MEMORY_PATH } from "./working.ts";
 
 export { PartnerDO };
 
@@ -60,6 +61,14 @@ export default {
 				request,
 				env,
 				decodeURIComponent(connectionPartnerId),
+			);
+		}
+		const workingPartnerId = WORKING_MEMORY_PATH.exec(pathname)?.[1];
+		if (workingPartnerId !== undefined) {
+			return handleWorkingMemory(
+				request,
+				env,
+				decodeURIComponent(workingPartnerId),
 			);
 		}
 		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];
