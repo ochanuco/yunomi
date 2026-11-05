@@ -6,7 +6,8 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 
 | ファイル | 役割 |
 | --- | --- |
-| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、`gh` を入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
+| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、`gh`、mise と依存のビルドに要る OS のパッケージを入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
+| `mise/config.toml` | 席の既定の道具（node、pnpm、uv、jq）。`/etc/mise/config.toml` に置く |
 | `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、席の Claude に渡す人格として標準出力に出す |
 | `compose.example.yaml` | 常駐させるときの compose の雛形 |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Orca の席で作業する |
@@ -27,7 +28,7 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
 | `yunomi-working-state` | `/home/worker/state` | フォーラム投稿と席の対応、Orca の Run と受付の端末（`seats.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、最後に届いた Mac の席の状態（`mac-state.json`）、記憶の口の接続情報（`memory-credentials.json`） |
-| `yunomi-working-work` | `/home/worker/work` | 席の元にする空の git リポジトリ（`seats/`）と、席の worktree（`orca/workspaces/seats/seat-<投稿の ID>/`）。席の Claude はその中に clone する |
+| `yunomi-working-work` | `/home/worker/work` | 席の元にする空の git リポジトリ（`seats/`）と、席の worktree（`orca/workspaces/seats/seat-<投稿の ID>/`）。席の Claude はその中に clone する。mise が入れた道具（`.mise/`）、pnpm の store（`.pnpm-store/`）、uv のキャッシュと Python（`.cache/uv/`・`.uv/`） |
 
 `CLAUDE_CONFIG_DIR` を `~/.claude` に向けているので、通常は `~/.claude.json` に置かれる設定も volume に入る。Orca は worktree を `~/orca/workspaces` に作るので、`~/orca` は `~/work/orca` への symlink にしてある。
 
@@ -77,12 +78,22 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の worktree に、止めた操作の紐づけ先をその投稿にする。ほかの席の worktree も作業場所の外として扱う。
 
-席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR` だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口の service token は渡さない。
+席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR`、mise・uv・pnpm の置き場所だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口の service token は渡さない。
+
+### 席のビルドとテスト
+
+席の `PATH` の先頭には mise の shims（`~/work/.mise/shims`）がある。clone したリポジトリで `mise install` を実行すると、そのリポジトリの `mise.toml`（または `.tool-versions`）の道具と、`/etc/mise/config.toml` の既定の道具（node 24、pnpm 10、uv、jq）が入る。`mise.toml` を持たないリポジトリでも既定の道具で `pnpm install` や `uv sync` を回せる。
+
+- 道具とダウンロードのキャッシュは work の volume に置くので、コンテナを作り直しても入れ直さない。
+- `~/work` の下の `mise.toml` は信頼済みとして扱う（`MISE_TRUSTED_CONFIG_PATHS`）。`mise trust` は要らない。
+- C 拡張や node-gyp のビルドに使う `build-essential`・`python3`・`pkg-config` と、opencv-python が読む `libgl1`・`libglib2.0-0` を入れてある。
+- 受付（start.sh が起動する node）の `PATH` には shims を足さない。受付はイメージの node 24 で動く。
 
 聞かずに通す操作:
 
 - 読み取り（秘密情報や設定・許可の記録がある場所を除く）
 - 席の作業場所の中のファイルの編集と削除、テストやビルドの実行
+- `mise install` / `mise use`（`--global` を除く）/ `mise exec` / `mise run`、`pnpm install`・`uv sync`・`uv pip install` などの依存の導入
 - `git commit`、`origin` の `dev/` で始まるブランチへの push（押し先を `HEAD:dev/<topic>` のように書いたもの）
 - `gh issue create` / `comment`、`gh pr create` / `comment`、`gh label create`（申し送りに使う）と、`gh` の読み取り
 - `yunomi-memory read` と `yunomi-memory write --kind … --summary …`
@@ -94,7 +105,8 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `gh pr merge`・`gh api`・`gh repo delete`・`gh release` など、上で通す以外の `gh`
 - 席を作る・止める・消すなど、上で通す以外の `orca`
 - 作業場所の外の削除と移動、作業場所の外（`/tmp` を除く）への書き込み
-- デプロイ・公開・課金・外部のサービスに届く道具（`wrangler`、`pnpm deploy`、`npm publish`、`tofu`、`stripe` など）、`curl` の POST などの送信
+- デプロイ・公開・課金・外部のサービスに届く道具（`wrangler`、`pnpm deploy`、`npm publish`、`uv publish`、`cargo publish`、`twine`、`tofu`、`stripe` など）、`curl` の POST などの送信。`mise exec -- …`・`uv run …`・`uvx …` で包んだものも中身で判定する
+- `mise use --global`・`mise settings set`（`--local` を除く）・`mise implode`・`mise self-update`
 - 秘密情報の読み出し（`printenv`、トークンの変数、`~/.claude`・`~/.config`・`STATE_DIR` など）
 - 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
 

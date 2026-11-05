@@ -15,9 +15,29 @@ FROM node:24.22.1-slim AS node
 FROM debian:bookworm-slim
 
 ARG ORCA_VERSION=1.4.248
+ARG MISE_VERSION=2026.11.2
+ARG MISE_SHA256_AMD64=62cad463c1413f05398ca339168a8f655120b6f0b0b8adce3bc6758bafaf0602
+ARG MISE_SHA256_ARM64=18bf3ac02033c2a50b772b411e35528cd1888386b4316895fcae626db6ad96f3
+# build-essential・python3・pkg-config は席で clone したリポジトリの依存のビルド（node-gyp、Python の C 拡張）に使う。
+# libgl1・libglib2.0-0 は opencv-python を import するのに要る。
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends ca-certificates curl git jq bash procps \
+		build-essential python3 pkg-config xz-utils unzip libgl1 libglib2.0-0 \
 	&& rm -rf /var/lib/apt/lists/*
+
+# 席の Claude がリポジトリの mise.toml の道具を入れるのに使う。
+RUN arch="$(dpkg --print-architecture)" \
+	&& case "$arch" in \
+		amd64) asset=x64; sha="$MISE_SHA256_AMD64" ;; \
+		arm64) asset=arm64; sha="$MISE_SHA256_ARM64" ;; \
+		*) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+	esac \
+	&& curl -fsSL -o /usr/local/bin/mise \
+		"https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-linux-${asset}" \
+	&& echo "$sha  /usr/local/bin/mise" | sha256sum -c - \
+	&& chmod 755 /usr/local/bin/mise
+# mise.toml を持たないリポジトリ（uv だけで回すものなど）でも、席で同じ道具が使えるようにする。
+COPY apps/working/mise/config.toml /etc/mise/config.toml
 
 # Claude CLI が clone・issue・PR に使う。認証は環境変数 GH_TOKEN で渡す。
 RUN curl -fsSL -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -65,6 +85,15 @@ RUN git config --global credential.helper '!gh auth git-credential'
 ENV PATH=/home/worker/.local/bin:$PATH
 # .claude.json（ログインの付随情報）も volume に入れるため、設定の置き場所を 1 か所にまとめる。
 ENV CLAUDE_CONFIG_DIR=/home/worker/.claude
+# mise が入れた道具とダウンロードのキャッシュを work の volume に置き、コンテナを作り直しても入れ直さない。
+# pnpm の store と uv のキャッシュも同じ volume に置くと、席の node_modules と .venv に hardlink で入る。
+ENV MISE_DATA_DIR=/home/worker/work/.mise \
+	MISE_CACHE_DIR=/home/worker/work/.mise/cache \
+	MISE_STATE_DIR=/home/worker/work/.mise/state \
+	MISE_TRUSTED_CONFIG_PATHS=/home/worker/work \
+	UV_CACHE_DIR=/home/worker/work/.cache/uv \
+	UV_PYTHON_INSTALL_DIR=/home/worker/work/.uv/python \
+	npm_config_store_dir=/home/worker/work/.pnpm-store
 
 # 人格の元ファイルをそのまま連結して席の Claude に渡す。build context はリポジトリの root。
 COPY --chown=worker:worker partners/yukarin/profile.yaml partners/yukarin/examples.yaml /home/worker/persona/

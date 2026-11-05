@@ -104,6 +104,44 @@ describe("classifyBash: 止める", () => {
 	});
 });
 
+describe("classifyBash: 道具と依存を入れる", () => {
+	it.each([
+		"cd yunomi && mise install",
+		"mise trust && mise install",
+		"mise use node@24",
+		"mise settings set --local experimental true",
+		"mise exec -- pnpm install --frozen-lockfile",
+		"mise x node@24 -- node scripts/check.mjs",
+		"pnpm install && pnpm turbo typecheck lint test",
+		"uv sync --frozen",
+		"uv venv .venv && uv pip install -e . pytest",
+		"uv run --with pytest pytest -q",
+		"uvx ruff check .",
+		"mise run test",
+	])("通す: %s", (cmd) => {
+		expect(classifyBash(cmd, ctx)).toBeNull();
+	});
+	it.each([
+		["mise exec -- wrangler deploy", "wrangler"],
+		["mise x node@24 -- npm publish", "デプロイ"],
+		["mise exec -c 'git push --force'", "中身を読めない"],
+		["mise use -g node@24", "mise 設定"],
+		["mise use --global uv", "mise 設定"],
+		["mise settings set experimental true", "mise 設定"],
+		["mise implode --yes", "mise 本体"],
+		["mise run deploy", "デプロイ"],
+		["uv publish", "デプロイ"],
+		["uv run wrangler deploy", "wrangler"],
+		["uv tool run --from twine twine upload dist/*", "twine"],
+		["uvx --python 3.13 twine upload dist/*", "twine"],
+		["poetry publish --build", "デプロイ"],
+		["cargo publish", "デプロイ"],
+		["pnpm login", "デプロイ"],
+	])("止める: %s", (cmd, reason) => {
+		expect(classifyBash(cmd, ctx)).toContain(reason);
+	});
+});
+
 describe("classifyBash: 記憶の CLI", () => {
 	it.each([
 		"yunomi-memory read",
