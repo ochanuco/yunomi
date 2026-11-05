@@ -13,11 +13,14 @@ import * as v from "valibot";
 import type { Logger } from "./logger.ts";
 
 export const EVENTS_PATH = "/events";
+export const SEATS_SUMMARY_PATH = "/seats/summary";
 const BODY_LIMIT = 1_000_000;
 
 export type ServerDeps = {
 	sharedToken: string;
 	accept: (envelope: DiscordMessageCreatedEnvelope) => void;
+	/** 作業中の席の数。gateway が bot のステータスに出す。 */
+	seatSummary: () => { working: number };
 	logger: Logger;
 };
 
@@ -53,11 +56,21 @@ export const reply = (res: ServerResponse, status: number) => {
 };
 
 /**
- * gateway から envelope を受ける。仕事は数分かかるので、受け取った時点で 202 を返し、処理は待たない。
+ * gateway から envelope を受け、席の数を返す。仕事は数分かかるので、受け取った時点で 202 を返し、処理は待たない。
  */
 export const createWorkingServer = (deps: ServerDeps): Server =>
 	createServer(async (req, res) => {
 		if (req.method === "GET" && req.url === "/healthz") return reply(res, 200);
+		if (req.url === SEATS_SUMMARY_PATH) {
+			if (req.method !== "GET") return reply(res, 405);
+			if (!authorized(req.headers.authorization, deps.sharedToken)) {
+				return reply(res, 401);
+			}
+			res
+				.writeHead(200, { "content-type": "application/json" })
+				.end(JSON.stringify(deps.seatSummary()));
+			return;
+		}
 		if (req.url !== EVENTS_PATH) return reply(res, 404);
 		if (req.method !== "POST") return reply(res, 405);
 		if (!authorized(req.headers.authorization, deps.sharedToken)) {

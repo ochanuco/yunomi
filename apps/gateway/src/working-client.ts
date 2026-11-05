@@ -6,8 +6,10 @@ import {
 	type Result,
 } from "@yunomi/core";
 import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import * as v from "valibot";
 
 export type WorkingClientOptions = {
+	/** envelope を送る URL。席の数は同じ受付の /seats/summary から読む。 */
 	url: string;
 	/** 受付と共有するトークン。Authorization: Bearer で送る。 */
 	token: string;
@@ -19,7 +21,13 @@ export type WorkingClient = {
 	forward: (
 		envelope: DiscordMessageCreatedEnvelope,
 	) => Promise<Result<void, DomainError>>;
+	/** 作業中の席の数。 */
+	seatSummary: () => Promise<Result<{ working: number }, DomainError>>;
 };
+
+const summarySchema = v.object({
+	working: v.pipe(v.number(), v.integer(), v.minValue(0)),
+});
 
 /**
  * 仕事カテゴリの発言を Working 受付へ渡す。
@@ -46,6 +54,27 @@ export const createWorkingClient = (
 					return err(externalServiceUnavailable({ service: "working" }));
 				}
 				return ok(undefined);
+			} catch {
+				return err(externalServiceUnavailable({ service: "working" }));
+			}
+		},
+		seatSummary: async () => {
+			try {
+				const res = await doFetch(new URL("/seats/summary", opts.url), {
+					headers: { authorization: `Bearer ${opts.token}` },
+					signal: AbortSignal.timeout(timeoutMs),
+				});
+				if (!res.ok) {
+					return err(externalServiceUnavailable({ service: "working" }));
+				}
+				const parsed = v.safeParse(
+					summarySchema,
+					await res.json().catch(() => null),
+				);
+				if (!parsed.success) {
+					return err(externalServiceUnavailable({ service: "working" }));
+				}
+				return ok({ working: parsed.output.working });
 			} catch {
 				return err(externalServiceUnavailable({ service: "working" }));
 			}

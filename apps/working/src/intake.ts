@@ -34,7 +34,14 @@ import {
 	seatSpec,
 	wakeNote,
 } from "./prompts.ts";
-import { newSeat, type Seat, type SeatStore } from "./seat-store.ts";
+import { PANEL_REFRESH_MS, panelText, REACTION_OF } from "./seat-panel.ts";
+import {
+	type MessageRef,
+	newSeat,
+	type Seat,
+	type SeatLabel,
+	type SeatStore,
+} from "./seat-store.ts";
 import {
 	replaceStatusTag,
 	takeStatus,
@@ -70,7 +77,18 @@ export type IntakeDeps = {
 	sleepAfterMs: number;
 	newGrantId?: () => string;
 	now?: () => Date;
+	/** ms ごとに fn を呼び、止める関数を返す。入力中の表示を送り続けるのに使う。 */
+	every?: (ms: number, fn: () => void) => () => void;
 	logger: Logger;
+};
+
+/** Discord の入力中の表示は約 10 秒で消えるので、それより短い間隔で送り直す。 */
+export const TYPING_EVERY_MS = 8_000;
+
+const defaultEvery = (ms: number, fn: () => void) => {
+	const timer = setInterval(fn, ms);
+	timer.unref();
+	return () => clearInterval(timer);
 };
 
 type Payload = DiscordMessageCreatedEnvelope["payload"];
@@ -153,6 +171,10 @@ export type Intake = {
 	sleepIdle: () => Promise<void>;
 	/** 起動時に、対応表と Orca の席を突き合わせる。 */
 	reconcile: () => Promise<void>;
+	/** 作業中の席の状態の欄の経過時間を書き換える。前に書いてから間がなければ書かない。 */
+	refreshPanels: () => Promise<void>;
+	/** 作業中の席の数。gateway が bot のステータスに出す。 */
+	summary: () => { working: number };
 };
 
 export const createIntake = (deps: IntakeDeps): Intake => {
@@ -162,6 +184,46 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 	const queue = createKeyedQueue();
 	const parentOf = new Map<string, string | null>();
 	let tagIds: Map<WorkStatus, string> | null = null;
+	const every = deps.every ?? defaultEvery;
+
+	const typingTimers = new Map<string, () => void>();
+	const sendTyping = (threadId: string) => {
+		void deps.discord.typing(threadId).then((r) => {
+			if (!r.ok) {
+				log.debug("typing failed", {
+					thread_id: threadId,
+					error: r.error.type,
+				});
+			}
+		});
+	};
+	/** 席の Claude が動いている間だけ、投稿に入力中の表示を出し続ける。 */
+	const syncTyping = (threadId: string, seat: Seat | null) => {
+		const on = seat !== null && seat.status === "working" && !seat.standup;
+		const stop = typingTimers.get(threadId);
+		if (on && !stop) {
+			sendTyping(threadId);
+			typingTimers.set(
+				threadId,
+				every(TYPING_EVERY_MS, () => sendTyping(threadId)),
+			);
+		} else if (!on && stop) {
+			stop();
+			typingTimers.delete(threadId);
+		}
+	};
+	// 席の状態が変わる所はすべてここを通るので、入力中の表示の付け外しをここでまとめる
+	const seats: SeatStore = {
+		...deps.seats,
+		set: async (seat) => {
+			await deps.seats.set(seat);
+			syncTyping(seat.threadId, seat);
+		},
+		delete: async (threadId) => {
+			await deps.seats.delete(threadId);
+			syncTyping(threadId, null);
+		},
+	};
 
 	const statusTags = async (): Promise<Map<WorkStatus, string>> => {
 		if (tagIds) return tagIds;
@@ -180,7 +242,143 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		return found;
 	};
 
-	const setStatus = async (threadId: string, status: WorkStatus) => {
+	/** bot のリアクションを from から to に付け替える。付いている絵文字を返す。 */
+	const react = async (
+		request: MessageRef,
+		from: string | null,
+		to: string | null,
+	): Promise<string | null> => {
+		if (from === to) return to;
+		if (from !== null) {
+			const r = await deps.discord.removeReaction(
+				request.channelId,
+				request.messageId,
+				from,
+			);
+			if (!r.ok) {
+				log.warn("remove reaction failed", {
+					message_id: request.messageId,
+					error: r.error.type,
+				});
+			}
+		}
+		if (to === null) return null;
+		const r = await deps.discord.addReaction(
+			request.channelId,
+			request.messageId,
+			to,
+		);
+		if (!r.ok) {
+			log.warn("add reaction failed", {
+				message_id: request.messageId,
+				error: r.error.type,
+			});
+			return null;
+		}
+		return to;
+	};
+
+	/** 状態の欄を書き換える。内容が同じなら書かず、force でなければ前に書いてから間をおく。 */
+	const writePanel = async (seat: Seat, force: boolean): Promise<Seat> => {
+		if (seat.panelId === null || seat.label === null) return seat;
+		const at = now();
+		const text = panelText({
+			label: seat.label,
+			elapsedMs: seat.labelSince
+				? at.getTime() - seat.labelSince.getTime()
+				: null,
+			doing: seat.lastStatus,
+		});
+		if (text === seat.panelText) return seat;
+		if (
+			!force &&
+			seat.panelAt !== null &&
+			at.getTime() - seat.panelAt.getTime() < PANEL_REFRESH_MS
+		) {
+			return seat;
+		}
+		const r = await deps.discord.editMessage(seat.threadId, seat.panelId, text);
+		if (!r.ok) {
+			log.warn("panel update failed", {
+				thread_id: seat.threadId,
+				error: r.error.type,
+			});
+			return seat;
+		}
+		return { ...seat, panelText: text, panelAt: at };
+	};
+
+	const refreshPanel = async (threadId: string, force: boolean) => {
+		const seat = seats.get(threadId);
+		if (seat === null) return;
+		const next = await writePanel(seat, force);
+		if (next !== seat) await seats.set(next);
+	};
+
+	/**
+	 * 依頼メッセージのリアクションと状態の欄を label に合わせる。
+	 * 席を閉じたあとに呼ぶときは、閉じる前の席を gone に渡す。
+	 */
+	const show = async (threadId: string, label: SeatLabel, gone?: Seat) => {
+		const seat = seats.get(threadId) ?? gone ?? null;
+		if (seat === null || seat.standup) return;
+		const reaction = seat.request
+			? await react(seat.request, seat.reaction, REACTION_OF[label])
+			: seat.reaction;
+		const next = await writePanel(
+			{
+				...seat,
+				reaction,
+				label,
+				labelSince: seat.label === label ? seat.labelSince : now(),
+			},
+			true,
+		);
+		if (seats.get(threadId) !== null) await seats.set(next);
+	};
+
+	/** 投稿の先頭近くに状態の欄を置く。 */
+	const placePanel = async (seat: Seat): Promise<Seat> => {
+		if (seat.standup || seat.panelId !== null) return seat;
+		const text = panelText({ label: "受付", elapsedMs: null, doing: null });
+		const r = await deps.discord.createMessage(seat.threadId, text);
+		if (!r.ok) {
+			log.warn("panel post failed", {
+				thread_id: seat.threadId,
+				error: r.error.type,
+			});
+			return seat;
+		}
+		return {
+			...seat,
+			panelId: r.value.id,
+			panelText: text,
+			panelAt: now(),
+			label: "受付",
+			labelSince: now(),
+		};
+	};
+
+	/** 持ち主の新しい依頼メッセージに受付の絵文字を移す。 */
+	const receive = async (seat: Seat, from: MessageRef): Promise<Seat> => {
+		if (seat.standup || seat.request?.messageId === from.messageId) {
+			return seat;
+		}
+		if (seat.request && seat.reaction) {
+			await react(seat.request, seat.reaction, null);
+		}
+		const reaction = await react(from, null, REACTION_OF.受付);
+		const next = { ...seat, request: from, reaction };
+		await seats.set(next);
+		return next;
+	};
+
+	const setStatus = async (
+		threadId: string,
+		status: WorkStatus,
+		gone?: Seat,
+	) => {
+		await show(threadId, status, gone);
 		const tags = await statusTags();
 		const thread = await deps.discord.getChannel(threadId);
 		if (!thread.ok) {
@@ -222,7 +420,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		return replied.ok && replied.value.authorId === deps.botUserId;
 	};
 
-	const alive = () => deps.seats.all().filter((s) => ALIVE.has(s.status));
+	const alive = () => seats.all().filter((s) => ALIVE.has(s.status));
 
 	/** 許可したのに使われなかった操作は、その回かぎりで失効させる。 */
 	const expireGrant = (threadId: string) => {
@@ -296,7 +494,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 	const dequeue = () => {
 		const free = deps.seatLimit - alive().length;
 		if (free <= 0) return;
-		const waiting = deps.seats
+		const waiting = seats
 			.all()
 			.filter((s) => s.status === "queued")
 			.sort(
@@ -305,7 +503,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			.slice(0, free);
 		for (const s of waiting) {
 			void queue.run(s.threadId, async () => {
-				const seat = deps.seats.get(s.threadId);
+				const seat = seats.get(s.threadId);
 				if (seat?.status !== "queued") return;
 				if (alive().length >= deps.seatLimit) return;
 				await launch(seat);
@@ -332,17 +530,17 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			});
 			// worktree が無ければ席ごと忘れ、次の返事でやりとりを読ませて作り直す
 			if (seat.path) {
-				await deps.seats.set({ ...seat, status: "sleeping", pending: [] });
+				await seats.set({ ...seat, status: "sleeping", pending: [] });
 			} else {
-				await deps.seats.delete(threadId);
+				await seats.delete(threadId);
 			}
 			if (!seat.standup) {
 				await deps.discord.send(threadId, seatStartFailedText(r.error));
-				await setStatus(threadId, "決めてほしい");
+				await setStatus(threadId, "決めてほしい", seat);
 			}
 			return;
 		}
-		await deps.seats.set({
+		await seats.set({
 			...seat,
 			status: "working",
 			path: r.value.path,
@@ -368,9 +566,17 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 
 	/** 席を作るか、上限なら順番待ちにする。 */
 	const openSeat = async (seat: Seat, text: string) => {
-		const next = { ...seat, pending: [...seat.pending, text] };
+		const reaction =
+			seat.request && !seat.standup
+				? await react(seat.request, seat.reaction, REACTION_OF.受付)
+				: seat.reaction;
+		const next = await placePanel({
+			...seat,
+			reaction,
+			pending: [...seat.pending, text],
+		});
 		if (!seat.standup && alive().length >= deps.seatLimit) {
-			await deps.seats.set({ ...next, status: "queued", queuedAt: now() });
+			await seats.set({ ...next, status: "queued", queuedAt: now() });
 			log.info("seat queued", { thread_id: seat.threadId });
 			await deps.discord.send(seat.threadId, QUEUED_TEXT);
 			return;
@@ -396,7 +602,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				});
 			}
 		}
-		await deps.seats.delete(seat.threadId);
+		await seats.delete(seat.threadId);
 		log.info("seat closed", { thread_id: seat.threadId });
 		dequeue();
 	};
@@ -427,9 +633,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		threadId: string,
 		text: string,
 		granted: readonly Operation[] | null,
+		from: MessageRef,
 	) => {
-		const seat = deps.seats.get(threadId);
-		if (seat === null) {
+		const stored = seats.get(threadId);
+		if (stored === null) {
 			// 席が無い（完了したあと、朝会の投稿、作れなかった）ときは、やりとりを読ませて新しい席を作る
 			const [history, title] = await Promise.all([
 				deps.discord.listMessages(threadId, HISTORY_LIMIT),
@@ -442,14 +649,15 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				botUserId: deps.botUserId,
 			});
 			await openSeat(
-				newSeat(threadId),
+				{ ...newSeat(threadId), request: from },
 				granted ? `${prompt}\n\n${approvedNote(granted)}` : prompt,
 			);
 			return;
 		}
+		const seat = await receive(stored, from);
 		switch (seat.status) {
 			case "queued":
-				await deps.seats.set({ ...seat, pending: [...seat.pending, text] });
+				await seats.set({ ...seat, pending: [...seat.pending, text] });
 				return;
 			case "sleeping": {
 				const woke = {
@@ -457,7 +665,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 					pending: [`${wakeNote(seat.question)}\n\n${text}`],
 				};
 				if (alive().length >= deps.seatLimit) {
-					await deps.seats.set({ ...woke, status: "queued", queuedAt: now() });
+					await seats.set({ ...woke, status: "queued", queuedAt: now() });
+					await show(threadId, "受付");
 					await deps.discord.send(threadId, QUEUED_TEXT);
 					return;
 				}
@@ -471,7 +680,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 						body: text,
 					});
 					if (r.ok) {
-						await deps.seats.set({
+						await seats.set({
 							...seat,
 							status: "working",
 							questionId: null,
@@ -517,7 +726,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			await deps.discord.send(threadId, FAILURE_TEXT);
 			return;
 		}
-		await deps.seats.set({
+		await seats.set({
 			...seat,
 			status: "working",
 			terminal: sent.value.terminal ?? seat.terminal,
@@ -541,7 +750,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
 		const reply = await seatReply(seat, msg.body);
 		await postWithApproval(threadId, reply.body, blocked, reply.files);
-		await deps.seats.set(toWaiting(seat, { id: msg.id, text: reply.body }));
+		await seats.set(toWaiting(seat, { id: msg.id, text: reply.body }));
 		await setStatus(threadId, "決めてほしい");
 		log.info("seat asked", { thread_id: threadId, blocked: blocked.length });
 	};
@@ -567,7 +776,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			taken.status === "決めてほしい"
 		) {
 			await postWithApproval(threadId, reply.body, blocked, reply.files);
-			await deps.seats.set({ ...toWaiting(seat, null), expectStop: false });
+			await seats.set({ ...toWaiting(seat, null), expectStop: false });
 			await setStatus(threadId, "決めてほしい");
 			log.info("seat waiting", {
 				thread_id: threadId,
@@ -589,12 +798,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 
 	/** Dispatch を付けずに送られたメッセージは、送り手の端末か Dispatch から席を引く。 */
 	const seatOfMessage = (msg: SeatMessage): Seat | null => {
-		if (msg.dispatchId) return deps.seats.byDispatch(msg.dispatchId);
+		if (msg.dispatchId) return seats.byDispatch(msg.dispatchId);
 		return (
-			deps.seats
-				.all()
-				.find((s) => s.terminal !== null && s.terminal === msg.from) ??
-			deps.seats.byDispatch(msg.from)
+			seats.all().find((s) => s.terminal !== null && s.terminal === msg.from) ??
+			seats.byDispatch(msg.from)
 		);
 	};
 
@@ -604,7 +811,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const reply = await seatReply(seat, msg.body);
 		if (reply.body === "" && reply.files.length === 0) return;
 		if (reply.text !== "") {
-			await deps.seats.set({ ...seat, lastStatus: reply.text });
+			await seats.set({ ...seat, lastStatus: reply.text });
+			await refreshPanel(seat.threadId, true);
 		}
 		const sent = await deps.discord.send(
 			seat.threadId,
@@ -622,7 +830,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 
 	/** 持ち主の頼みで席の Claude を止め、同じ会話のまま起こし直す。コネクタの認証を足したあとなどに使う。 */
 	const restart = async (threadId: string): Promise<boolean> => {
-		const seat = deps.seats.get(threadId);
+		const seat = seats.get(threadId);
 		if (seat === null || seat.path === null || seat.status === "queued")
 			return false;
 		if (seat.status !== "sleeping") {
@@ -654,13 +862,13 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const threadId = seat.threadId;
 		if (msg.dispatchId !== seat.dispatchId) return;
 		if (msg.stopReason !== null && seat.expectStop) {
-			await deps.seats.set({ ...seat, expectStop: false });
+			await seats.set({ ...seat, expectStop: false });
 			return;
 		}
 		if (msg.stopReason !== null && seat.status !== "working") return;
 		// 裏の shell やタイマーを待つためにターンを終えただけなので、止まったとは書かない
 		if (msg.stopReason !== null && backgroundRunning(msg.body)) {
-			if (!seat.background) await deps.seats.set({ ...seat, background: true });
+			if (!seat.background) await seats.set({ ...seat, background: true });
 			log.info("seat waiting on background work", { thread_id: threadId });
 			return;
 		}
@@ -677,7 +885,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			msg.stopReason !== null ? STOPPED_TEXT : msg.body,
 			blocked,
 		);
-		await deps.seats.set(toWaiting(seat, null));
+		await seats.set(toWaiting(seat, null));
 		await setStatus(threadId, "決めてほしい");
 		log.info("seat stopped", {
 			thread_id: threadId,
@@ -687,6 +895,9 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 	};
 
 	const startFromRequest = async (p: Payload) => {
+		const request = { channelId: p.channel_id, messageId: p.message_id };
+		// 要約と投稿を立てる間も受け付けたことが見えるよう、先に絵文字を付ける
+		const reaction = await react(request, null, REACTION_OF.受付);
 		const summary = await deps.summarize(p.content);
 		const title = summary.ok ? summary.value : fallbackTitle(p.content);
 		const link = messageLink(p.guild_id, p.channel_id, p.message_id);
@@ -706,6 +917,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				message_id: p.message_id,
 				error: post.error.type,
 			});
+			await react(request, reaction, null);
 			await deps.discord.send(
 				p.channel_id,
 				"フォーラムに投稿を立てられませんでした。少し置いてから、もう一度お願いします。",
@@ -726,9 +938,9 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		);
 		await queue.run(threadId, async () => {
 			// 投稿内の返事が先に届いていれば、その返事がやりとりを読ませて席を作っている
-			if (deps.seats.get(threadId) !== null) return;
+			if (seats.get(threadId) !== null) return;
 			await openSeat(
-				newSeat(threadId),
+				{ ...newSeat(threadId), request, reaction },
 				requestPrompt({
 					now: now(),
 					authorName: p.author.display_name,
@@ -743,7 +955,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const threadId = p.channel_id;
 		log.info("forum post received", { thread_id: threadId });
 		await openSeat(
-			newSeat(threadId),
+			{
+				...newSeat(threadId),
+				request: { channelId: threadId, messageId: p.message_id },
+			},
 			forumStarterPrompt({
 				now: now(),
 				authorName: p.author.display_name,
@@ -762,8 +977,9 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		});
 		if (isRestartRequest(p.content) && (await restart(threadId))) return;
 		const request = deps.approvals.get(threadId);
+		const from = { channelId: threadId, messageId: p.message_id };
 		if (request === null) {
-			await deliver(threadId, reply, null);
+			await deliver(threadId, reply, null, from);
 			return;
 		}
 		// 許可でも取りやめでも、待っていた操作はここで片付け、古い依頼に後から OK を返しても通さない
@@ -780,7 +996,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				operations: [...request.operations],
 			});
 			log.info("approval dismissed", { thread_id: threadId });
-			await deliver(threadId, reply, null);
+			await deliver(threadId, reply, null, from);
 			return;
 		}
 		const grantId = newGrantId();
@@ -809,11 +1025,12 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				operations: request.operations,
 			}),
 			request.operations,
+			from,
 		);
 	};
 
 	const sleep = async (threadId: string) => {
-		const seat = deps.seats.get(threadId);
+		const seat = seats.get(threadId);
 		if (
 			seat === null ||
 			(seat.status !== "asking" && seat.status !== "waiting")
@@ -827,7 +1044,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			});
 			return;
 		}
-		await deps.seats.set({
+		await seats.set({
 			...seat,
 			status: "sleeping",
 			terminal: null,
@@ -863,7 +1080,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			// フォーラム投稿の最初のメッセージは投稿（スレッド）と同じ ID を持つ
 			if (p.message_id === threadId) {
 				await queue.run(threadId, async () => {
-					if (deps.seats.get(threadId) === null) await startFromForumPost(p);
+					if (seats.get(threadId) === null) await startFromForumPost(p);
 				});
 				return;
 			}
@@ -879,7 +1096,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				return;
 			}
 			await queue.run(seat.threadId, async () => {
-				const current = deps.seats.get(seat.threadId);
+				const current = seats.get(seat.threadId);
 				if (current === null) return;
 				if (msg.type === "question") await onQuestion(current, msg);
 				else if (msg.type === "worker_done") await onDone(current, msg);
@@ -894,7 +1111,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		},
 		sleepIdle: async () => {
 			const limit = now().getTime() - deps.sleepAfterMs;
-			const idle = deps.seats
+			const idle = seats
 				.all()
 				.filter(
 					(s) =>
@@ -919,8 +1136,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				});
 				return;
 			}
-			const seats = deps.seats.all();
-			for (const seat of seats) {
+			const before = seats.all();
+			for (const seat of before) {
 				if (!ALIVE.has(seat.status)) continue;
 				if (seat.terminal && live.value.has(seat.terminal)) continue;
 				// 席の Claude はもういない。worktree と会話は残っているので、返事で起こす
@@ -929,10 +1146,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 					terminal: null,
 				});
 				if (seat.standup || seat.path === null) {
-					await deps.seats.delete(seat.threadId);
+					await seats.delete(seat.threadId);
 					continue;
 				}
-				await deps.seats.set({
+				await seats.set({
 					...seat,
 					status: "sleeping",
 					terminal: null,
@@ -947,7 +1164,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				log.info("seat lost its claude", { thread_id: seat.threadId });
 			}
 			const known = new Map(
-				deps.seats.all().flatMap((s) => (s.path ? [[s.path, s] as const] : [])),
+				seats.all().flatMap((s) => (s.path ? [[s.path, s] as const] : [])),
 			);
 			for (const t of residue.value.terminals) {
 				const owner = known.get(t.path);
@@ -960,7 +1177,22 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				const r = await deps.orca.removeWorktree(path);
 				log.info("stray seat worktree removed", { path, ok: r.ok });
 			}
+			for (const seat of seats.all()) syncTyping(seat.threadId, seat);
 			dequeue();
 		},
+		refreshPanels: async () => {
+			const working = seats
+				.all()
+				.filter((s) => s.status === "working" && !s.standup);
+			await Promise.all(
+				working.map((s) =>
+					queue.run(s.threadId, () => refreshPanel(s.threadId, false)),
+				),
+			);
+		},
+		summary: () => ({
+			working: seats.all().filter((s) => s.status === "working" && !s.standup)
+				.length,
+		}),
 	};
 };

@@ -199,6 +199,9 @@ const sleepTimer = setInterval(() => {
 	void intake.sleepIdle().catch((e: unknown) => {
 		logger.error("seat sleep crashed", { error: String(e) });
 	});
+	void intake.refreshPanels().catch((e: unknown) => {
+		logger.error("seat panel refresh crashed", { error: String(e) });
+	});
 }, 60_000);
 
 // 席の Claude の SessionStart hook は写しだけを読み、席を起動するたびに GitHub へ行かない
@@ -222,6 +225,7 @@ const server = createWorkingServer({
 			});
 		});
 	},
+	seatSummary: intake.summary,
 	logger,
 });
 server.listen(cfg.port, () => {
