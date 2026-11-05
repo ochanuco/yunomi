@@ -64,12 +64,17 @@ describe("createDiscordRest", () => {
 	});
 
 	it("長い本文は分けて送り、返信先は最初の 1 件だけに付ける", async () => {
+		let n = 0;
 		const fetch = vi.fn(
-			async (_url: string | URL | Request, _init?: RequestInit) => json({}),
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				json({ id: `sent${++n}` }),
 		);
 		const api = createDiscordRest({ token: "t", fetch });
 		const long = `${"a".repeat(1990)}\n${"b".repeat(100)}`;
-		expect((await api.send("c", long, "m1")).ok).toBe(true);
+		expect(await api.send("c", long, "m1")).toEqual({
+			ok: true,
+			value: { messageIds: ["sent1", "sent2"] },
+		});
 		const bodies = fetch.mock.calls.map(([, init]) =>
 			JSON.parse(String(init?.body)),
 		);

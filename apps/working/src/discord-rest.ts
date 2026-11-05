@@ -26,6 +26,7 @@ const messageSchema = v.object({
 	content: v.string(),
 	author: userSchema,
 });
+const sentSchema = v.object({ id: v.string() });
 const channelSchema = v.object({
 	id: v.string(),
 	name: v.nullish(v.string()),
@@ -68,12 +69,12 @@ export type DiscordApi = {
 		forumId: string,
 		post: { name: string; content: string; tagIds: string[] },
 	) => Promise<Result<{ threadId: string }, DomainError>>;
-	/** 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに付ける。 */
+	/** 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに付ける。送ったメッセージの ID を順に返す。 */
 	send: (
 		channelId: string,
 		content: string,
 		replyTo?: string,
-	) => Promise<Result<void, DomainError>>;
+	) => Promise<Result<{ messageIds: string[] }, DomainError>>;
 	setTags: (
 		threadId: string,
 		tagIds: string[],
@@ -218,22 +219,29 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 		},
 		send: async (channelId, content, replyTo) => {
 			const chunks = splitMessage(content);
+			const messageIds: string[] = [];
 			for (const [i, chunk] of chunks.entries()) {
-				const r = await call("POST", `/channels/${channelId}/messages`, null, {
-					content: chunk,
-					allowed_mentions: noMentions,
-					...(i === 0 && replyTo
-						? {
-								message_reference: {
-									message_id: replyTo,
-									fail_if_not_exists: false,
-								},
-							}
-						: {}),
-				});
+				const r = await callJson(
+					"POST",
+					`/channels/${channelId}/messages`,
+					sentSchema,
+					{
+						content: chunk,
+						allowed_mentions: noMentions,
+						...(i === 0 && replyTo
+							? {
+									message_reference: {
+										message_id: replyTo,
+										fail_if_not_exists: false,
+									},
+								}
+							: {}),
+					},
+				);
 				if (!r.ok) return r;
+				messageIds.push(r.value.id);
 			}
-			return ok(undefined);
+			return ok({ messageIds });
 		},
 		setTags: async (threadId, tagIds) => {
 			const r = await call("PATCH", `/channels/${threadId}`, null, {

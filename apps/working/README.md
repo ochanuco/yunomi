@@ -6,9 +6,11 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 
 | ファイル | 役割 |
 | --- | --- |
-| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）と Claude CLI を入れる。人格の元ファイルも入れる |
+| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、`gh` を入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
 | `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、system prompt として標準出力に出す |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Claude CLI で作業する |
+| `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
+| `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
 
 Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<arch>.deb` を使う。CLI の名前は `orca` ではなく `orca-ide`。版は `ORCA_VERSION` で Mac の Orca と揃える。
@@ -19,7 +21,8 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | --- | --- | --- |
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
-| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿とセッションの対応（`threads.json`）、組み立てた system prompt |
+| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿とセッションの対応（`threads.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、組み立てた system prompt |
+| `yunomi-working-work` | `/home/worker/work` | Claude CLI の作業場所。clone したリポジトリ |
 
 `CLAUDE_CONFIG_DIR` を `~/.claude` に向けているので、通常は `~/.claude.json` に置かれる設定も volume に入る。
 
@@ -39,9 +42,41 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 フォーラムに `決めてほしい`・`作業中`・`引き継ぎ`・`完了` のタグを作っておく。受付は名前で ID を引く。作業を始めるときに `作業中` を付け、返事の最後の行（`状態: …`、投稿には出さない）に合わせて付け替える。書かれていなければ `決めてほしい` にする。人が付けたほかのタグは残す。
 
+### system prompt
+
+起動時に、`persona.sh` の出力、仕事のしかた（`src/prompts.ts` の `WORKING_INSTRUCTIONS`）、Mac への引き継ぎの手順（`handoff/prompt.md`）、申し送りの雛形（`handoff/issue-template.md`）の順に連結して `STATE_DIR/system-prompt.md` に書く。
+
 ### Claude CLI の権限
 
-既定は読み取りだけ（`--tools Read,Glob,Grep --permission-mode dontAsk`）。`src/claude-cli.ts` の `ClaudePolicy` を差し替えて変える。作業ディレクトリは `WORK_DIR` に固定する（Claude CLI のセッションは作業ディレクトリに紐づく）。
+Claude CLI には `Read`・`Glob`・`Grep`・`Edit`・`Write`・`Bash` を渡し（`--permission-mode dontAsk --setting-sources ""`）、使うたびに managed settings の PreToolUse hook（`src/guard/hook.ts`）が通すかどうかを決める。allow のルールは置かないので、hook が落ちたときは dontAsk が断る。managed settings と hook は root の持ち物にし、作業場所の `.claude/settings.json` や Claude CLI 自身の書き換えでは外せない。
+
+作業ディレクトリは `WORK_DIR` に固定する（Claude CLI のセッションは作業ディレクトリに紐づく）。Claude CLI に渡す環境変数は `src/claude-cli.ts` の `claudeEnv` に絞り、Discord のトークンと `WORKING_TOKEN` は渡さない。
+
+聞かずに通す操作:
+
+- 読み取り（秘密情報や設定・許可の記録がある場所を除く）
+- 作業場所の中のファイルの編集と削除、テストやビルドの実行
+- `git commit`、`origin` の `dev/` で始まるブランチへの push（押し先を `HEAD:dev/<topic>` のように書いたもの）
+- `gh issue create` / `comment`、`gh pr create` / `comment`、`gh label create`（申し送りに使う）と、`gh` の読み取り
+
+止める操作:
+
+- `dev/` 以外への push、押し先を書いていない push、force push、まとめての push、ブランチの削除
+- `gh pr merge`・`gh api`・`gh repo delete`・`gh release` など、上で通す以外の `gh`
+- 作業場所の外の削除と移動、作業場所の外（`/tmp` を除く）への書き込み
+- デプロイ・公開・課金・外部のサービスに届く道具（`wrangler`、`pnpm deploy`、`npm publish`、`tofu`、`stripe` など）、`curl` の POST などの送信
+- 秘密情報の読み出し（`printenv`、トークンの変数、`~/.claude`・`~/.config`・`STATE_DIR` など）
+- 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
+
+Bash は道具の名前と引数で読むので、書き方を変えれば抜けられる。うっかりの実行を止めるためのもので、`main` への push やマージは GitHub のブランチ保護とトークンの権限でも止めておく。
+
+### 取り消せない操作の許可
+
+1. hook が止めた操作は `STATE_DIR/guard/pending/` に残る。受付は 1 回の作業が終わるとそれを取り出し、Claude CLI の返事に続けて「決めてほしいこと」としてコマンドそのものを投稿に書き、タグを `決めてほしい` にする。
+2. 持ち主がその投稿に `OK`・`許可`・`許可します` のどれか（全角・末尾の句点は許す）だけを返すと許可になる。返信の形で送るときは「決めてほしいこと」のメッセージへの返信にする。ほかの返事が来たら、待っていた操作は取りやめる。
+3. 許可すると、受付はその操作を環境変数で Claude CLI に渡して resume する。hook は同じ道具・同じ内容の操作を 1 回だけ通す。その回で使わなかった許可は失効し、次に同じ操作をするとまた止まる。
+
+止めた・聞いた・許可した・使った・失効した・取りやめたの記録は `STATE_DIR/guard/log.jsonl` に 1 行ずつ残る。
 
 ### 環境変数
 
@@ -56,6 +91,9 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | `STATE_DIR` | いいえ | 対応表の置き場所。既定は `~/state` |
 | `WORK_DIR` | いいえ | Claude CLI の作業ディレクトリ。既定は `~/work` |
 | `PERSONA_SCRIPT` | いいえ | 人格を出力するスクリプト。既定は `~/bin/persona.sh` |
+| `HANDOFF_DIR` | いいえ | `prompt.md` と `issue-template.md` の置き場所。既定は `~/handoff` |
+| `GH_TOKEN` | いいえ | Claude CLI の `gh` と `git push` が使う書き込みトークン |
+| `GIT_AUTHOR_NAME` など | いいえ | Claude CLI の commit の作者。`GIT_AUTHOR_*` と `GIT_COMMITTER_*` を渡す |
 | `CLAUDE_BIN` | いいえ | Claude CLI のパス。既定は `claude` |
 | `CLAUDE_TIMEOUT_MS` | いいえ | 1 回の作業の上限。既定は 30 分 |
 | `LOG_LEVEL` | いいえ | `debug` / `info` / `warn` / `error`。既定は `info` |
@@ -76,6 +114,7 @@ docker run -d --name working \
   -v yunomi-working-claude:/home/worker/.claude \
   -v yunomi-working-orca:/home/worker/.config \
   -v yunomi-working-state:/home/worker/state \
+  -v yunomi-working-work:/home/worker/work \
   yunomi-working:spike \
   orca-ide serve --port 6768 --pairing-address 127.0.0.1:16768
 ```

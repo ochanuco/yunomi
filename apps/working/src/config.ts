@@ -20,6 +20,7 @@ const envSchema = v.object({
 	STATE_DIR: v.optional(nonEmpty),
 	WORK_DIR: v.optional(nonEmpty),
 	PERSONA_SCRIPT: v.optional(nonEmpty),
+	HANDOFF_DIR: v.optional(nonEmpty),
 	CLAUDE_BIN: v.optional(nonEmpty),
 	CLAUDE_TIMEOUT_MS: v.optional(positiveInt),
 	LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
@@ -39,6 +40,8 @@ export type WorkingConfig = {
 	/** Claude CLI の作業ディレクトリ。セッションはこの場所に紐づくので変えない。 */
 	workDir: string;
 	personaScript: string;
+	/** Mac への引き継ぎの指示（prompt.md と issue-template.md）を置いたディレクトリ。 */
+	handoffDir: string;
 	claudeBin: string;
 	claudeTimeoutMs: number;
 	logLevel: LogLevel;
@@ -76,6 +79,7 @@ export const loadConfig = (
 		stateDir: e.STATE_DIR ?? `${home}/state`,
 		workDir: e.WORK_DIR ?? `${home}/work`,
 		personaScript: e.PERSONA_SCRIPT ?? `${home}/bin/persona.sh`,
+		handoffDir: e.HANDOFF_DIR ?? `${home}/handoff`,
 		claudeBin: e.CLAUDE_BIN ?? "claude",
 		claudeTimeoutMs: e.CLAUDE_TIMEOUT_MS ?? 30 * 60_000,
 		logLevel: e.LOG_LEVEL ?? "info",
