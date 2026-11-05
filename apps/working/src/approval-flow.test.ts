@@ -1,229 +1,144 @@
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { err, externalServiceUnavailable, ok } from "@yunomi/core";
-import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import { ok } from "@yunomi/core";
 import { describe, expect, it } from "vitest";
 import { openApprovalStore } from "./approval-store.ts";
-import { claudeEnv, createClaudeCli, WORK_POLICY } from "./claude-cli.ts";
-import type { ChannelInfo, DiscordApi } from "./discord-rest.ts";
+import { GUARD_ENV, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
 import { silentLogger } from "./logger.ts";
-import { openSessionStore } from "./session-store.ts";
-import { tempDir } from "./test-support.ts";
+import { openSeatStore } from "./seat-store.ts";
+import {
+	BOT,
+	FORUM,
+	fakeDiscord,
+	fakeOrca,
+	OWNER,
+	say,
+	seatMessage,
+	TEXT,
+	tempDir,
+} from "./test-support.ts";
 
-const BOT = "bot";
-const OWNER = "u1";
-const FORUM = "forum";
-const THREAD = "thread1";
 const HOOK = join(import.meta.dirname, "guard", "hook.ts");
 
 /**
- * Claude CLI のモック。決まったコマンドを Bash で実行しようとし、本物と同じく
- * 受け取った環境変数のまま PreToolUse hook（src/guard/hook.ts）を呼んで、通ったときだけ実行したことにする。
+ * 席の Claude から呼ばれる形で本物の PreToolUse hook（src/guard/hook.ts）を動かす。
+ * 席の Claude は orca serve の環境変数を受け継ぎ、Claude CLI は hook に席の場所（CLAUDE_PROJECT_DIR）を渡す。
  */
-const FAKE_CLAUDE = `#!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
-const args = process.argv.slice(2);
-const at = (flag) => { const i = args.indexOf(flag); return i === -1 ? null : args[i + 1]; };
-const sessionId = at("--session-id") ?? at("--resume");
-readFileSync(0, "utf8");
-const command = process.env.FAKE_COMMAND;
-const hook = spawnSync(process.execPath, [process.env.FAKE_HOOK], {
-	input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: process.env.YUNOMI_WORK_DIR }),
-	env: process.env,
-	encoding: "utf8",
-});
-const decision = hook.status === 0 ? JSON.parse(hook.stdout).hookSpecificOutput.permissionDecision : "deny";
-if (decision === "allow") appendFileSync(process.env.FAKE_EXECUTED, command + "\\n");
-const result = decision === "allow" ? "push しました\\n状態: 完了" : "push には許可が要ります\\n状態: 完了";
-process.stdout.write(JSON.stringify({ is_error: false, result, session_id: sessionId }));
-`;
-
-const fakeDiscord = () => {
-	const channels = new Map<string, ChannelInfo>([
-		[
-			FORUM,
-			{
-				id: FORUM,
-				name: "仕事",
-				parentId: "cat",
-				appliedTagIds: [],
-				availableTags: [
-					{ id: "tag-decide", name: "決めてほしい" },
-					{ id: "tag-working", name: "作業中" },
-					{ id: "tag-handoff", name: "引き継ぎ" },
-					{ id: "tag-done", name: "完了" },
-				],
-			},
-		],
-		[
-			THREAD,
-			{
-				id: THREAD,
-				name: "main に push",
-				parentId: FORUM,
-				appliedTagIds: [],
-				availableTags: [],
-			},
-		],
-	]);
-	const sent: { id: string; content: string }[] = [];
-	const api: DiscordApi = {
-		me: async () => ok({ id: BOT }),
-		getChannel: async (id) => {
-			const ch = channels.get(id);
-			return ch
-				? ok(ch)
-				: err(externalServiceUnavailable({ service: "discord" }));
-		},
-		getMessage: async () =>
-			err(externalServiceUnavailable({ service: "discord" })),
-		listMessages: async () => ok([]),
-		createForumPost: async () =>
-			err(externalServiceUnavailable({ service: "discord" })),
-		send: async (_channelId, content) => {
-			const id = `sent${sent.length + 1}`;
-			sent.push({ id, content });
-			return ok({ messageIds: [id] });
-		},
-		setTags: async (threadId, tagIds) => {
-			const ch = channels.get(threadId);
-			if (ch) channels.set(threadId, { ...ch, appliedTagIds: tagIds });
-			return ok(undefined);
-		},
-	};
-	const tag = () => channels.get(THREAD)?.appliedTagIds;
-	return { api, sent, tag };
-};
-
-let messageSeq = 0;
-const say = (
-	content: string,
-	opts: { first?: boolean; replyTo?: string } = {},
-): DiscordMessageCreatedEnvelope =>
-	({
-		event_id: `e${++messageSeq}`,
-		payload: {
-			guild_id: "g",
-			channel_id: THREAD,
-			message_id: opts.first ? THREAD : `m${messageSeq}`,
-			author: { id: OWNER, display_name: "ちゃぬ", is_bot: false },
-			content,
-			mentions: [],
-			reply_to_message_id: opts.replyTo ?? null,
-			attachments: [],
-		},
-	}) as unknown as DiscordMessageCreatedEnvelope;
-
-const setup = async (command: string) => {
+const setup = async () => {
 	const root = tempDir();
 	const stateDir = join(root, "state");
-	const workDir = join(root, "work");
-	const bin = join(root, "claude.mjs");
-	const executed = join(root, "executed.txt");
-	writeFileSync(bin, FAKE_CLAUDE);
-	chmodSync(bin, 0o755);
-	writeFileSync(executed, "");
+	const seatsDir = join(root, "seats");
 	const d = fakeDiscord();
-	const ledger = createLedger(join(stateDir, "guard"));
-	let n = 0;
+	const o = fakeOrca(seatsDir);
+	const seats = await openSeatStore(stateDir);
 	const intake = createIntake({
 		discord: d.api,
-		claude: createClaudeCli({
-			bin,
-			cwd: root,
-			systemPromptFile: join(root, "system.md"),
-			timeoutMs: 30_000,
-			policy: WORK_POLICY,
-			env: {
-				...claudeEnv(
-					{ PATH: process.env.PATH, HOME: root },
-					{ workDir, stateDir },
-				),
-				FAKE_HOOK: HOOK,
-				FAKE_COMMAND: command,
-				FAKE_EXECUTED: executed,
-			},
-		}),
-		sessions: await openSessionStore(stateDir),
+		orca: o.orca,
+		seats,
 		approvals: await openApprovalStore(stateDir),
-		ledger,
+		ledger: createLedger(guardDirOf(stateDir)),
+		summarize: async () => ok("件名"),
+		remember: async () => {},
+		standupDone: async () => {},
+		preamble: "",
 		botUserId: BOT,
 		ownerUserIds: new Set([OWNER]),
-		workTextChannelId: "text",
+		workTextChannelId: TEXT,
 		workForumChannelId: FORUM,
-		newSessionId: () => `s${++n}`,
-		newGrantId: () => `g${n}`,
+		seatLimit: 6,
+		sleepAfterMs: 60_000,
+		newGrantId: () => "g1",
 		logger: silentLogger,
 	});
-	const ran = () => readFileSync(executed, "utf8").split("\n").filter(Boolean);
-	const events = () =>
-		readFileSync(join(stateDir, "guard", "log.jsonl"), "utf8")
-			.trim()
-			.split("\n")
-			.map((l) => JSON.parse(l))
-			.map((e) => `${e.event}${e.operation ? `:${e.operation.target}` : ""}`);
-	return { intake, d, ran, events };
+	const tool = (
+		threadId: string,
+		tool_name: string,
+		tool_input: Record<string, unknown>,
+	) => {
+		const seatDir = join(seatsDir, `seat-${threadId}`);
+		const r = spawnSync(process.execPath, [HOOK], {
+			input: JSON.stringify({ tool_name, tool_input, cwd: seatDir }),
+			env: {
+				PATH: process.env.PATH ?? "",
+				HOME: join(root, "home"),
+				[GUARD_ENV.stateDir]: stateDir,
+				[GUARD_ENV.seatsDir]: seatsDir,
+				CLAUDE_PROJECT_DIR: seatDir,
+			},
+			encoding: "utf8",
+		});
+		return r.status === 0
+			? (JSON.parse(r.stdout).hookSpecificOutput.permissionDecision as string)
+			: "error";
+	};
+	const bash = (threadId: string, command: string) =>
+		tool(threadId, "Bash", { command });
+	const open = async (threadId: string) => {
+		d.addThread(threadId, threadId);
+		await intake.handle(say(threadId, "頼みます", { first: true }));
+		return seats.get(threadId);
+	};
+	return { d, o, seats, intake, seatsDir, bash, tool, open };
 };
 
-describe("取り消せない操作の許可（Claude CLI のモック + 本物の hook）", () => {
-	it("dev/ への push は聞かずに通す", async () => {
-		const { intake, d, ran } = await setup("git push -u origin HEAD:dev/x");
-		await intake.handle(say("push して", { first: true }));
-		expect(ran()).toEqual(["git push -u origin HEAD:dev/x"]);
-		expect(d.sent.map((s) => s.content)).toEqual(["push しました"]);
-		expect(d.tag()).toEqual(["tag-done"]);
+describe("席の Claude の取り消せない操作", () => {
+	it("聞かずに通す操作は通し、席の外への書き込みは止める", async () => {
+		const s = await setup();
+		await s.open("p1");
+		expect(s.bash("p1", "git push -u origin HEAD:dev/x")).toBe("allow");
+		expect(
+			s.tool("p1", "Write", {
+				file_path: join(s.seatsDir, "seat-p1", "r", "a.ts"),
+			}),
+		).toBe("allow");
+		// ほかの席の作業場所も、この席から見れば外
+		expect(
+			s.tool("p1", "Write", { file_path: join(s.seatsDir, "seat-p2", "a.ts") }),
+		).toBe("deny");
 	});
 
-	it("止めた操作を投稿で聞き、OK の後に 1 回だけ通し、次の同じ操作はまた止める", async () => {
-		const { intake, d, ran, events } = await setup("git push origin main");
-
-		await intake.handle(say("main に push して", { first: true }));
-		expect(ran()).toEqual([]);
-		const request = d.sent.at(-1);
-		expect(request?.content).toContain("決めてほしいこと");
-		expect(request?.content).toContain("```\ngit push origin main\n```");
-		// Claude が「完了」と書いても、止めた操作があれば持ち主の判断を待つ
-		expect(d.tag()).toEqual(["tag-decide"]);
-
-		await intake.handle(say("OK"));
-		expect(ran()).toEqual(["git push origin main"]);
-		expect(d.sent.at(-1)?.content).toBe("push しました");
-		expect(d.tag()).toEqual(["tag-done"]);
-
-		await intake.handle(say("もう一回 main に push して"));
-		expect(ran()).toEqual(["git push origin main"]);
-		expect(d.sent.at(-1)?.content).toContain("決めてほしいこと");
-		expect(d.tag()).toEqual(["tag-decide"]);
-
-		expect(events()).toEqual([
-			"blocked:git push origin main",
-			"requested",
-			"granted",
-			"used:git push origin main",
-			"blocked:git push origin main",
-			"requested",
-		]);
+	it("受付とのやりとりの orca だけを通し、席を作る・消す orca は止める", async () => {
+		const s = await setup();
+		await s.open("p1");
+		expect(
+			s.bash("p1", 'orca orchestration ask --question "どうしますか"'),
+		).toBe("allow");
+		expect(
+			s.bash(
+				"p1",
+				'orca orchestration send --type worker_done --body "済み" --outcome succeeded',
+			),
+		).toBe("allow");
+		expect(s.bash("p1", "orca worktree rm --worktree active")).toBe("deny");
+		expect(
+			s.bash("p1", "orca orchestration send --to dispatch:x --subject a"),
+		).toBe("deny");
 	});
 
-	it("決まった言い方以外の返事や、ほかのメッセージへの OK では通さない", async () => {
-		const { intake, d, ran } = await setup("gh pr merge 3");
-		await intake.handle(say("マージして", { first: true }));
-		const first = d.sent.at(-1)?.id ?? "";
+	it("main への push と gh pr merge を止めて投稿で聞き、OK の後に 1 回だけ通す。許可はほかの投稿の席に効かない", async () => {
+		const s = await setup();
+		const seat = await s.open("p1");
+		await s.open("p2");
+		expect(s.bash("p1", "git push origin main")).toBe("deny");
+		expect(s.bash("p1", "gh pr merge 3")).toBe("deny");
 
-		await intake.handle(say("うーん、いいかも"));
-		expect(ran()).toEqual([]);
-		const second = d.sent.at(-1)?.id ?? "";
-		expect(second).not.toBe(first);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat?.dispatchId ?? null,
+				body: "マージと main への push をしてよいですか",
+			}),
+		);
+		const asked = s.d.sentTo("p1").at(-1) ?? "";
+		expect(asked).toContain("git push origin main");
+		expect(asked).toContain("gh pr merge 3");
 
-		// 取りやめた前の依頼への OK は効かない
-		await intake.handle(say("OK", { replyTo: first }));
-		expect(ran()).toEqual([]);
-
-		const third = d.sent.at(-1)?.id ?? "";
-		await intake.handle(say("許可します。", { replyTo: third }));
-		expect(ran()).toEqual(["gh pr merge 3"]);
+		await s.intake.handle(say("p1", "OK"));
+		expect(s.bash("p2", "gh pr merge 3")).toBe("deny");
+		expect(s.bash("p1", "gh pr merge 3")).toBe("allow");
+		expect(s.bash("p1", "gh pr merge 3")).toBe("deny");
+		expect(s.bash("p1", "git push origin main")).toBe("allow");
 	});
 });

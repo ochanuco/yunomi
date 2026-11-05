@@ -5,8 +5,10 @@ import {
 	readFileSync,
 	renameSync,
 	rmSync,
+	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { type GrantFile, grantPathOf } from "./env.ts";
 import type { Operation } from "./operation.ts";
 
 /**
@@ -100,6 +102,29 @@ export const createLedger = (
 		used: (grantId: string): Operation[] => readLines(usedPath(grantId)),
 		markUsed: (grantId: string, op: Operation) => append(usedPath(grantId), op),
 		clearUsed: (grantId: string) => rmSync(usedPath(grantId), { force: true }),
+		/** 持ち主が許可した操作を、その投稿の席の hook に渡す。 */
+		grant: (threadId: string, grant: GrantFile) => {
+			const path = grantPathOf(dir, threadId);
+			mkdirSync(join(path, ".."), { recursive: true });
+			writeFileSync(`${path}.tmp`, JSON.stringify(grant));
+			renameSync(`${path}.tmp`, path);
+		},
+		/** 渡していた許可を取り下げて返す。 */
+		takeGrant: (threadId: string): GrantFile | null => {
+			const path = grantPathOf(dir, threadId);
+			let raw: string;
+			try {
+				raw = readFileSync(path, "utf8");
+			} catch {
+				return null;
+			}
+			rmSync(path, { force: true });
+			try {
+				return JSON.parse(raw) as GrantFile;
+			} catch {
+				return null;
+			}
+		},
 	};
 };
 

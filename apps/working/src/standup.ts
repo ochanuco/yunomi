@@ -1,18 +1,17 @@
 import { formatJstForPrompt, toModelJson } from "@yunomi/core";
 import * as v from "valibot";
-import { approvalRequestText, uniquePending } from "./approval.ts";
+import { approvalRequestText } from "./approval.ts";
 import type { ApprovalStore } from "./approval-store.ts";
-import type { ClaudeRunner } from "./claude-cli.ts";
 import type { DiscordApi } from "./discord-rest.ts";
-import type { Ledger } from "./guard/ledger.ts";
+import type { Ledger, Pending } from "./guard/ledger.ts";
 import type { Logger } from "./logger.ts";
 import {
 	loginExpiryDecision,
 	STANDUP_TITLE_LIMIT,
+	seatSpec,
 	standupPostFooter,
 	standupPrompt,
 } from "./prompts.ts";
-import type { SessionStore } from "./session-store.ts";
 import type { StandupMaterials } from "./standup-materials.ts";
 
 export type Decision = { title: string; body: string };
@@ -49,75 +48,28 @@ export const parseDecisions = (text: string): Decision[] | null => {
 };
 
 export type StandupDeps = {
-	claude: ClaudeRunner;
 	discord: DiscordApi;
-	sessions: SessionStore;
 	approvals: ApprovalStore;
 	ledger: Ledger;
 	workForumChannelId: string;
-	gather: () => Promise<StandupMaterials>;
-	newSessionId: () => string;
 	now?: () => Date;
 	logger: Logger;
 };
 
-export type StandupReport = {
-	sessionId: string;
-	decisions: number;
-	posted: string[];
-	failed: number;
-};
-
 const DECIDE_TAG = "決めてほしい";
 
-/**
- * 朝会を 1 回する。Claude が材料を見て取り消せることを済ませ、決めてほしいことだけを返す。
- * 1 件ごとに仕事フォーラムへ投稿し、投稿は朝会のセッションから fork して返事で続けられるようにする。
- * 決めてほしいことが無ければ何も投稿しない。
- */
-export const runStandup = async (deps: StandupDeps): Promise<StandupReport> => {
+export type StandupReport = { posted: string[]; failed: number };
+
+/** 決めてほしいこと 1 件ごとに仕事フォーラムへ投稿する。投稿への返事は、その投稿の新しい席が受ける。 */
+export const postDecisions = async (
+	deps: StandupDeps,
+	decisions: readonly Decision[],
+	blocked: readonly Pending[],
+): Promise<StandupReport> => {
 	const log = deps.logger;
 	const now = (deps.now ?? (() => new Date()))();
-	const sessionId = deps.newSessionId();
-	// hook が止めた操作をこの朝会に紐づけて取り出すための ID。投稿ではない
-	const guardThreadId = `standup-${sessionId}`;
-	log.info("standup started", { session_id: sessionId });
-
-	const materials = await deps.gather();
-	const result = await deps.claude.run({
-		prompt: standupPrompt({ now, materials: toModelJson(materials) }),
-		session: { kind: "new", id: sessionId },
-		guard: { threadId: guardThreadId, grants: [], grantId: null },
-	});
-	const blocked = uniquePending(deps.ledger.takePending(guardThreadId));
-	if (!result.ok) {
-		log.error("standup claude failed", {
-			session_id: sessionId,
-			error: result.error.type,
-		});
-	}
-	const parsed = result.ok ? parseDecisions(result.value.text) : [];
-	if (parsed === null) {
-		log.error("standup decisions unreadable", { session_id: sessionId });
-	}
-	const decisions: Decision[] = [...(parsed ?? [])];
-	if (
-		materials.claude_login.expires_soon &&
-		materials.claude_login.expires_at
-	) {
-		decisions.push(loginExpiryDecision(materials.claude_login.expires_at));
-	}
-
-	const report: StandupReport = {
-		sessionId,
-		decisions: decisions.length + (blocked.length > 0 ? 1 : 0),
-		posted: [],
-		failed: 0,
-	};
-	if (report.decisions === 0) {
-		log.info("standup done", { ...report, session_id: sessionId });
-		return report;
-	}
+	const report: StandupReport = { posted: [], failed: 0 };
+	if (decisions.length === 0 && blocked.length === 0) return report;
 
 	const forum = await deps.discord.getChannel(deps.workForumChannelId);
 	const tagId = forum.ok
@@ -137,18 +89,11 @@ export const runStandup = async (deps: StandupDeps): Promise<StandupReport> => {
 		);
 		if (!created.ok) {
 			report.failed++;
-			log.error("standup post failed", {
-				session_id: sessionId,
-				error: created.error.type,
-			});
+			log.error("standup post failed", { error: created.error.type });
 			return null;
 		}
-		const { threadId } = created.value;
-		if (result.ok) {
-			await deps.sessions.set(threadId, result.value.sessionId, true);
-		}
-		report.posted.push(threadId);
-		return threadId;
+		report.posted.push(created.value.threadId);
+		return created.value.threadId;
 	};
 
 	for (const d of decisions) await post(d);
@@ -173,6 +118,57 @@ export const runStandup = async (deps: StandupDeps): Promise<StandupReport> => {
 			});
 		}
 	}
-	log.info("standup done", { ...report, session_id: sessionId });
+	return report;
+};
+
+/**
+ * 朝会を始める。材料を集めて朝会の席に渡す。席は取り消せることを済ませ、決めてほしいことを worker_done で返す。
+ * ログインの期限は Claude の返事によらないので、ここで先に投稿する。
+ */
+export const startStandup = async (input: {
+	deps: StandupDeps;
+	gather: () => Promise<StandupMaterials>;
+	preamble: string;
+	start: (spec: string) => Promise<string>;
+}): Promise<string> => {
+	const { deps } = input;
+	const now = (deps.now ?? (() => new Date()))();
+	const materials = await input.gather();
+	if (
+		materials.claude_login.expires_soon &&
+		materials.claude_login.expires_at
+	) {
+		await postDecisions(
+			deps,
+			[loginExpiryDecision(materials.claude_login.expires_at)],
+			[],
+		);
+	}
+	const id = await input.start(
+		seatSpec(
+			input.preamble,
+			standupPrompt({ now, materials: toModelJson(materials) }),
+		),
+	);
+	deps.logger.info("standup started", { seat: id });
+	return id;
+};
+
+/** 朝会の席の報告を読み、決めてほしいことを投稿にする。 */
+export const finishStandup = async (
+	deps: StandupDeps,
+	text: string,
+	blocked: readonly Pending[],
+): Promise<StandupReport> => {
+	const parsed = parseDecisions(text);
+	if (parsed === null) {
+		deps.logger.error("standup decisions unreadable", {});
+	}
+	const report = await postDecisions(deps, parsed ?? [], blocked);
+	deps.logger.info("standup done", {
+		decisions: (parsed ?? []).length,
+		blocked: blocked.length,
+		...report,
+	});
 	return report;
 };

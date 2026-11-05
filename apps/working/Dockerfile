@@ -28,6 +28,17 @@ RUN curl -fsSL -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
 	&& apt-get install -y --no-install-recommends gh \
 	&& rm -rf /var/lib/apt/lists/*
 
+# orca-ide の deb は Electron アプリ一式で、GUI 用ライブラリを依存に持つ。apt に解決させる。
+RUN arch="$(dpkg --print-architecture)" \
+	&& curl -fsSL -o /tmp/orca.deb \
+		"https://github.com/stablyai/orca/releases/download/v${ORCA_VERSION}/orca-ide_${ORCA_VERSION}_${arch}.deb" \
+	&& apt-get update \
+	&& apt-get install -y --no-install-recommends /tmp/orca.deb \
+	&& rm -rf /var/lib/apt/lists/* /tmp/orca.deb
+
+# 席の Claude の手順書（orchestration の preamble）はコマンドを orca と書く。
+RUN ln -s /usr/bin/orca-ide /usr/local/bin/orca
+
 # 取り消せない操作を止める PreToolUse hook。managed settings も hook も root の持ち物にし、
 # Claude CLI（worker で動く）が書き換えて止めるのをやめさせられないようにする。
 COPY apps/working/guard/managed-settings.json /etc/claude-code/managed-settings.json
@@ -41,19 +52,13 @@ COPY apps/working/src/memory-cli/cli.ts apps/working/src/memory-cli/bin.ts /opt/
 RUN printf '#!/bin/sh\nexec /usr/local/bin/node /opt/yunomi-memory/bin.ts "$@"\n' > /usr/local/bin/yunomi-memory \
 	&& chmod 755 /usr/local/bin/yunomi-memory
 
-# orca-ide の deb は Electron アプリ一式で、GUI 用ライブラリを依存に持つ。apt に解決させる。
-RUN arch="$(dpkg --print-architecture)" \
-	&& curl -fsSL -o /tmp/orca.deb \
-		"https://github.com/stablyai/orca/releases/download/v${ORCA_VERSION}/orca-ide_${ORCA_VERSION}_${arch}.deb" \
-	&& apt-get update \
-	&& apt-get install -y --no-install-recommends /tmp/orca.deb \
-	&& rm -rf /var/lib/apt/lists/* /tmp/orca.deb
-
 RUN useradd -m -s /bin/bash worker
 USER worker
 WORKDIR /home/worker
 # named volume は空のときマウント先の所有者を引き継ぐ。先に worker 所有で作っておかないと root 所有になり書けない。
 RUN mkdir -p /home/worker/.claude /home/worker/.config /home/worker/state /home/worker/work
+# Orca は席の worktree を ~/orca/workspaces に作る。作り直しても席が残るよう work の volume に置く。
+RUN ln -s /home/worker/work/orca /home/worker/orca
 
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN git config --global credential.helper '!gh auth git-credential'
@@ -61,16 +66,16 @@ ENV PATH=/home/worker/.local/bin:$PATH
 # .claude.json（ログインの付随情報）も volume に入れるため、設定の置き場所を 1 か所にまとめる。
 ENV CLAUDE_CONFIG_DIR=/home/worker/.claude
 
-# 人格の元ファイルをそのまま連結して system prompt にする。build context はリポジトリの root。
+# 人格の元ファイルをそのまま連結して席の Claude に渡す。build context はリポジトリの root。
 COPY --chown=worker:worker partners/yukarin/profile.yaml partners/yukarin/examples.yaml /home/worker/persona/
 COPY --chown=worker:worker partners/yukarin/identity/ /home/worker/persona/identity/
 COPY --chown=worker:worker apps/working/persona.sh /home/worker/bin/persona.sh
-# Mac への引き継ぎの手順と申し送りの雛形。受付が起動時に system prompt の後ろに足す。
+# Mac への引き継ぎの手順と申し送りの雛形。受付が席の Claude に渡す前置きに足す。
 COPY apps/working/handoff/prompt.md apps/working/handoff/issue-template.md /home/worker/handoff/
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build --chown=worker:worker /out /home/worker/app
-COPY --chown=worker:worker apps/working/start.sh apps/working/release-orcad-lock.sh /home/worker/bin/
+COPY --chown=worker:worker apps/working/start.sh apps/working/seat-env.sh apps/working/release-orcad-lock.sh /home/worker/bin/
 
 # 8080 は gateway からの受付、8090 は Mac からの席の状態
 EXPOSE 8080 8090

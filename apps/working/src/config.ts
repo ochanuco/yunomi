@@ -22,7 +22,11 @@ const envSchema = v.object({
 	PERSONA_SCRIPT: v.optional(nonEmpty),
 	HANDOFF_DIR: v.optional(nonEmpty),
 	CLAUDE_BIN: v.optional(nonEmpty),
-	CLAUDE_TIMEOUT_MS: v.optional(positiveInt),
+	ORCA_BIN: v.optional(nonEmpty),
+	SEATS_REPO: v.optional(nonEmpty),
+	SEATS_DIR: v.optional(nonEmpty),
+	SEAT_LIMIT: v.optional(positiveInt),
+	SEAT_SLEEP_AFTER_MINUTES: v.optional(positiveInt),
 	LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	YUNOMI_URL: v.optional(v.pipe(v.string(), v.url())),
 	CF_ACCESS_CLIENT_ID: v.optional(nonEmpty),
@@ -50,13 +54,21 @@ export type WorkingConfig = {
 	port: number;
 	/** 投稿とセッションの対応を置くディレクトリ。volume に載せる。 */
 	stateDir: string;
-	/** Claude CLI の作業ディレクトリ。セッションはこの場所に紐づくので変えない。 */
+	/** 受付が自分で動かす CLI の作業ディレクトリ。 */
 	workDir: string;
 	personaScript: string;
 	/** Mac への引き継ぎの指示（prompt.md と issue-template.md）を置いたディレクトリ。 */
 	handoffDir: string;
 	claudeBin: string;
-	claudeTimeoutMs: number;
+	orcaBin: string;
+	/** 席の worktree の元にする空の git リポジトリ。 */
+	seatsRepo: string;
+	/** Orca が席の worktree を作る場所。start.sh が hook に渡す値と揃える。 */
+	seatsDir: string;
+	/** 同時に Claude を動かしておく席の上限。 */
+	seatLimit: number;
+	/** 決めてほしいままこれだけたった席は Claude を止める。 */
+	seatSleepAfterMs: number;
 	logLevel: LogLevel;
 	/** Working の記憶の口。3 つそろったときだけ yunomi-memory が使える。 */
 	memory: { url: string; clientId: string; clientSecret: string } | null;
@@ -111,7 +123,12 @@ export const loadConfig = (
 		personaScript: e.PERSONA_SCRIPT ?? `${home}/bin/persona.sh`,
 		handoffDir: e.HANDOFF_DIR ?? `${home}/handoff`,
 		claudeBin: e.CLAUDE_BIN ?? "claude",
-		claudeTimeoutMs: e.CLAUDE_TIMEOUT_MS ?? 30 * 60_000,
+		orcaBin: e.ORCA_BIN ?? "orca-ide",
+		seatsRepo: e.SEATS_REPO ?? `${home}/work/seats`,
+		// Orca は worktree を ~/orca/workspaces/<リポジトリ名> に作り、~/orca は work の volume への symlink
+		seatsDir: e.SEATS_DIR ?? `${home}/work/orca/workspaces/seats`,
+		seatLimit: e.SEAT_LIMIT ?? 6,
+		seatSleepAfterMs: (e.SEAT_SLEEP_AFTER_MINUTES ?? 120) * 60_000,
 		logLevel: e.LOG_LEVEL ?? "info",
 		memory:
 			e.YUNOMI_URL && e.CF_ACCESS_CLIENT_ID && e.CF_ACCESS_CLIENT_SECRET

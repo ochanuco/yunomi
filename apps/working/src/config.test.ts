@@ -27,7 +27,11 @@ describe("loadConfig", () => {
 				personaScript: "/home/w/bin/persona.sh",
 				handoffDir: "/home/w/handoff",
 				claudeBin: "claude",
-				claudeTimeoutMs: 1_800_000,
+				orcaBin: "orca-ide",
+				seatsRepo: "/home/w/work/seats",
+				seatsDir: "/home/w/work/orca/workspaces/seats",
+				seatLimit: 6,
+				seatSleepAfterMs: 7_200_000,
 				logLevel: "info",
 				memory: null,
 				memoryBin: "yunomi-memory",
@@ -42,9 +46,18 @@ describe("loadConfig", () => {
 	});
 
 	it("数値の設定を読み、空文字は未設定として扱う", () => {
-		const r = loadConfig({ ...base, PORT: "9000", CLAUDE_TIMEOUT_MS: "" });
+		const r = loadConfig({
+			...base,
+			PORT: "9000",
+			SEAT_LIMIT: "3",
+			SEAT_SLEEP_AFTER_MINUTES: "30",
+			SEATS_DIR: "",
+		});
 		expect(r.ok && r.value.port).toBe(9000);
-		expect(r.ok && r.value.claudeTimeoutMs).toBe(1_800_000);
+		expect(r.ok && r.value.seatLimit).toBe(3);
+		expect(r.ok && r.value.seatSleepAfterMs).toBe(1_800_000);
+		expect(r.ok && r.value.seatsDir).toBe("/home/w/work/orca/workspaces/seats");
+		expect(loadConfig({ ...base, SEAT_LIMIT: "0" }).ok).toBe(false);
 		expect(loadConfig({ ...base, PORT: "x" }).ok).toBe(false);
 	});
 

@@ -65,8 +65,6 @@ const EXTERNAL_TOOLS = new Set([
 	"http",
 	"https",
 	"xh",
-	"orca",
-	"orca-ide",
 ]);
 const PRIVILEGE = new Set(["sudo", "su", "doas"]);
 const PROCESS_CONTROL = new Set([
@@ -324,6 +322,20 @@ const classifyMemory = (rest: readonly string[]): Reason => {
 	return null;
 };
 
+/** 席の Claude が受付とやりとりする orchestration の口。席を作る・止める・ほかの席に送る操作は通さない。 */
+const ORCA_SEAT_VERBS = new Set(["ask", "send", "check"]);
+
+const classifyOrca = (rest: readonly string[]): Reason => {
+	const [group, verb] = rest;
+	if (group === "orchestration" && verb && ORCA_SEAT_VERBS.has(verb)) {
+		return rest.some((a) => /^--(to|pairing-code|environment)(=|$)/.test(a))
+			? "orca orchestration の宛先を変える操作"
+			: null;
+	}
+	if (group === "skills" && verb === "get") return null;
+	return "orca は席の Claude が受付とやりとりする orchestration の口だけを聞かずに使える";
+};
+
 type CwdRef = { cwd: string | null };
 
 const pathsOf = (rest: readonly string[]) => {
@@ -416,6 +428,7 @@ const classifySimple = (
 		return "秘密情報の読み出し";
 	}
 	if (name === "yunomi-memory") return classifyMemory(rest);
+	if (name === "orca" || name === "orca-ide") return classifyOrca(rest);
 	if (name === "git") return classifyGit(rest);
 	if (name === "gh") return classifyGh(rest);
 	if (name === "curl") return classifyCurl(rest);

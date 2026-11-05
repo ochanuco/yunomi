@@ -1,27 +1,23 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { openApprovalStore } from "./approval-store.ts";
-import {
-	claudeEnv,
-	createClaudeCli,
-	spawnExec,
-	WORK_POLICY,
-} from "./claude-cli.ts";
+import { childEnv, createSummarizer } from "./claude-cli.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
+import { spawnExec } from "./exec.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
 import { createLogger } from "./logger.ts";
 import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
-import { buildSystemPrompt } from "./prompts.ts";
+import { createOrcaCli } from "./orca.ts";
+import { buildSeatPreamble } from "./prompts.ts";
+import { openSeatStore } from "./seat-store.ts";
 import { createWorkingServer } from "./server.ts";
-import { openSessionStore } from "./session-store.ts";
-import { runStandup } from "./standup.ts";
+import { finishStandup, startStandup } from "./standup.ts";
 import { gatherStandupMaterials } from "./standup-materials.ts";
 import { startStandupTimer } from "./standup-timer.ts";
 
@@ -37,20 +33,16 @@ const logger = createLogger(cfg.logLevel);
 const persona = await promisify(execFile)(cfg.personaScript, {
 	maxBuffer: 10_000_000,
 });
-const systemPromptFile = join(cfg.stateDir, "system-prompt.md");
 await mkdir(cfg.stateDir, { recursive: true });
 await mkdir(cfg.workDir, { recursive: true });
-await writeFile(
-	systemPromptFile,
-	buildSystemPrompt({
-		persona: persona.stdout,
-		handoffPrompt: await readFile(join(cfg.handoffDir, "prompt.md"), "utf8"),
-		issueTemplate: await readFile(
-			join(cfg.handoffDir, "issue-template.md"),
-			"utf8",
-		),
-	}),
-);
+const preamble = buildSeatPreamble({
+	persona: persona.stdout,
+	handoffPrompt: await readFile(join(cfg.handoffDir, "prompt.md"), "utf8"),
+	issueTemplate: await readFile(
+		join(cfg.handoffDir, "issue-template.md"),
+		"utf8",
+	),
+});
 
 // yunomi-memory はこのファイルから接続情報を読む。Claude CLI の環境変数に service token を載せないため
 const credentialsPath = credentialsPathOf(cfg.stateDir);
@@ -80,36 +72,96 @@ if (!me.ok) {
 	process.exit(1);
 }
 
-const env = claudeEnv(process.env, {
-	workDir: cfg.workDir,
-	stateDir: cfg.stateDir,
-});
-const claude = createClaudeCli({
+const env = childEnv(process.env, cfg.stateDir);
+const summarize = createSummarizer({
 	bin: cfg.claudeBin,
 	cwd: cfg.workDir,
-	systemPromptFile,
-	timeoutMs: cfg.claudeTimeoutMs,
-	policy: WORK_POLICY,
 	env,
+	exec: spawnExec,
 });
-const sessions = await openSessionStore(cfg.stateDir);
+const orca = createOrcaCli({
+	bin: cfg.orcaBin,
+	exec: spawnExec,
+	env,
+	seatsRepo: cfg.seatsRepo,
+	seatsDir: cfg.seatsDir,
+	specDir: join(cfg.stateDir, "specs"),
+	logger,
+});
+const seats = await openSeatStore(cfg.stateDir);
 const approvals = await openApprovalStore(cfg.stateDir);
 const ledger = createLedger(guardDirOf(cfg.stateDir));
 const macState = openMacStateStore(cfg.stateDir);
+const standupDeps = {
+	discord,
+	approvals,
+	ledger,
+	workForumChannelId: cfg.workForumChannelId,
+	logger,
+};
+
+const prepared = await orca.prepare(seats.orca());
+if (!prepared.ok) {
+	logger.error("orca prepare failed", { reason: prepared.error.reason });
+	process.exit(1);
+}
+await seats.setOrca(prepared.value);
 
 const intake = createIntake({
 	discord,
-	claude,
-	sessions,
+	orca,
+	seats,
 	approvals,
 	ledger,
+	summarize,
+	remember: async (summary) => {
+		if (!cfg.memory) return;
+		const out = await spawnExec(
+			cfg.memoryBin,
+			["write", "--kind", "done", "--summary", summary.slice(0, 200)],
+			{ stdin: "", cwd: cfg.workDir, timeoutMs: 30_000, env },
+		);
+		if (out.code !== 0) {
+			logger.warn("memory write failed", { stderr: out.stderr.slice(0, 300) });
+		}
+	},
+	standupDone: async (text, blocked) => {
+		await finishStandup(standupDeps, text, blocked);
+	},
+	preamble,
 	botUserId: me.value.id,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,
 	ownerUserIds: cfg.ownerUserIds,
-	newSessionId: randomUUID,
+	seatLimit: cfg.seatLimit,
+	sleepAfterMs: cfg.seatSleepAfterMs,
 	logger,
 });
+await intake.reconcile();
+
+// 席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次の check で受け取れる
+let stopped = false;
+const MAIL_WAIT_MS = 10 * 60_000;
+void (async () => {
+	while (!stopped) {
+		const r = await orca.waitMessages(MAIL_WAIT_MS);
+		if (!r.ok) {
+			logger.warn("seat mail check failed", { reason: r.error.reason });
+			await new Promise((res) => setTimeout(res, 5_000));
+			continue;
+		}
+		for (const msg of r.value) {
+			void intake.onSeatMessage(msg).catch((e: unknown) => {
+				logger.error("seat message crashed", { id: msg.id, error: String(e) });
+			});
+		}
+	}
+})();
+const sleepTimer = setInterval(() => {
+	void intake.sleepIdle().catch((e: unknown) => {
+		logger.error("seat sleep crashed", { error: String(e) });
+	});
+}, 60_000);
 
 const server = createWorkingServer({
 	sharedToken: cfg.sharedToken,
@@ -144,13 +196,8 @@ const standupTimer = cfg.standup.enabled
 	? startStandupTimer({
 			at: cfg.standup.at,
 			run: async () => {
-				await runStandup({
-					claude,
-					discord,
-					sessions,
-					approvals,
-					ledger,
-					workForumChannelId: cfg.workForumChannelId,
+				await startStandup({
+					deps: standupDeps,
 					gather: () =>
 						gatherStandupMaterials({
 							exec: spawnExec,
@@ -163,8 +210,8 @@ const standupTimer = cfg.standup.enabled
 							now: () => new Date(),
 							logger,
 						}),
-					newSessionId: randomUUID,
-					logger,
+					preamble,
+					start: intake.startStandup,
 				});
 			},
 			logger,
@@ -173,6 +220,8 @@ const standupTimer = cfg.standup.enabled
 
 const shutdown = (signal: string) => {
 	logger.info("shutting down", { signal });
+	stopped = true;
+	clearInterval(sleepTimer);
 	standupTimer?.stop();
 	macStateServer?.close();
 	server.close();

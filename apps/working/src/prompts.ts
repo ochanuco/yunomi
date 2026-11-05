@@ -1,31 +1,33 @@
 import { formatJstForPrompt } from "@yunomi/core";
 import type { PostedMessage } from "./discord-rest.ts";
 
-/** persona.sh の出力の後ろに足す。仕事の場での振る舞いと、状態の書き方を決める。 */
+/** 席の Claude に渡す仕事のしかた。人格の後ろに置く。 */
 export const WORKING_INSTRUCTIONS = `
 ## 仕事のしかた
 
-あなたはいま Discord の仕事フォーラムの投稿で、頼まれた仕事をしている。あなたの返事はそのままその投稿に書き込まれる。
+あなたはいま Discord の仕事フォーラムの投稿 1 件を受け持つ席にいる。持ち主とのやりとりは受付が投稿に運ぶ。持ち主はこのやりとりを Discord で読む。
 
-- 返事は Discord のメッセージとして読める長さと書式にする。
-- いまの作業ディレクトリが作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。
+- 投稿への返事は、作業の区切りで \`orca orchestration send --type worker_done\` の \`--body\` に書く。本文はそのまま投稿に書き込まれる。手順書にある「3 文で書く」は守らなくてよい。Discord のメッセージとして読める長さと書式にする。
+- 作業の途中で持ち主に聞きたいことができたら \`orca orchestration ask\` で聞く。質問はそのまま投稿に書かれ、持ち主の返事が答えとして届く。答えが届くまでは同じことを進めない。
+- いまの作業ディレクトリがこの席の作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。作業場所の外に書かない。
 - 聞かずにやってよいこと: 読み取り、作業場所の中のファイルの編集と削除、テストやビルドの実行、git commit、\`dev/\` で始まるブランチへの push、issue の作成とコメント、PR の作成。
 - push は \`git push -u origin HEAD:dev/<topic>\` のように、押し先のブランチを必ず書く。
-- それ以外の取り消せない操作や外に出る操作（main などへの push、force push、マージ、ブランチ・リポジトリ・リリースの削除、作業場所の外の削除、デプロイ、課金、Discord など外部への投稿、秘密情報の読み出し）は、実行しようとすると止められる。止められたら、別の書き方や別の道具で回避しない。止めた操作は受付が「決めてほしいこと」として投稿に書き添えるので、返事ではそれが何のために要るかを書く。
-- 持ち主が許可した操作は、書かれたとおり一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
+- それ以外の取り消せない操作や外に出る操作（main などへの push、force push、マージ、ブランチ・リポジトリ・リリースの削除、作業場所の外の削除、デプロイ、課金、Discord など外部への投稿、秘密情報の読み出し）は、実行しようとすると止められる。止められたら、別の書き方や別の道具で回避しない。\`orca orchestration ask\` で、その操作が何のために要るかを短く書いて許可を求める。受付が止めた操作をそのまま質問に書き添える。
+- 答えが「許可された」なら、止められた操作を一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
 - 決まったこと（持ち主が決めたこと、方針）と終わったこと（片付いた作業）は、そのつど \`yunomi-memory write --kind decided --summary "<1行>"\` か \`--kind done\` で 1 件 1 行ずつ残す。会話のときの Yukarin も同じ記憶を読む。1 行は 200 字以内で、改行を入れない。秘密情報やトークンは書かない。
 - 前に決まったことや持ち主のことを確かめたいときは \`yunomi-memory read\` で読む。
-- 返事の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
+- 完了にする前に、変更はすべて commit して push しておく。席を閉じると作業場所は消える。
+- worker_done の本文の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
   - \`状態: 決めてほしい\`: 相手の判断や情報を待っている
-  - \`状態: 引き継ぎ\`: この環境ではできず、Mac の agent に任せたい
+  - \`状態: 引き継ぎ\`: この環境ではできず、Mac の agent に任せた（申し送り issue を立てた）
   - \`状態: 完了\`: 頼まれたことが終わった
 `;
 
 /**
- * Claude CLI の system prompt。人格、仕事のしかた、Mac への引き継ぎの手順、申し送りの雛形の順に並べる。
+ * 新しい席の Claude に最初に渡す前置き。人格、仕事のしかた、Mac への引き継ぎの手順、申し送りの雛形の順に並べる。
  * 引き継ぎの手順は雛形が後ろに続く前提で書いてある。
  */
-export const buildSystemPrompt = (input: {
+export const buildSeatPreamble = (input: {
 	persona: string;
 	handoffPrompt: string;
 	issueTemplate: string;
@@ -147,7 +149,8 @@ export const replyPrompt = (input: {
 }) => `${clock(input.now)}
 ${input.authorName}: ${input.content}`;
 
-export const recoveryPrompt = (input: {
+/** 完了した投稿にまた書かれたときなど、新しい席にこれまでのやりとりを渡す。 */
+export const historyPrompt = (input: {
 	now: Date;
 	title: string | null;
 	history: readonly PostedMessage[];
@@ -158,7 +161,7 @@ export const recoveryPrompt = (input: {
 			`[${m.authorId === input.botUserId ? "あなた" : m.authorName}] ${m.content}`,
 	);
 	return `${clock(input.now)}
-この投稿で続けていた作業の記憶が失われた。これまでのやりとりを読み、最後の発言に答えて続きをする。
+この投稿のこれまでのやりとりを読み、最後の発言に答えて続きをする。前の席の作業場所は残っていないので、要るものは clone し直す。
 件名: ${input.title ?? "（なし）"}
 
 --- これまでのやりとり ---
@@ -166,13 +169,23 @@ ${lines.join("\n\n")}
 --- ここまで ---`;
 };
 
-/** 朝会の投稿への最初の返事に添える。朝会のセッションを分けて続けるので、どの件かを伝える。 */
-export const standupFollowupNote = (title: string | null) =>
-	`この投稿は朝会で立てた「${title ?? "（件名なし）"}」。ここからはこの件だけを扱う。以下はこの投稿への持ち主の返事。`;
+/** 新しい席に渡す spec。前置きの後ろに、この投稿で頼まれたことを置く。 */
+export const seatSpec = (preamble: string, task: string) =>
+	`${preamble.trimEnd()}
+
+## この投稿
+
+${task}`;
+
+/** 止めていた席を起こすときに足す。前の質問は Orca の側では取り下げてある。 */
+export const wakeNote = (question: string | null) =>
+	question === null
+		? "しばらく止めていた席を起こした。以下は投稿への持ち主の返事。"
+		: `しばらく止めていた席を起こした。前に ask で聞いた「${question}」は取り下げてあるので、以下の持ち主の返事を答えとして続ける。`;
 
 export const STANDUP_TITLE_LIMIT = 60;
 
-/** 朝会の指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
+/** 朝会の席に渡す指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
 export const standupPrompt = (input: { now: Date; materials: string }) =>
 	`${clock(input.now)}
 平日の朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
@@ -184,7 +197,8 @@ export const standupPrompt = (input: { now: Date; materials: string }) =>
 - Claude CLI のログインの期限は受付が見るので入れない。
 - 1 件は 1 つの投稿になる。title は ${STANDUP_TITLE_LIMIT} 字以内の件名、body は投稿の本文（Discord で読める長さ。何を決めてほしいか、選択肢、関係する PR や issue の URL）。
 
-最後に、次の形の JSON を \`\`\`json のコードブロック 1 つで出す。ほかの文章は投稿されない。
+持ち主はまだ投稿を見ていないので、\`orca orchestration ask\` では聞かない。止められた操作も聞かずに、決めてほしいことに入れる。
+終わったら、\`orca orchestration send --type worker_done\` の \`--body\` に、次の形の JSON を \`\`\`json のコードブロック 1 つで書く。ほかの文章と状態の行は投稿されない。
 
 \`\`\`json
 {"decisions": [{"title": "件名", "body": "本文"}]}

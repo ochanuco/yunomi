@@ -84,17 +84,62 @@ describe("decide", () => {
 	});
 });
 
+describe("guardRunFromEnv: 席の中かどうか", () => {
+	const env = {
+		HOME: "/home/worker",
+		[GUARD_ENV.seatsDir]: "/home/worker/work/orca/workspaces/seats",
+	};
+	it("席の中なら、その席の worktree を作業場所にし、名前から投稿を引く", () => {
+		const run = guardRunFromEnv(
+			env,
+			"/home/worker/work/orca/workspaces/seats/seat-123/repo",
+		);
+		expect(run.threadId).toBe("123");
+		expect(run.ctx.workDir).toBe(
+			"/home/worker/work/orca/workspaces/seats/seat-123",
+		);
+	});
+	it("席の外や、席の名前でない場所は投稿に紐づけない", () => {
+		for (const dir of [
+			"/home/worker/work",
+			"/home/worker/work/orca/workspaces/seats",
+			"/home/worker/work/orca/workspaces/seats/other",
+			"/home/worker/work/orca/workspaces/seats/seat-../x",
+		]) {
+			const run = guardRunFromEnv(env, dir);
+			expect(run.threadId).toBe("_");
+			expect(run.ctx.workDir).toBe("/home/worker/work");
+		}
+	});
+	it("CLAUDE_PROJECT_DIR があれば cwd より優先する", () => {
+		const run = guardRunFromEnv(
+			{
+				...env,
+				CLAUDE_PROJECT_DIR: "/home/worker/work/orca/workspaces/seats/seat-9",
+			},
+			"/tmp",
+		);
+		expect(run.threadId).toBe("9");
+	});
+});
+
 describe("hook.ts（Claude CLI から呼ばれる形で動かす）", () => {
-	const envFor = (stateDir: string, extra: Record<string, string> = {}) => ({
+	const SEATS = "/home/worker/work/orca/workspaces/seats";
+	const envFor = (stateDir: string) => ({
 		HOME: "/home/worker",
 		[GUARD_ENV.stateDir]: stateDir,
-		[GUARD_ENV.threadId]: "t1",
-		...extra,
+		[GUARD_ENV.seatsDir]: SEATS,
+		CLAUDE_PROJECT_DIR: `${SEATS}/seat-t1`,
+	});
+	const seatBash = (command: string) => ({
+		tool_name: "Bash",
+		tool_input: { command },
+		cwd: `${SEATS}/seat-t1`,
 	});
 
 	it("聞かずに通す操作は allow を返す", () => {
 		const state = tempDir();
-		const r = runHook(bash("git push -u origin HEAD:dev/x"), envFor(state));
+		const r = runHook(seatBash("git push -u origin HEAD:dev/x"), envFor(state));
 		expect(r.status).toBe(0);
 		expect(r.out).toEqual(
 			expect.objectContaining({
@@ -104,12 +149,12 @@ describe("hook.ts（Claude CLI から呼ばれる形で動かす）", () => {
 		);
 	});
 
-	it("止める操作は deny を返し、投稿に紐づけて残す", () => {
+	it("止める操作は deny を返し、席の投稿に紐づけて残す", () => {
 		const state = tempDir();
-		const r = runHook(bash("gh pr merge 3"), envFor(state));
+		const r = runHook(seatBash("gh pr merge 3"), envFor(state));
 		expect(r.status).toBe(0);
 		expect(r.out.permissionDecision).toBe("deny");
-		expect(r.out.permissionDecisionReason).toContain("決めてほしいこと");
+		expect(r.out.permissionDecisionReason).toContain("orca orchestration ask");
 		expect(createLedger(join(state, "guard")).takePending("t1")).toEqual([
 			{
 				operation: { tool: "Bash", target: "gh pr merge 3" },
@@ -118,18 +163,17 @@ describe("hook.ts（Claude CLI から呼ばれる形で動かす）", () => {
 		]);
 	});
 
-	it("環境変数で渡した許可は 1 回だけ通す", () => {
+	it("受付が書いた許可は 1 回だけ通す", () => {
 		const state = tempDir();
-		const env = envFor(state, {
-			[GUARD_ENV.grantId]: "g1",
-			[GUARD_ENV.grants]: JSON.stringify([
-				{ tool: "Bash", target: "gh pr merge 3" },
-			]),
+		createLedger(join(state, "guard")).grant("t1", {
+			grant_id: "g1",
+			operations: [{ tool: "Bash", target: "gh pr merge 3" }],
 		});
-		expect(runHook(bash("gh pr merge 3"), env).out.permissionDecision).toBe(
+		const env = envFor(state);
+		expect(runHook(seatBash("gh pr merge 3"), env).out.permissionDecision).toBe(
 			"allow",
 		);
-		expect(runHook(bash("gh pr merge 3"), env).out.permissionDecision).toBe(
+		expect(runHook(seatBash("gh pr merge 3"), env).out.permissionDecision).toBe(
 			"deny",
 		);
 	});
