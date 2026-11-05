@@ -5,7 +5,10 @@ import * as v from "valibot";
 import type { Exec } from "./exec.ts";
 import type { Logger } from "./logger.ts";
 
-export type OrcaError = { type: "OrcaFailed"; command: string; reason: string };
+export type OrcaError =
+	| { type: "OrcaFailed"; command: string; reason: string }
+	/** 席の作業場所を Claude CLI の信頼済みにできなかった。 */
+	| { type: "SeatTrustFailed"; command: string; reason: string };
 
 /** 席から受付に届くメッセージ。 */
 export type SeatMessage = {
@@ -88,6 +91,7 @@ const envelope = v.object({
 });
 
 const runSchema = v.object({ runId: v.string() });
+const worktreeSchema = v.object({ worktree: v.object({ path: v.string() }) });
 const statusSchema = v.object({
 	runtime: v.optional(v.object({ state: v.optional(v.string()) })),
 });
@@ -175,6 +179,8 @@ export type OrcaCliOptions = {
 	seatsDir: string;
 	/** spec を一時的に置く場所。 */
 	specDir: string;
+	/** 席の作業場所を Claude CLI の信頼済みにし、登録した realpath を返す。 */
+	trust: (dir: string) => Promise<Result<string, { reason: string }>>;
 	logger: Logger;
 	timeoutMs?: number;
 	sleep?: (ms: number) => Promise<void>;
@@ -257,6 +263,19 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 		);
 		await writeFile(path, spec, { mode: 0o600 });
 		return path;
+	};
+
+	const trustSeat = async (
+		path: string,
+	): Promise<Result<string, OrcaError>> => {
+		const r = await opts.trust(path);
+		if (r.ok) return r;
+		log.error("seat trust failed", { path, reason: r.error.reason });
+		return err({
+			type: "SeatTrustFailed",
+			command: "claude trust",
+			reason: r.error.reason,
+		});
 	};
 
 	const startWith = async (
@@ -402,22 +421,41 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 					ignore,
 				);
 			}
-			return startWith(
+			// worktree を先に作り、Claude の信頼済みにしてから起動する。信頼していない場所の Claude は確認の画面で止まる
+			const created = await call(
 				[
-					"--worktree",
-					"new-top-level",
+					"worktree",
+					"create",
 					"--repo",
 					`id:${repoId ?? ""}`,
 					"--name",
 					name,
+					"--no-parent",
+					"--setup",
+					"skip",
+				],
+				worktreeSchema,
+			);
+			if (!created.ok) return created;
+			const path = created.value.worktree.path;
+			const trusted = await trustSeat(path);
+			if (!trusted.ok) return trusted;
+			return startWith(
+				[
+					"--worktree",
+					`path:${path}`,
 					"--agent",
 					"claude",
+					// 既にある worktree の席は、報告のあと Orca が端末を閉じてしまう。返事で続けられるよう残す
+					"--keep-open",
 				],
 				spec,
 				title,
 			);
 		},
 		resumeSeat: async ({ path, title, spec }) => {
+			const trusted = await trustSeat(path);
+			if (!trusted.ok) return trusted;
 			// Orca が Claude を新しく起動すると会話が残らないので、--continue で起こした端末に渡す
 			const created = await call(
 				[

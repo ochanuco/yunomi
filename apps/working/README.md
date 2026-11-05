@@ -55,7 +55,8 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 ### 席
 
 - 受付は起動時に、`SEATS_REPO`（既定は `~/work/seats`）に空の git リポジトリを用意して Orca に登録し、その root に受付の端末（`受付`、中身は `sleep infinity`）を作る。orchestration の送り手と受け手はこの端末になる。Run は `seats.json` に残し、作り直した端末で引き継ぐ（`run-use`）。
-- 席は投稿ごとに `worker-start --worktree new-top-level --agent claude` で作る。worktree の名前は `seat-<投稿の ID>` で、hook はこの名前から投稿を引く。Mac の Orca から接続すると、同じ席と Claude の画面が見える。
+- 席は投稿ごとに作る。`worktree create` で `seat-<投稿の ID>` の worktree を作り、その realpath を Claude CLI の信頼済みの場所（`.claude.json` の `projects[<realpath>].hasTrustDialogAccepted`）に登録してから、`worker-start --worktree path:<席> --agent claude --keep-open` で Claude を起動する。信頼していない場所の Claude は確認の画面で止まり、Orca は席を始めない。登録は Claude CLI と同じ `.claude.json.lock` のロックを取って書くので、動いている席の Claude の書き込みと混ざらない。10 秒より古いロック（落ちたプロセスの残り）は外して進む。hook は worktree の名前から投稿を引く。Mac の Orca から接続すると、同じ席と Claude の画面が見える。
+- 席を始められなかったときは、止まった所（作業場所の確認、Claude の起動、Orca の席の作成など）を短く投稿に書く。
 - 受付は `orchestration check --wait` で席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次に起動したときに受け取る。
 - 同時に Claude を動かしておく席は `SEAT_LIMIT`（既定は 6）まで。上限を超えた投稿には「順番待ち」と書き、空いたら古い順に始める。止めた席と順番待ちの席は数えない。
 - `決めてほしい` のまま `SEAT_SLEEP_AFTER_MINUTES`（既定は 120 分）たった席は、Claude だけ止める（worktree と会話は残す）。返事が来たら、その worktree で `claude --continue` の端末を作って `worker-start --terminal` で渡し、前の会話のまま起こす。
@@ -98,6 +99,8 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `gh issue create` / `comment`、`gh pr create` / `comment`、`gh label create`（申し送りに使う）と、`gh` の読み取り
 - `yunomi-memory read` と `yunomi-memory write --kind … --summary …`
 - `orca orchestration ask` / `send` / `check`（宛先を変える `--to` などを付けないもの）と `orca skills get`
+- `ToolSearch`（道具の説明を読み込むだけ）
+- MCP の道具（ログインしたアカウントのコネクタを含む）のうち、下で止めるもの以外。読み取りや生成（chimera の `create_request`・`plain_render`、Gmail の下書きなど）
 
 止める操作:
 
@@ -109,6 +112,9 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `mise use --global`・`mise settings set`（`--local` を除く）・`mise implode`・`mise self-update`
 - 秘密情報の読み出し（`printenv`、トークンの変数、`~/.claude`・`~/.config`・`STATE_DIR` など）
 - 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
+- MCP の道具のうち、名前に取り消せないか外に届く動詞（`send`、`reply`、`forward`、`respond`、`post`、`publish`、`deploy`、`release`、`share`、`invite`、`delete`、`trash`、`remove`、`destroy`、`purge`、`drop`、`revoke`、`transfer`、`merge`、`execute`、`exec`）が入っているもの。サーバー（コネクタ）では分けない
+
+Bash 以外の道具の許可は、道具の名前と引数（キーの順によらない JSON）が同じ操作に 1 回だけ効く。
 
 Bash は道具の名前と引数で読むので、書き方を変えれば抜けられる。うっかりの実行を止めるためのもので、`main` への push やマージは GitHub のブランチ保護とトークンの権限でも止めておく。
 

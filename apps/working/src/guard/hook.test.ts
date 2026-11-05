@@ -56,6 +56,59 @@ describe("classify: Bash 以外の道具", () => {
 	});
 });
 
+describe("classify: ToolSearch と MCP の道具", () => {
+	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
+	const free = (tool: string) => classify({ tool, target: "{}" }, ctx);
+	it("ToolSearch は道具の説明を読み込むだけなので通す", () => {
+		expect(free("ToolSearch")).toBeNull();
+	});
+	it("MCP の読み取りと生成は、どのサーバーの道具でも通す", () => {
+		for (const tool of [
+			"mcp__claude_ai_chimera__get_generation",
+			"mcp__claude_ai_chimera__list_catalog",
+			"mcp__claude_ai_chimera__create_request",
+			"mcp__claude_ai_chimera__derive_request",
+			"mcp__claude_ai_chimera__plain_render",
+			"mcp__claude_ai_chimera__redraw_generation",
+			"mcp__claude_ai_chimera__deliver_generation",
+			"mcp__claude_ai_chimera__dof_generation",
+			"mcp__claude_ai_chimera__set_evaluation",
+			"mcp__claude_ai_chimera__record_publication",
+			"mcp__claude_ai_chimera__promote_to_pose",
+			"mcp__claude_ai_Gmail__search_threads",
+			"mcp__claude_ai_Gmail__get_thread",
+			"mcp__claude_ai_Gmail__create_draft",
+			"mcp__claude_ai_Gmail__untrash_message",
+			"mcp__claude_ai_Google_Drive__read_file_content",
+			"mcp__claude_ai_Google_Drive__get_file_permissions",
+			"mcp__claude_ai_Google_Calendar__list_events",
+			"mcp__claude_ai_Google_Sheets__get_values",
+			"mcp__claude_ai_Cloudflare_Developer_Platform__workers_list",
+		]) {
+			expect(free(tool), tool).toBeNull();
+		}
+	});
+	it("送信・削除・共有・公開・デプロイなど、取り消せないか外に届く MCP の操作は止める", () => {
+		for (const tool of [
+			"mcp__claude_ai_Gmail__send_message",
+			"mcp__claude_ai_Gmail__reply",
+			"mcp__claude_ai_Gmail__forward",
+			"mcp__claude_ai_Gmail__trash_thread",
+			"mcp__claude_ai_Gmail__delete_draft",
+			"mcp__claude_ai_Google_Drive__share_file",
+			"mcp__claude_ai_Google_Drive__trash_file",
+			"mcp__claude_ai_Google_Calendar__delete_event",
+			"mcp__claude_ai_Google_Calendar__respond_to_event",
+			"mcp__claude_ai_Cloudflare_Developer_Platform__d1_database_delete",
+			"mcp__claude_ai_Claude_Docs__delete",
+			"mcp__posthog__exec",
+			"mcp__someone__deploy_site",
+		]) {
+			expect(free(tool), tool).not.toBeNull();
+		}
+	});
+});
+
 describe("decide", () => {
 	it("許可は同じ操作に 1 回だけ使え、2 回目は止めて記録する", () => {
 		const dir = tempDir();

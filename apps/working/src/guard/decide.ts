@@ -9,6 +9,47 @@ import {
 } from "./operation.ts";
 
 const READERS = new Set(["Read", "Glob", "Grep"]);
+/** 道具の説明を読み込むだけの道具。 */
+const LOADERS = new Set(["ToolSearch"]);
+
+/**
+ * MCP の道具の名前に入っていたら止める動詞。取り消せない操作と、外に届く操作。
+ * 読み取りと生成（下書きや画像を作るなど）は、ほかの道具と同じく聞かずに通す。
+ */
+const MCP_STOP_WORDS = new Set([
+	"send",
+	"reply",
+	"forward",
+	"respond",
+	"post",
+	"publish",
+	"deploy",
+	"release",
+	"share",
+	"invite",
+	"delete",
+	"trash",
+	"remove",
+	"destroy",
+	"purge",
+	"drop",
+	"revoke",
+	"transfer",
+	"merge",
+	"execute",
+	"exec",
+]);
+
+const classifyMcp = (tool: string): string | null => {
+	// mcp__<サーバー>__<道具>。サーバー名ではなく道具の名前の動詞で決める
+	const name = tool.split("__").slice(2).join("__");
+	const words = name.toLowerCase().split(/[^a-z0-9]+/);
+	const hit = words.find((w) => MCP_STOP_WORDS.has(w));
+	return hit === undefined
+		? null
+		: `取り消せないか外に届く MCP の操作（${hit}）`;
+};
+
 const WRITERS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /** 聞かずに実行してよいかを、道具ごとに調べる。止めるときは理由を返す。 */
@@ -26,6 +67,8 @@ export const classify = (op: Operation, ctx: GuardContext): string | null => {
 			? null
 			: "作業場所の外への書き込み";
 	}
+	if (LOADERS.has(op.tool)) return null;
+	if (op.tool.startsWith("mcp__")) return classifyMcp(op.tool);
 	return `${op.tool} は聞かずに使える道具に入っていない`;
 };
 

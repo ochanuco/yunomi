@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { err, ok, type Result } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import type { Exec } from "./exec.ts";
 import { silentLogger } from "./logger.ts";
@@ -29,11 +30,27 @@ const fakeExec = (
 		};
 	});
 
-const setup = (table: Parameters<typeof fakeExec>[0]) => {
+const setup = (
+	table: Parameters<typeof fakeExec>[0],
+	trustResult: (dir: string) => Result<string, { reason: string }> = ok,
+) => {
 	const root = tempDir();
+	const order: string[] = [];
+	const trusting = async (dir: string) => {
+		order.push(`trust ${dir}`);
+		return trustResult(dir);
+	};
 	const seatsRepo = join(root, "seats");
 	mkdirSync(join(seatsRepo, ".git"), { recursive: true });
-	const exec = fakeExec({
+	const exec0 = fakeExec({
+		"worktree create": (args) => ({
+			stdout: {
+				ok: true,
+				result: {
+					worktree: { path: `/ws/${args[args.indexOf("--name") + 1]}` },
+				},
+			},
+		}),
 		"repo list": {
 			stdout: { ok: true, result: { repos: [{ id: "r1", path: seatsRepo }] } },
 		},
@@ -46,6 +63,10 @@ const setup = (table: Parameters<typeof fakeExec>[0]) => {
 		},
 		...table,
 	});
+	const exec = vi.fn<Exec>(async (bin, args, o) => {
+		order.push(args.slice(0, 2).join(" "));
+		return exec0(bin, args, o);
+	});
 	const orca = createOrcaCli({
 		bin: "orca-ide",
 		exec,
@@ -53,6 +74,7 @@ const setup = (table: Parameters<typeof fakeExec>[0]) => {
 		cwd: root,
 		seatsRepo,
 		sleep: async () => {},
+		trust: trusting,
 		seatsDir: join(root, "ws"),
 		specDir: join(root, "specs"),
 		logger: silentLogger,
@@ -61,7 +83,7 @@ const setup = (table: Parameters<typeof fakeExec>[0]) => {
 		exec.mock.calls
 			.filter(([, a]) => a.slice(0, 2).join(" ") === cmd)
 			.map(([, a]) => a);
-	return { orca, exec, argsOf, seatsRepo };
+	return { orca, exec, argsOf, seatsRepo, order };
 };
 
 describe("waitReady", () => {
@@ -96,6 +118,7 @@ describe("waitReady", () => {
 			specDir: "/tmp",
 			logger: silentLogger,
 			sleep: async () => {},
+			trust: async (d: string) => ok(d),
 		});
 
 	it("serve がつながらない間と ready でない間は待ち、ready になったら返す", async () => {
@@ -165,7 +188,7 @@ describe("createOrcaCli", () => {
 		expect(r.ok && r.value.runId).toBe("run-new");
 	});
 
-	it("席は空の git リポジトリから新しい worktree を作り、spec はファイルで渡す", async () => {
+	it("席は worktree を作って Claude の信頼済みにしてから、その worktree で Claude を起動する", async () => {
 		let spec = "";
 		const t = setup({
 			"orchestration worker-start": (args) => {
@@ -184,6 +207,7 @@ describe("createOrcaCli", () => {
 			},
 		});
 		await t.orca.prepare({ runId: null, reception: null });
+		t.order.length = 0;
 		const r = await t.orca.startSeat({
 			name: "seat-p1",
 			title: "件名",
@@ -194,6 +218,20 @@ describe("createOrcaCli", () => {
 			value: { dispatchId: "d1", terminal: "t1", path: "/ws/seat-p1" },
 		});
 		expect(spec).toBe("頼みます");
+		expect(t.order).toEqual([
+			"worktree create",
+			"trust /ws/seat-p1",
+			"orchestration worker-start",
+		]);
+		expect(t.argsOf("worktree create")[0]).toEqual(
+			expect.arrayContaining([
+				"--repo",
+				"id:r1",
+				"--name",
+				"seat-p1",
+				"--no-parent",
+			]),
+		);
 		expect(t.argsOf("orchestration worker-start")[0]).toEqual(
 			expect.arrayContaining([
 				"--from",
@@ -201,15 +239,31 @@ describe("createOrcaCli", () => {
 				"--run",
 				"run-new",
 				"--worktree",
-				"new-top-level",
-				"--repo",
-				"id:r1",
-				"--name",
-				"seat-p1",
+				"path:/ws/seat-p1",
 				"--agent",
 				"claude",
+				"--keep-open",
 			]),
 		);
+	});
+
+	it("信頼済みにできなければ Claude を起動しない", async () => {
+		const t = setup({}, () => err({ reason: "lock" }));
+		await t.orca.prepare({ runId: null, reception: null });
+		const r = await t.orca.startSeat({
+			name: "seat-p1",
+			title: "件名",
+			spec: "x",
+		});
+		expect(r).toEqual({
+			ok: false,
+			error: {
+				type: "SeatTrustFailed",
+				command: "claude trust",
+				reason: "lock",
+			},
+		});
+		expect(t.argsOf("orchestration worker-start")).toEqual([]);
 	});
 
 	it("止めた席は claude --continue の端末を作って渡し、前の会話のまま起こす", async () => {
@@ -251,6 +305,9 @@ describe("createOrcaCli", () => {
 			]),
 		);
 		expect(t.argsOf("orchestration worker-start")[0]).not.toContain("--agent");
+		expect(t.order.indexOf("trust /ws/seat-p1")).toBeLessThan(
+			t.order.lastIndexOf("terminal create"),
+		);
 	});
 
 	it("届いたメッセージを読み、失敗は OrcaFailed にする", async () => {
