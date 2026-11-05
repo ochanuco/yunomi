@@ -20,6 +20,7 @@ describe("loadConfig", () => {
 				workTextChannelId: "100",
 				workForumChannelId: "200",
 				ownerUserIds: new Set(["300", "400"]),
+				ownerDiscordUserId: "300",
 				port: 8080,
 				stateDir: "/home/w/state",
 				workDir: "/home/w/work",
@@ -28,6 +29,14 @@ describe("loadConfig", () => {
 				claudeBin: "claude",
 				claudeTimeoutMs: 1_800_000,
 				logLevel: "info",
+				memory: null,
+				memoryBin: "yunomi-memory",
+				macState: null,
+				standup: {
+					enabled: true,
+					at: { hour: 9, minute: 0 },
+					githubOwner: "ochanuco",
+				},
 			},
 		});
 	});
@@ -37,6 +46,36 @@ describe("loadConfig", () => {
 		expect(r.ok && r.value.port).toBe(9000);
 		expect(r.ok && r.value.claudeTimeoutMs).toBe(1_800_000);
 		expect(loadConfig({ ...base, PORT: "x" }).ok).toBe(false);
+	});
+
+	it("記憶の口・席の状態の口・朝会の設定を読む", () => {
+		const r = loadConfig({
+			...base,
+			YUNOMI_URL: "https://worker.example",
+			CF_ACCESS_CLIENT_ID: "id",
+			CF_ACCESS_CLIENT_SECRET: "secret",
+			MAC_STATE_TOKEN: "mac",
+			STANDUP_ENABLED: "false",
+			STANDUP_TIME: "08:30",
+		});
+		expect(r.ok && r.value.memory).toEqual({
+			url: "https://worker.example",
+			clientId: "id",
+			clientSecret: "secret",
+		});
+		expect(r.ok && r.value.macState).toEqual({ token: "mac", port: 8090 });
+		expect(r.ok && r.value.standup).toEqual({
+			enabled: false,
+			at: { hour: 8, minute: 30 },
+			githubOwner: "ochanuco",
+		});
+		expect(loadConfig({ ...base, STANDUP_TIME: "25:00" }).ok).toBe(false);
+		// service token が欠けていれば記憶の口は使わない
+		const partial = loadConfig({
+			...base,
+			YUNOMI_URL: "https://worker.example",
+		});
+		expect(partial.ok && partial.value.memory).toBeNull();
 	});
 
 	it("トークンとチャンネル ID が欠けていれば理由を返す", () => {

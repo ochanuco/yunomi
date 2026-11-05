@@ -302,6 +302,28 @@ const classifyWget = (rest: readonly string[]): Reason =>
 		? "外への送信"
 		: null;
 
+/**
+ * Working の記憶の口を呼ぶ CLI。Worker に書くので外への送信だが、決まったことと終わったことを
+ * 1 行ずつ残すのは仕事のしかたに入れてあるので、read と write の決まった形だけは聞かずに通す。
+ */
+const classifyMemory = (rest: readonly string[]): Reason => {
+	const [sub, ...flags] = rest;
+	if (sub === "read" && flags.length === 0) return null;
+	if (sub !== "write")
+		return "yunomi-memory は read と write だけを聞かずに使える";
+	const seen = new Set<string>();
+	for (let i = 0; i < flags.length; i++) {
+		const a = flags[i] as string;
+		const m = /^--(kind|summary)(=.*)?$/.exec(a);
+		if (!m || seen.has(m[1] as string)) {
+			return "yunomi-memory write は --kind と --summary だけを聞かずに使える";
+		}
+		seen.add(m[1] as string);
+		if (m[2] === undefined) i++;
+	}
+	return null;
+};
+
 type CwdRef = { cwd: string | null };
 
 const pathsOf = (rest: readonly string[]) => {
@@ -393,6 +415,7 @@ const classifySimple = (
 	) {
 		return "秘密情報の読み出し";
 	}
+	if (name === "yunomi-memory") return classifyMemory(rest);
 	if (name === "git") return classifyGit(rest);
 	if (name === "gh") return classifyGh(rest);
 	if (name === "curl") return classifyCurl(rest);

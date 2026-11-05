@@ -10,6 +10,8 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、system prompt として標準出力に出す |
 | `compose.example.yaml` | 常駐させるときの compose の雛形 |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Claude CLI で作業する |
+| `src/memory-cli/` | 記憶の道具 `yunomi-memory`。Worker の Working の記憶の口を読み書きする。node の組み込みだけで書き、`/opt/yunomi-memory/` に置いて node で直接動かす |
+| `mac-state/` | Mac から Orca の席の状態を送るスクリプトと launchd の plist の雛形（[mac-state/README.md](mac-state/README.md)） |
 | `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
 | `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
@@ -22,7 +24,7 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | --- | --- | --- |
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
-| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿とセッションの対応（`threads.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、組み立てた system prompt |
+| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿とセッションの対応（`threads.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、組み立てた system prompt、最後に届いた席の状態（`mac-state.json`）、記憶の口の接続情報（`memory-credentials.json`） |
 | `yunomi-working-work` | `/home/worker/work` | Claude CLI の作業場所。clone したリポジトリ |
 
 `CLAUDE_CONFIG_DIR` を `~/.claude` に向けているので、通常は `~/.claude.json` に置かれる設定も volume に入る。
@@ -53,7 +55,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 Claude CLI には `Read`・`Glob`・`Grep`・`Edit`・`Write`・`Bash` を渡し（`--permission-mode dontAsk --setting-sources ""`）、使うたびに managed settings の PreToolUse hook（`src/guard/hook.ts`）が通すかどうかを決める。allow のルールは置かないので、hook が落ちたときは dontAsk が断る。managed settings と hook は root の持ち物にし、作業場所の `.claude/settings.json` や Claude CLI 自身の書き換えでは外せない。
 
-作業ディレクトリは `WORK_DIR` に固定する（Claude CLI のセッションは作業ディレクトリに紐づく）。Claude CLI に渡す環境変数は `src/claude-cli.ts` の `claudeEnv` に絞り、Discord のトークンと `WORKING_TOKEN` は渡さない。
+作業ディレクトリは `WORK_DIR` に固定する（Claude CLI のセッションは作業ディレクトリに紐づく）。Claude CLI に渡す環境変数は `src/claude-cli.ts` の `claudeEnv` に絞り、Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口の service token は渡さない。
 
 聞かずに通す操作:
 
@@ -61,6 +63,7 @@ Claude CLI には `Read`・`Glob`・`Grep`・`Edit`・`Write`・`Bash` を渡し
 - 作業場所の中のファイルの編集と削除、テストやビルドの実行
 - `git commit`、`origin` の `dev/` で始まるブランチへの push（押し先を `HEAD:dev/<topic>` のように書いたもの）
 - `gh issue create` / `comment`、`gh pr create` / `comment`、`gh label create`（申し送りに使う）と、`gh` の読み取り
+- `yunomi-memory read` と `yunomi-memory write --kind … --summary …`
 
 止める操作:
 
@@ -72,6 +75,42 @@ Claude CLI には `Read`・`Glob`・`Grep`・`Edit`・`Write`・`Bash` を渡し
 - 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
 
 Bash は道具の名前と引数で読むので、書き方を変えれば抜けられる。うっかりの実行を止めるためのもので、`main` への push やマージは GitHub のブランチ保護とトークンの権限でも止めておく。
+
+### 記憶の道具
+
+Claude CLI は `yunomi-memory` で、Talking と共有する長い記憶を読み書きする。決まったことと終わったことは、そのつど 1 件 1 行ずつ残すよう `WORKING_INSTRUCTIONS` に書いてある。
+
+```sh
+yunomi-memory read                                         # 事実・出来事・open loop を JSON で出す
+yunomi-memory write --kind decided --summary "<1行の要約>"  # 決まったこと
+yunomi-memory write --kind done --summary "<1行の要約>"     # 終わったこと
+```
+
+- 呼ぶ先は Worker の `/v1/partners/yukarin/working/memory`。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
+- 受付は起動時に `YUNOMI_URL` と `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` を `STATE_DIR/memory-credentials.json`（権限 600）に書き、`yunomi-memory` はそこから読む。service token は Claude CLI の環境変数に載せず、標準出力にも標準エラーにも出さない。3 つのどれかが欠けていれば、ファイルを消して記憶の道具を使えなくする。
+- hook は `yunomi-memory read` と、`--kind` と `--summary` だけを付けた `write` を聞かずに通す。ほかの書き方と、`curl` などでの送信は今までどおり止める。
+- `summary` は改行を含まない 200 字以内。
+
+### 席の状態の受け口
+
+Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は `8090`）の `POST /mac-state` で受ける。`MAC_STATE_TOKEN` を設定したときだけ待ち受ける。
+
+- `Authorization: Bearer <MAC_STATE_TOKEN>` が合わなければ 401。gateway と共有する `WORKING_TOKEN` とは別のトークンにする。
+- 本文は `mac-state/send.sh` が作る要約（`sent_at` と `worktrees`）。形が違えば 400。
+- 受け取った最新の 1 件を、受け取った時刻と一緒に `STATE_DIR/mac-state.json` に置き換えて残す。Mac が寝ていても、朝会は最後に届いたものを読む。
+
+### 朝会
+
+受付は平日（月〜金、祝日は見ない）の `STANDUP_TIME`（既定は `09:00`、Asia/Tokyo）に朝会をする。`STANDUP_ENABLED=false` で止める。
+
+1. 材料を集める。記憶（`yunomi-memory read`）、最後に届いた席の状態と届いた時刻、GitHub（`STANDUP_GITHUB_OWNER` の open な PR、CI が落ちている PR、label `working-handoff` の申し送り、`GH_TOKEN` の人が `dev/` ブランチから出した PR）、Claude CLI のログインの期限（`claude auth status` の `loginExpiresAt`）。取れなかったものは、取れなかったと書いて渡す。
+2. 新しいセッションの Claude CLI に材料を渡す。Claude は取り消せること（調べる、コメントする、`dev/` ブランチで直す、記憶に残す）をその場で済ませ、決めてほしいことだけを JSON で返す。
+3. 決めてほしいこと 1 件ごとに、仕事フォーラムへ投稿を立ててタグ `決めてほしい` を付ける。ログインの期限が 7 日以内なら、Claude の返事によらず 1 件足す。hook が止めた操作があれば 1 件の投稿にまとめ、その投稿で許可を待つ。
+4. 決めてほしいことが無ければ何も投稿しない。
+
+朝会の投稿は朝会のセッションに紐づく。投稿に返事をすると、朝会のセッションを fork して（`--resume <朝会> --fork-session`）その件だけを続け、以後はその投稿のセッションを resume する。投稿どうしで会話は混ざらない。
+
+朝会の始まり・終わり（決めてほしいことの件数、立てた投稿、投稿に失敗した数）と、材料を取れなかったことはログに残る。
 
 ### 取り消せない操作の許可
 
@@ -97,8 +136,14 @@ Bash は道具の名前と引数で読むので、書き方を変えれば抜け
 | `HANDOFF_DIR` | いいえ | `prompt.md` と `issue-template.md` の置き場所。既定は `~/handoff` |
 | `GH_TOKEN` | いいえ | Claude CLI の `gh` と `git push` が使う書き込みトークン |
 | `GIT_AUTHOR_NAME` など | いいえ | Claude CLI の commit の作者。`GIT_AUTHOR_*` と `GIT_COMMITTER_*` を渡す |
-| `YUNOMI_URL` | いいえ | Worker の URL。Claude CLI が Working の記憶の口（`/v1/partners/:partnerId/working/memory`）を呼ぶ |
-| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | いいえ | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる |
+| `YUNOMI_URL` | いいえ | Worker の URL。`yunomi-memory` が Working の記憶の口（`/v1/partners/:partnerId/working/memory`）を呼ぶ |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | いいえ | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる。Claude CLI には渡さない |
+| `MEMORY_BIN` | いいえ | 朝会で記憶を読む CLI。既定は `yunomi-memory` |
+| `MAC_STATE_TOKEN` | いいえ | Mac と共有するトークン。設定したときだけ席の状態の受け口を開く |
+| `MAC_STATE_PORT` | いいえ | 席の状態の受け口のポート。既定は `8090` |
+| `STANDUP_ENABLED` | いいえ | `false` で朝会を止める。既定は `true` |
+| `STANDUP_TIME` | いいえ | 朝会の時刻（`HH:MM`、Asia/Tokyo）。既定は `09:00` |
+| `STANDUP_GITHUB_OWNER` | いいえ | 朝会で PR と申し送りを探す GitHub の owner。既定は `ochanuco` |
 | `CLAUDE_BIN` | いいえ | Claude CLI のパス。既定は `claude` |
 | `CLAUDE_TIMEOUT_MS` | いいえ | 1 回の作業の上限。既定は 30 分 |
 | `LOG_LEVEL` | いいえ | `debug` / `info` / `warn` / `error`。既定は `info` |
@@ -112,6 +157,7 @@ main への push で `.github/workflows/working-image.yml` が `ghcr.io/ochanuco
 gateway と同じホストに、gateway とは別の compose project で置く（`compose.example.yaml`）。gateway を更新しても Working の作業は止まらない。
 
 - 受付は docker0 のゲートウェイ（`172.17.0.1:8180`）にだけ公開する。gateway は `extra_hosts: host.docker.internal:host-gateway` を足し、`WORKING_URL=http://host.docker.internal:8180/events` で送る。
+- 席の状態の受け口（コンテナの `8090`）は、Mac から届く LAN の口に公開する。`MAC_STATE_URL` は `http://<host>:<公開したポート>/mac-state` にする。
 - `restart: unless-stopped` で、ホストの再起動後も受付と `orca serve` が上がる。
 - volume は 4 つ（上の表）。コンテナを作り直しても、ログイン・pairing・投稿との対応・作業用の clone が残る。
 

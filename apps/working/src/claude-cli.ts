@@ -30,7 +30,10 @@ export type GuardRunInput = {
 	grantId: string | null;
 };
 
-/** Claude CLI に渡す環境変数。受付の秘密（Discord のトークン、gateway と共有するトークン）は渡さない。 */
+/**
+ * Claude CLI に渡す環境変数。受付の秘密（Discord のトークン、gateway と共有するトークン）は渡さない。
+ * 記憶の口の service token も渡さず、yunomi-memory が STATE_DIR のファイルから読む。
+ */
 const CLAUDE_ENV_KEYS = [
 	"HOME",
 	"PATH",
@@ -44,10 +47,6 @@ const CLAUDE_ENV_KEYS = [
 	"GIT_AUTHOR_EMAIL",
 	"GIT_COMMITTER_NAME",
 	"GIT_COMMITTER_EMAIL",
-	// Working の記憶の口（Worker の /v1/partners/:partnerId/working/memory）を呼ぶ
-	"YUNOMI_URL",
-	"CF_ACCESS_CLIENT_ID",
-	"CF_ACCESS_CLIENT_SECRET",
 ] as const;
 
 export const claudeEnv = (
@@ -70,7 +69,9 @@ export type ClaudeError =
 
 export type SessionRef =
 	| { kind: "new"; id: string }
-	| { kind: "resume"; id: string };
+	| { kind: "resume"; id: string }
+	/** id のセッションを読んで、新しいセッションとして続ける。元のセッションは変わらない。 */
+	| { kind: "fork"; id: string };
 
 export type ClaudeRunner = {
 	run: (input: {
@@ -183,6 +184,7 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 				"",
 				session.kind === "new" ? "--session-id" : "--resume",
 				session.id,
+				...(session.kind === "fork" ? ["--fork-session"] : []),
 			];
 			const out = await exec(opts.bin, args, {
 				stdin: prompt,
@@ -200,7 +202,7 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 				},
 			});
 			if (
-				session.kind === "resume" &&
+				session.kind !== "new" &&
 				out.code !== 0 &&
 				/No conversation found/i.test(`${out.stderr}\n${out.stdout}`)
 			) {

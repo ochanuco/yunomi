@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - apps/working/handoff
+  - apps/working/mac-state
   - packages/*
   - partners/*
   - evals

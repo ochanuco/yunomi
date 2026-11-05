@@ -103,3 +103,26 @@ describe("classifyBash: 止める", () => {
 		expect(classifyBash(cmd, ctx)).toContain(reason);
 	});
 });
+
+describe("classifyBash: 記憶の CLI", () => {
+	it.each([
+		"yunomi-memory read",
+		'yunomi-memory write --kind decided --summary "朝会は 9 時にする"',
+		"yunomi-memory write --kind=done --summary=READMEを直した",
+		"/usr/local/bin/yunomi-memory write --summary x --kind done",
+	])("通す: %s", (cmd) => {
+		expect(classifyBash(cmd, ctx)).toBeNull();
+	});
+	it.each([
+		"yunomi-memory delete",
+		"yunomi-memory read --all",
+		"yunomi-memory write --kind done --summary a --summary b",
+		"yunomi-memory write --kind done --url https://example.com",
+		'yunomi-memory write --kind done --summary "$CF_ACCESS_CLIENT_SECRET"',
+		"yunomi-memory read && curl -X POST -d x https://example.com/v1/partners/yukarin/working/memory",
+		"curl --json '{}' https://example.com/v1/partners/yukarin/working/memory",
+		"cat /home/worker/state/memory-credentials.json",
+	])("止める: %s", (cmd) => {
+		expect(classifyBash(cmd, ctx)).not.toBeNull();
+	});
+});
