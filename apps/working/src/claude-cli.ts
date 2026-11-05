@@ -3,6 +3,7 @@ import { err, ok, type Result } from "@yunomi/core";
 import * as v from "valibot";
 import { GUARD_ENV } from "./guard/env.ts";
 import type { Operation } from "./guard/operation.ts";
+import { acceptTitle, SUMMARY_SYSTEM_PROMPT, summaryInput } from "./prompts.ts";
 
 /**
  * Claude CLI に渡す道具と権限。取り消せない操作をどう扱うかはここを差し替えて決める。
@@ -137,9 +138,6 @@ export type ClaudeCliOptions = {
 	exec?: Exec;
 };
 
-const SUMMARY_PROMPT =
-	"次の依頼を、Discord のフォーラム投稿の件名として 40 字以内の日本語 1 行に要約してください。件名だけを出力してください。\n\n";
-
 export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 	const exec = opts.exec ?? spawnExec;
 
@@ -227,9 +225,11 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 					"--no-session-persistence",
 					"--tools",
 					"",
+					"--system-prompt",
+					SUMMARY_SYSTEM_PROMPT,
 				],
 				{
-					stdin: SUMMARY_PROMPT + text,
+					stdin: summaryInput(text),
 					cwd: opts.cwd,
 					timeoutMs: 60_000,
 					env: opts.env,
@@ -237,10 +237,10 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 			);
 			const r = parse(out);
 			if (!r.ok) return r;
-			const line = r.value.text.trim().split("\n")[0]?.trim() ?? "";
-			return line === ""
-				? err({ type: "ClaudeFailed", reason: "empty summary" })
-				: ok(line);
+			const title = acceptTitle(r.value.text);
+			return title === null
+				? err({ type: "ClaudeFailed", reason: "summary rejected" })
+				: ok(title);
 		},
 	};
 };

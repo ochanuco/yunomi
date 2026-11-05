@@ -101,4 +101,51 @@ describe("createDiscordRest", () => {
 		);
 		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
 	});
+
+	it("2xx 以外は状態とエラーコード・メッセージをログに残し、トークンは出さない", async () => {
+		const logs: Record<string, unknown>[] = [];
+		const logger = {
+			debug: () => {},
+			info: () => {},
+			warn: (msg: string, fields?: Record<string, unknown>) => {
+				logs.push({ msg, ...fields });
+			},
+			error: () => {},
+		};
+		const forbidden = vi.fn(async () =>
+			json({ message: "Missing Permissions", code: 50013 }, 403),
+		);
+		const api = createDiscordRest({
+			token: "secret-token",
+			fetch: forbidden,
+			logger,
+		});
+		const r = await api.setTags("t1", ["a"]);
+		expect(!r.ok && r.error.type).toBe("PermissionDenied");
+		expect(logs).toEqual([
+			{
+				msg: "discord request rejected",
+				route: "PATCH /channels/t1",
+				status: 403,
+				code: 50013,
+				message: "Missing Permissions",
+			},
+		]);
+		expect(JSON.stringify(logs)).not.toContain("secret-token");
+
+		const sent = await api.send("t1", "hi");
+		expect(!sent.ok && sent.error.type).toBe("PermissionDenied");
+
+		const notFound = vi.fn(async () =>
+			json({ message: "Unknown Channel", code: 10003 }, 404),
+		);
+		const missing = await createDiscordRest({
+			token: "t",
+			fetch: notFound,
+			logger,
+		}).getChannel("x");
+		expect(!missing.ok && missing.error.type).toBe(
+			"ExternalServiceUnavailable",
+		);
+	});
 });

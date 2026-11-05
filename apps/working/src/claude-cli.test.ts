@@ -147,15 +147,31 @@ describe("createClaudeCli", () => {
 		expect(!crashed.ok && crashed.error.type).toBe("ClaudeFailed");
 	});
 
-	it("要約は道具なし・セッションなしで 1 行目だけを使う", async () => {
-		const exec = execReturning(
-			0,
-			JSON.stringify({ result: "請求書の整理\n余計" }),
-		);
+	it("要約は指示を system prompt に分け、道具なし・セッションなしで頼む", async () => {
+		const exec = execReturning(0, JSON.stringify({ result: "請求書の整理" }));
 		const r = await createClaudeCli({ ...opts, exec }).summarize("請求書を…");
 		expect(r).toEqual({ ok: true, value: "請求書の整理" });
-		expect(exec.mock.calls[0]?.[1]).toEqual(
+		const [, args, o] = exec.mock.calls[0] ?? [];
+		expect(args).toEqual(
 			expect.arrayContaining(["--no-session-persistence", "--tools", ""]),
 		);
+		expect(args?.[(args?.indexOf("--system-prompt") ?? -2) + 1]).toContain(
+			"件名を付ける係",
+		);
+		expect(o?.stdin).toBe("<依頼>請求書を…</依頼>");
+	});
+
+	it("前置きやメタ発言の出力は件名にせず err を返す", async () => {
+		for (const result of [
+			"件名だけを出力する依頼なので、要約を返します。",
+			"件名だけを出力する依頼なので、要約を返します。\n請求書の整理",
+		]) {
+			const exec = execReturning(0, JSON.stringify({ result }));
+			const r = await createClaudeCli({ ...opts, exec }).summarize("x");
+			expect(r).toEqual({
+				ok: false,
+				error: { type: "ClaudeFailed", reason: "summary rejected" },
+			});
+		}
 	});
 });

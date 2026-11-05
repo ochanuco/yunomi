@@ -42,7 +42,7 @@ await writeFile(
 	}),
 );
 
-const discord = createDiscordRest({ token: cfg.discordToken });
+const discord = createDiscordRest({ token: cfg.discordToken, logger });
 const me = await discord.me();
 if (!me.ok) {
 	logger.error("discord login failed", { error: me.error.type });

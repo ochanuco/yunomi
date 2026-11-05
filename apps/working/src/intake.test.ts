@@ -1,4 +1,9 @@
-import { err, externalServiceUnavailable, ok } from "@yunomi/core";
+import {
+	err,
+	externalServiceUnavailable,
+	ok,
+	permissionDenied,
+} from "@yunomi/core";
 import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { ClaudeRunner } from "./claude-cli.ts";
@@ -43,6 +48,7 @@ const fakeDiscord = () => {
 		],
 	]);
 	const messages = new Map<string, PostedMessage>();
+	const refuseSendTo = new Set<string>();
 	const sent: { channelId: string; content: string; replyTo?: string }[] = [];
 	const history = new Map<string, PostedMessage[]>();
 	let nextThread = 1;
@@ -80,6 +86,11 @@ const fakeDiscord = () => {
 			},
 		),
 		send: async (channelId, content, replyTo) => {
+			if (refuseSendTo.has(channelId)) {
+				return err(
+					permissionDenied({ actor: "discord bot", action: "POST /channels" }),
+				);
+			}
 			sent.push({ channelId, content, ...(replyTo ? { replyTo } : {}) });
 			return ok({ messageIds: [`sent${sent.length}`] });
 		},
@@ -89,7 +100,7 @@ const fakeDiscord = () => {
 			return ok(undefined);
 		},
 	};
-	return { api, channels, messages, sent, history };
+	return { api, channels, messages, sent, history, refuseSendTo };
 };
 
 const memoryStore = (): SessionStore => {
@@ -422,6 +433,53 @@ describe("仕事フォーラムの投稿", () => {
 			"end:一つ目",
 			"start:二つ目",
 			"end:二つ目",
+		]);
+	});
+
+	it("返事を投稿に書けなかったら完了にせず、次の発言で同じ返事を先に出し直す", async () => {
+		const { d, c, sessions, intake } = setup(() => "終わりました\n状態: 完了");
+		threadOf(d, "t6");
+		await sessions.set("t6", "s-old");
+		c.known.add("s-old");
+		d.refuseSendTo.add("t6");
+		await intake.handle(
+			envelope({
+				channel_id: "t6",
+				message_id: "a",
+				mentions: [],
+				content: "どう？",
+			}),
+		);
+		expect(d.sent).toEqual([]);
+		expect(d.channels.get("t6")?.appliedTagIds).toEqual([
+			"tag-other",
+			"tag-decide",
+		]);
+		expect(sessions.get("t6")).toBe("s-old");
+
+		d.refuseSendTo.delete("t6");
+		c.runner.run.mockResolvedValueOnce(
+			ok({ sessionId: "s-old", text: "続きです\n状態: 完了" }),
+		);
+		await intake.handle(
+			envelope({
+				channel_id: "t6",
+				message_id: "b",
+				mentions: [],
+				content: "やりなおして",
+			}),
+		);
+		expect(d.sent).toEqual([
+			{ channelId: "t6", content: "終わりました" },
+			{ channelId: "t6", content: "続きです" },
+		]);
+		expect(c.runner.run.mock.calls[1]?.[0].session).toEqual({
+			kind: "resume",
+			id: "s-old",
+		});
+		expect(d.channels.get("t6")?.appliedTagIds).toEqual([
+			"tag-other",
+			"tag-done",
 		]);
 	});
 
