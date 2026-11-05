@@ -65,6 +65,7 @@ const EXTERNAL_TOOLS = new Set([
 	"http",
 	"https",
 	"xh",
+	"twine",
 ]);
 const PRIVILEGE = new Set(["sudo", "su", "doas"]);
 const PROCESS_CONTROL = new Set([
@@ -78,7 +79,19 @@ const PROCESS_CONTROL = new Set([
 	"systemctl",
 	"crontab",
 ]);
-const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "turbo"]);
+const PACKAGE_MANAGERS = new Set([
+	"npm",
+	"pnpm",
+	"yarn",
+	"bun",
+	"turbo",
+	"mise",
+	"uv",
+	"poetry",
+	"pdm",
+	"hatch",
+	"cargo",
+]);
 const RELEASE_WORDS = new Set([
 	"publish",
 	"unpublish",
@@ -114,6 +127,24 @@ const GH_ALLOWED: Record<string, ReadonlySet<string> | "any"> = {
 };
 
 const isFlag = (a: string) => a.startsWith("-") && a !== "-";
+
+/** `uv run` と `uvx` で、次の引数を値に取るもの。 */
+const UV_VALUE_FLAGS = new Set([
+	"--with",
+	"--with-editable",
+	"--with-requirements",
+	"-w",
+	"--python",
+	"-p",
+	"--project",
+	"--directory",
+	"--package",
+	"--extra",
+	"--group",
+	"--env-file",
+	"--index",
+	"--from",
+]);
 
 /** 前に付く変数の代入とラッパー（env、timeout、xargs、npx など）を飛ばし、本体の位置を返す。 */
 const commandStart = (args: readonly string[]): number => {
@@ -167,6 +198,33 @@ const commandStart = (args: readonly string[]): number => {
 		) {
 			i += 2;
 			while (i < args.length && isFlag(args[i] as string)) i++;
+			continue;
+		}
+		// `mise exec node@24 -- <本体>`。`--` が無いものは本体を持たないか -c で渡すので classifyMise が読む
+		if (name === "mise" && ["exec", "x"].includes(args[i + 1] ?? "")) {
+			const sep = args.indexOf("--", i + 2);
+			if (sep === -1) return i;
+			i = sep + 1;
+			continue;
+		}
+		const uvRun =
+			name === "uvx"
+				? 1
+				: name === "uv" && args[i + 1] === "run"
+					? 2
+					: name === "uv" && args[i + 1] === "tool" && args[i + 2] === "run"
+						? 3
+						: 0;
+		if (uvRun > 0) {
+			i += uvRun;
+			while (i < args.length && isFlag(args[i] as string)) {
+				const b = args[i] as string;
+				if (b === "--") {
+					i++;
+					break;
+				}
+				i += UV_VALUE_FLAGS.has(b) ? 2 : 1;
+			}
 			continue;
 		}
 		return i;
@@ -336,6 +394,37 @@ const classifyOrca = (rest: readonly string[]): Reason => {
 	return "orca は席の Claude が受付とやりとりする orchestration の口だけを聞かずに使える";
 };
 
+/**
+ * mise は道具を入れる・使うのは通し、作業場所の外の設定を書き換える操作と、道具をまとめて消す操作を止める。
+ * 公開・デプロイの名前のタスク（`mise run deploy`）は PACKAGE_MANAGERS の判定で止める。
+ */
+const classifyMise = (rest: readonly string[]): Reason => {
+	const [sub, ...tail] = rest;
+	if (
+		(sub === "exec" || sub === "x") &&
+		tail.some((a) => a === "-c" || a.startsWith("--command"))
+	) {
+		return "中身を読めないコマンドの実行";
+	}
+	if (
+		(sub === "use" || sub === "u") &&
+		tail.some((a) => a === "--global" || /^-[A-Za-z]*g/.test(a))
+	) {
+		return "作業場所の外の mise 設定の変更";
+	}
+	if (
+		sub === "settings" &&
+		tail.some((a) => ["set", "add", "unset"].includes(a)) &&
+		!tail.some((a) => a === "--local" || a === "-l")
+	) {
+		return "作業場所の外の mise 設定の変更";
+	}
+	if (sub === "implode" || sub === "self-update") {
+		return "mise 本体と入れた道具の削除・入れ替え";
+	}
+	return null;
+};
+
 type CwdRef = { cwd: string | null };
 
 const pathsOf = (rest: readonly string[]) => {
@@ -429,6 +518,10 @@ const classifySimple = (
 	}
 	if (name === "yunomi-memory") return classifyMemory(rest);
 	if (name === "orca" || name === "orca-ide") return classifyOrca(rest);
+	if (name === "mise") {
+		const r = classifyMise(rest);
+		if (r) return r;
+	}
 	if (name === "git") return classifyGit(rest);
 	if (name === "gh") return classifyGh(rest);
 	if (name === "curl") return classifyCurl(rest);
