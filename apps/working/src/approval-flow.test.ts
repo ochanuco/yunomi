@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ok } from "@yunomi/core";
 import { describe, expect, it } from "vitest";
 import { openApprovalStore } from "./approval-store.ts";
+import { createAttachmentCollector } from "./attachments.ts";
 import { GUARD_ENV, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
@@ -40,6 +41,10 @@ const setup = async () => {
 		approvals: await openApprovalStore(stateDir),
 		ledger: createLedger(guardDirOf(stateDir)),
 		summarize: async () => ok("件名"),
+		collectAttachments: createAttachmentCollector({
+			chimera: null,
+			logger: silentLogger,
+		}),
 		remember: async () => {},
 		standupDone: async () => {},
 		preamble: "",

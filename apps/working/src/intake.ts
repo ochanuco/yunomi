@@ -8,8 +8,13 @@ import {
 	uniquePending,
 } from "./approval.ts";
 import type { ApprovalStore } from "./approval-store.ts";
+import {
+	type AttachmentCollector,
+	takeAttachRefs,
+	withNote,
+} from "./attachments.ts";
 import type { Summarizer } from "./claude-cli.ts";
-import type { DiscordApi } from "./discord-rest.ts";
+import type { Attachment, DiscordApi } from "./discord-rest.ts";
 import { seatNameOf } from "./guard/env.ts";
 import type { Ledger, Pending } from "./guard/ledger.ts";
 import type { Operation } from "./guard/operation.ts";
@@ -17,6 +22,7 @@ import { createKeyedQueue } from "./keyed-queue.ts";
 import type { Logger } from "./logger.ts";
 import type { Orca, OrcaError, SeatMessage } from "./orca.ts";
 import {
+	backgroundReplyNote,
 	fallbackTitle,
 	forumPostBody,
 	forumStarterPrompt,
@@ -45,6 +51,8 @@ export type IntakeDeps = {
 	/** hook が止めた操作と、許可の記録。 */
 	ledger: Ledger;
 	summarize: Summarizer;
+	/** 席の返事の添付の行を読み、投稿に付けるファイルを集める。 */
+	collectAttachments: AttachmentCollector;
 	/** 終わった仕事を記憶に 1 行残す。 */
 	remember: (summary: string) => Promise<void>;
 	/** 朝会の席が返した決めてほしいことを投稿にする。 */
@@ -120,6 +128,19 @@ export const backgroundRunning = (body: string) =>
 	);
 
 const ALIVE = new Set(["working", "asking", "waiting"]);
+
+const STATUS_SUMMARY_LIMIT = 200;
+
+/** 裏の作業を待っている席に持ち主が書いたとき、受付がすぐ返す文。 */
+export const busyText = (lastStatus: string | null) => {
+	const doing = (lastStatus ?? "").replace(/\s+/g, " ").trim();
+	if (doing === "") return "作業中です。";
+	const short =
+		doing.length > STATUS_SUMMARY_LIMIT
+			? `${doing.slice(0, STATUS_SUMMARY_LIMIT)}…`
+			: doing;
+	return `作業中です。（${short}）`;
+};
 
 export type Intake = {
 	/** 受け付けた仕事が終わるまで待つ Promise を返す。HTTP は待たずに 202 を返す。 */
@@ -230,10 +251,11 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		threadId: string,
 		lead: string,
 		blocked: readonly Pending[],
+		files: readonly Attachment[] = [],
 	) => {
 		if (blocked.length === 0) {
-			if (lead.trim() === "") return;
-			const sent = await deps.discord.send(threadId, lead);
+			if (lead.trim() === "" && files.length === 0) return;
+			const sent = await deps.discord.send(threadId, lead, undefined, files);
 			if (!sent.ok) {
 				log.error("post failed", {
 					thread_id: threadId,
@@ -246,6 +268,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const sent = await deps.discord.send(
 			threadId,
 			lead.trim() === "" ? request : `${lead}\n\n${request}`,
+			undefined,
+			files,
 		);
 		if (!sent.ok) {
 			log.error("approval request failed", {
@@ -331,6 +355,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			waitingSince: null,
 			pending: [],
 			queuedAt: null,
+			background: false,
+			lastStatus: null,
 		});
 		log.info("seat working", {
 			thread_id: threadId,
@@ -375,6 +401,13 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		dequeue();
 	};
 
+	/** 席の返事から添付の行を外し、ファイルを集める。 */
+	const seatReply = async (seat: Seat, text: string) => {
+		const { body, refs } = takeAttachRefs(text);
+		const got = await deps.collectAttachments(seat.path, refs);
+		return { text: body, body: withNote(body, got.note), files: got.files };
+	};
+
 	const toWaiting = (
 		seat: Seat,
 		ask: { id: string; text: string } | null,
@@ -385,6 +418,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		question: ask?.text ?? seat.question,
 		expectStop: ask !== null,
 		waitingSince: now(),
+		background: false,
+		lastStatus: null,
 	});
 
 	/** 持ち主の言葉を席に渡す。席の状態で渡し方が変わる。 */
@@ -456,10 +491,23 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				break;
 		}
 		if (seat.dispatchId === null) return;
+		// 裏の作業を待つ席は、手が空くまで返事をしないことがある。受付が先に作業中だと返す
+		if (seat.status === "working" && seat.background) {
+			const busy = await deps.discord.send(threadId, busyText(seat.lastStatus));
+			if (!busy.ok) {
+				log.warn("busy reply failed", {
+					thread_id: threadId,
+					error: busy.error.type,
+				});
+			}
+		}
 		const sent = await deps.orca.send({
 			dispatchId: seat.dispatchId,
 			subject: "持ち主の返事",
-			body: text,
+			body:
+				seat.status === "working" && seat.background
+					? `${backgroundReplyNote}\n\n${text}`
+					: text,
 		});
 		if (!sent.ok) {
 			log.error("seat send failed", {
@@ -491,8 +539,9 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		}
 		expireGrant(threadId);
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
-		await postWithApproval(threadId, msg.body, blocked);
-		await deps.seats.set(toWaiting(seat, { id: msg.id, text: msg.body }));
+		const reply = await seatReply(seat, msg.body);
+		await postWithApproval(threadId, reply.body, blocked, reply.files);
+		await deps.seats.set(toWaiting(seat, { id: msg.id, text: reply.body }));
 		await setStatus(threadId, "決めてほしい");
 		log.info("seat asked", { thread_id: threadId, blocked: blocked.length });
 	};
@@ -506,14 +555,18 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			await closeSeat(seat);
 			return;
 		}
-		const taken = takeStatus(msg.body);
+		// 状態の行は添付の行を外したあとの最後の行。付けられなかった知らせはその後ろに足す
+		const { body, refs } = takeAttachRefs(msg.body);
+		const taken = takeStatus(body);
+		const got = await deps.collectAttachments(seat.path, refs);
+		const reply = { body: withNote(taken.body, got.note), files: got.files };
 		// 止めた操作があれば、Claude の書いた状態によらず持ち主の判断を待つ
 		if (
 			blocked.length > 0 ||
 			msg.outcome === "failed" ||
 			taken.status === "決めてほしい"
 		) {
-			await postWithApproval(threadId, taken.body, blocked);
+			await postWithApproval(threadId, reply.body, blocked, reply.files);
 			await deps.seats.set({ ...toWaiting(seat, null), expectStop: false });
 			await setStatus(threadId, "決めてほしい");
 			log.info("seat waiting", {
@@ -522,7 +575,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			});
 			return;
 		}
-		await postWithApproval(threadId, taken.body, []);
+		await postWithApproval(threadId, reply.body, [], reply.files);
 		await setStatus(threadId, taken.status);
 		const title = (await titleOf(threadId)) ?? "仕事フォーラムの投稿";
 		await deps.remember(
@@ -548,9 +601,17 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 	/** 途中経過や、持ち主の質問への答え。完了を待たずに投稿に書く。 */
 	const onStatus = async (seat: Seat, msg: SeatMessage) => {
 		if (seat.standup) return;
-		const body = msg.body.trim();
-		if (body === "") return;
-		const sent = await deps.discord.send(seat.threadId, body);
+		const reply = await seatReply(seat, msg.body);
+		if (reply.body === "" && reply.files.length === 0) return;
+		if (reply.text !== "") {
+			await deps.seats.set({ ...seat, lastStatus: reply.text });
+		}
+		const sent = await deps.discord.send(
+			seat.threadId,
+			reply.body,
+			undefined,
+			reply.files,
+		);
 		if (!sent.ok) {
 			log.error("status post failed", {
 				thread_id: seat.threadId,
@@ -599,6 +660,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		if (msg.stopReason !== null && seat.status !== "working") return;
 		// 裏の shell やタイマーを待つためにターンを終えただけなので、止まったとは書かない
 		if (msg.stopReason !== null && backgroundRunning(msg.body)) {
+			if (!seat.background) await deps.seats.set({ ...seat, background: true });
 			log.info("seat waiting on background work", { thread_id: threadId });
 			return;
 		}
@@ -771,6 +833,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			terminal: null,
 			questionId: null,
 			expectStop: false,
+			background: false,
 		});
 		log.info("seat sleeping", { thread_id: threadId });
 		dequeue();
@@ -875,6 +938,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 					terminal: null,
 					questionId: null,
 					expectStop: false,
+					background: false,
 				});
 				if (seat.status === "working") {
 					await deps.discord.send(seat.threadId, RESTARTED_TEXT);

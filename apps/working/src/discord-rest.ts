@@ -16,6 +16,19 @@ const API = "https://discord.com/api/v10";
 export const MESSAGE_LIMIT = 2000;
 /** フォーラム投稿の件名の上限。 */
 export const THREAD_NAME_LIMIT = 100;
+/** 1 件のメッセージに付けられるファイルの数。 */
+export const ATTACHMENT_COUNT_LIMIT = 10;
+/** ブーストしていないサーバーで 1 ファイルに許される大きさ。 */
+export const ATTACHMENT_SIZE_LIMIT = 10 * 1024 * 1024;
+/** 1 件のメッセージの要求全体の大きさ。本文と JSON の分を残す。 */
+export const ATTACHMENT_TOTAL_LIMIT = 24 * 1024 * 1024;
+
+/** 投稿に付けるファイル。 */
+export type Attachment = {
+	name: string;
+	contentType: string;
+	data: Uint8Array;
+};
 
 const userSchema = v.object({
 	id: v.string(),
@@ -71,11 +84,15 @@ export type DiscordApi = {
 		forumId: string,
 		post: { name: string; content: string; tagIds: string[] },
 	) => Promise<Result<{ threadId: string }, DomainError>>;
-	/** 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに付ける。送ったメッセージの ID を順に返す。 */
+	/**
+	 * 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに、files は最後の 1 件だけに付ける。
+	 * 送ったメッセージの ID を順に返す。
+	 */
 	send: (
 		channelId: string,
 		content: string,
 		replyTo?: string,
+		files?: readonly Attachment[],
 	) => Promise<Result<{ messageIds: string[] }, DomainError>>;
 	setTags: (
 		threadId: string,
@@ -129,6 +146,29 @@ export const splitMessage = (text: string, limit = MESSAGE_LIMIT): string[] => {
 	return chunks;
 };
 
+/** ファイルを付けるときは multipart で、本文は payload_json、ファイルは files[n] に入れる。 */
+const withFiles = (
+	payload: Record<string, unknown>,
+	files: readonly Attachment[],
+): FormData => {
+	const form = new FormData();
+	form.append(
+		"payload_json",
+		JSON.stringify({
+			...payload,
+			attachments: files.map((f, id) => ({ id, filename: f.name })),
+		}),
+	);
+	for (const [id, f] of files.entries()) {
+		form.append(
+			`files[${id}]`,
+			new Blob([f.data as Uint8Array<ArrayBuffer>], { type: f.contentType }),
+			f.name,
+		);
+	}
+	return form;
+};
+
 export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 	const doFetch = opts.fetch ?? fetch;
 	const timeoutMs = opts.timeoutMs ?? 15_000;
@@ -141,14 +181,22 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 		retried = false,
 	): Promise<Result<T | undefined, DomainError>> => {
 		let res: Response;
+		// FormData は fetch が boundary 付きの content-type を付ける
+		const form = body instanceof FormData;
 		try {
 			res = await doFetch(`${API}${path}`, {
 				method,
 				headers: {
 					authorization: `Bot ${opts.token}`,
-					...(body === undefined ? {} : { "content-type": "application/json" }),
+					...(body === undefined || form
+						? {}
+						: { "content-type": "application/json" }),
 				},
-				body: body === undefined ? undefined : JSON.stringify(body),
+				body: form
+					? body
+					: body === undefined
+						? undefined
+						: JSON.stringify(body),
 				signal: AbortSignal.timeout(timeoutMs),
 			});
 		} catch {
@@ -244,26 +292,29 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 			);
 			return r.ok ? ok({ threadId: r.value.id }) : r;
 		},
-		send: async (channelId, content, replyTo) => {
-			const chunks = splitMessage(content);
+		send: async (channelId, content, replyTo, files = []) => {
+			const split = splitMessage(content);
+			const chunks = split.length === 0 && files.length > 0 ? [""] : split;
 			const messageIds: string[] = [];
 			for (const [i, chunk] of chunks.entries()) {
+				const payload = {
+					content: chunk,
+					allowed_mentions: noMentions,
+					...(i === 0 && replyTo
+						? {
+								message_reference: {
+									message_id: replyTo,
+									fail_if_not_exists: false,
+								},
+							}
+						: {}),
+				};
+				const attach = i === chunks.length - 1 ? files : [];
 				const r = await callJson(
 					"POST",
 					`/channels/${channelId}/messages`,
 					sentSchema,
-					{
-						content: chunk,
-						allowed_mentions: noMentions,
-						...(i === 0 && replyTo
-							? {
-									message_reference: {
-										message_id: replyTo,
-										fail_if_not_exists: false,
-									},
-								}
-							: {}),
-					},
+					attach.length === 0 ? payload : withFiles(payload, attach),
 				);
 				if (!r.ok) return r;
 				messageIds.push(r.value.id);

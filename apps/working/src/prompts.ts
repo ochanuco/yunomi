@@ -10,6 +10,8 @@ export const WORKING_INSTRUCTIONS = `
 - 投稿への返事は、作業の区切りで \`orca orchestration send --type worker_done\` の \`--body\` に書く。本文はそのまま投稿に書き込まれる。手順書にある「3 文で書く」は守らなくてよい。Discord のメッセージとして読める長さと書式にする。
 - 途中経過や、持ち主の質問への答えは、完了を待たずに \`orca orchestration send --type status --subject 途中経過 --body "<本文>"\` で投稿に書く（worker_done と同じ \`--task-id\` と \`--dispatch-id\` を付ける）。持ち主に質問されたら、作業の途中でもすぐ答える。
 - 描画やビルドの終わりや、裏で回した shell を待つなど、長い待ちに入るときは、何を待つかと目安を status で一言書いてからターンを終える。
+- 投稿にファイルを見せたいときは、作業場所の直下の \`out/\` に置き、返事（worker_done、ask、status の本文）に \`添付: out/<ファイル名>\` の行を 1 ファイル 1 行で書く。受付がその行を本文から外し、ファイルを投稿に付ける。\`out/\` の外のファイルや、\`out/\` の外を指すシンボリックリンクは付けられない。付けられるのは 1 件の返事に 10 個まで、1 ファイル 10 MB まで。
+- chimera で画像を描いたら、返事に \`chimera: <short_id>\` の行を 1 枚 1 行で書く。受付が元の PNG を取って投稿に付けるので、画像を自分で落として \`out/\` に置かなくてよい。
 - 作業の途中で持ち主に聞きたいことができたら \`orca orchestration ask\` で聞く。質問はそのまま投稿に書かれ、持ち主の返事が答えとして届く。答えが届くまでは同じことを進めない。
 - いまの作業ディレクトリがこの席の作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。作業場所の外に書かない。
 - 持ち主が投稿で頼んだことは、持ち主の意思として進めてよい。頼まれていない取り消せない操作や外に出る操作（main などへの push、force push、マージ、削除、デプロイ、課金、外部への投稿）は、自分の判断で実行せず、\`orca orchestration ask\` で何をしたいかを聞く。
@@ -179,6 +181,10 @@ export const seatSpec = (preamble: string, task: string) =>
 ## この投稿
 
 ${task}`;
+
+/** 裏の作業を待っている席に届けた持ち主の書き込みの前に置く。受付は「作業中です」とだけ返してある。 */
+export const backgroundReplyNote =
+	"裏の作業を待っている間に持ち主が書いた。受付が「作業中です」とだけ先に返してある。手が空いたら status で答え、待ちを続ける。";
 
 /** 持ち主の頼みで席を起動し直したときに渡す。 */
 export const restartNote = (question: string | null) =>

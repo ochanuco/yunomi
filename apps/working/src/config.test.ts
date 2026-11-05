@@ -35,6 +35,7 @@ describe("loadConfig", () => {
 				logLevel: "info",
 				memory: null,
 				memoryBin: "yunomi-memory",
+				chimera: null,
 				macState: null,
 				standup: {
 					enabled: true,
@@ -89,6 +90,26 @@ describe("loadConfig", () => {
 			YUNOMI_URL: "https://worker.example",
 		});
 		expect(partial.ok && partial.value.memory).toBeNull();
+	});
+
+	it("chimera の口は URL と service token がそろったときだけ使う", () => {
+		const r = loadConfig({
+			...base,
+			CHIMERA_URL: "https://chimera.example",
+			CHIMERA_ACCESS_CLIENT_ID: "cid",
+			CHIMERA_ACCESS_CLIENT_SECRET: "csecret",
+		});
+		expect(r.ok && r.value.chimera).toEqual({
+			url: "https://chimera.example",
+			clientId: "cid",
+			clientSecret: "csecret",
+		});
+		const partial = loadConfig({
+			...base,
+			CHIMERA_URL: "https://chimera.example",
+			CHIMERA_ACCESS_CLIENT_ID: "cid",
+		});
+		expect(partial.ok && partial.value.chimera).toBeNull();
 	});
 
 	it("トークンとチャンネル ID が欠けていれば理由を返す", () => {

@@ -38,6 +38,52 @@ describe("createDiscordRest", () => {
 		});
 	});
 
+	it("ファイルは multipart で最後の 1 件にだけ付け、本文は payload_json に入れる", async () => {
+		let n = 0;
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				json({ id: `m${++n}` }),
+		);
+		const api = createDiscordRest({ token: "tok", fetch });
+		const r = await api.send("c1", `${"a".repeat(1999)}\nbb`, "r1", [
+			{ name: "a.png", contentType: "image/png", data: new Uint8Array([1, 2]) },
+		]);
+		expect(r).toEqual({ ok: true, value: { messageIds: ["m1", "m2"] } });
+		const [first, last] = fetch.mock.calls.map(([, init]) => init);
+		expect(JSON.parse(String(first?.body))).toMatchObject({
+			message_reference: { message_id: "r1" },
+		});
+		const form = last?.body;
+		expect(form).toBeInstanceOf(FormData);
+		if (!(form instanceof FormData)) return;
+		// boundary 付きの content-type は fetch に任せる
+		expect(last?.headers).not.toHaveProperty("content-type");
+		expect(JSON.parse(String(form.get("payload_json")))).toEqual({
+			content: "bb",
+			allowed_mentions: { parse: [] },
+			attachments: [{ id: 0, filename: "a.png" }],
+		});
+		const file = form.get("files[0]");
+		expect(file).toBeInstanceOf(File);
+		expect(file instanceof File && file.name).toBe("a.png");
+		expect(file instanceof File && file.type).toBe("image/png");
+	});
+
+	it("本文が空でもファイルがあれば 1 件送る", async () => {
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				json({ id: "m1" }),
+		);
+		const r = await createDiscordRest({ token: "t", fetch }).send(
+			"c1",
+			"",
+			undefined,
+			[{ name: "a.png", contentType: "image/png", data: new Uint8Array([1]) }],
+		);
+		expect(r).toEqual({ ok: true, value: { messageIds: ["m1"] } });
+		expect(fetch).toHaveBeenCalledTimes(1);
+	});
+
 	it("履歴は古い順に並べ直し、表示名を優先する", async () => {
 		const fetch = vi.fn(async () =>
 			json([

@@ -73,7 +73,12 @@ export const fakeDiscord = () => {
 	]);
 	const messages = new Map<string, PostedMessage>();
 	const refuseSendTo = new Set<string>();
-	const sent: { channelId: string; content: string; replyTo?: string }[] = [];
+	const sent: {
+		channelId: string;
+		content: string;
+		replyTo?: string;
+		files?: string[];
+	}[] = [];
 	const posts: { name: string; content: string; tagIds: string[] }[] = [];
 	const history = new Map<string, PostedMessage[]>();
 	let nextThread = 1;
@@ -111,13 +116,18 @@ export const fakeDiscord = () => {
 				return ok({ threadId: id });
 			},
 		),
-		send: async (channelId, content, replyTo) => {
+		send: async (channelId, content, replyTo, files = []) => {
 			if (refuseSendTo.has(channelId)) {
 				return err(
 					permissionDenied({ actor: "discord bot", action: "POST /channels" }),
 				);
 			}
-			sent.push({ channelId, content, ...(replyTo ? { replyTo } : {}) });
+			sent.push({
+				channelId,
+				content,
+				...(replyTo ? { replyTo } : {}),
+				...(files.length > 0 ? { files: files.map((f) => f.name) } : {}),
+			});
 			return ok({ messageIds: [`sent${sent.length}`] });
 		},
 		setTags: async (threadId, tagIds) => {
