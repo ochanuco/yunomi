@@ -1,3 +1,5 @@
+import { DEFAULT_PARTNER_ID, isPartnerId, type PartnerId } from "@yunomi/core";
+
 export type PageName = "state" | "memory" | "audit";
 
 export type Route = { page: PageName; params: URLSearchParams };
@@ -26,4 +28,13 @@ export const buildHash = (
 ): string => {
 	const q = new URLSearchParams(params).toString();
 	return `#/${page}${q ? `?${q}` : ""}`;
+};
+
+/**
+ * 見るパートナーは `?partner=` で選ぶ。ハッシュの外に置くので、画面内のリンクが持ち回らなくてよい。
+ * 名簿にない値や指定なしは既定のパートナー。
+ */
+export const parsePartner = (search: string): PartnerId => {
+	const id = new URLSearchParams(search).get("partner") ?? "";
+	return isPartnerId(id) ? id : DEFAULT_PARTNER_ID;
 };

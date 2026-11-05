@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildHash, parseRoute } from "./route.ts";
+import { buildHash, parsePartner, parseRoute } from "./route.ts";
 
 describe("route", () => {
 	it("ハッシュから画面とパラメータを読む", () => {
@@ -18,5 +18,11 @@ describe("route", () => {
 		expect(r.page).toBe("audit");
 		expect(r.params.get("id")).toBe("a b");
 		expect(buildHash("state")).toBe("#/state");
+	});
+
+	it("?partner= で名簿のパートナーを選び、それ以外は yukarin", () => {
+		expect(parsePartner("?partner=akarin")).toBe("akarin");
+		expect(parsePartner("")).toBe("yukarin");
+		expect(parsePartner("?partner=nobody")).toBe("yukarin");
 	});
 });

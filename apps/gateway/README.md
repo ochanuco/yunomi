@@ -16,6 +16,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | 名前 | 必須 | 内容 |
 | --- | --- | --- |
 | `DISCORD_TOKEN` | はい | bot token |
+| `PARTNER_ID` | いいえ | この bot が受け持つパートナー（`yukarin` / `akarin`）。既定は `yukarin`。名簿にない値は起動時エラー |
 | `YUNOMI_URL` | はい | Worker の URL |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | 本番 | Access service token。どちらか一方だけの指定は起動時エラー |
 | `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |

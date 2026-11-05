@@ -12,12 +12,12 @@ import {
 	type StateHistoryResponse,
 	type StatusResponse,
 } from "@yunomi/admin-contract";
-import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { drizzle } from "drizzle-orm/d1";
 import { authenticate } from "../auth/access.ts";
 import { accessEnv, partnerNamespace } from "../env.ts";
 import { createInterestOpinionRepo } from "../interest-opinion.ts";
 import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
+import { partnerProfile } from "../partners.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
 import { handleSnapshots } from "./snapshots.ts";
@@ -73,7 +73,7 @@ export async function handleAdminApi(
 	const snapshotMatch = SNAPSHOT_ROUTE.exec(url.pathname);
 	if (snapshotMatch) {
 		const id = decodeURIComponent(snapshotMatch[1] ?? "");
-		if (id !== yukarinProfile.partner_id) return fail(404, "unknown_partner");
+		if (!partnerProfile(id)) return fail(404, "unknown_partner");
 		return handleSnapshots(request, env, id, snapshotMatch[2] ?? "");
 	}
 	const match = ROUTE.exec(url.pathname);
@@ -81,9 +81,8 @@ export async function handleAdminApi(
 	if (request.method !== "GET") return fail(405, "method_not_allowed");
 
 	const partnerId = decodeURIComponent(match[1] ?? "");
-	if (partnerId !== yukarinProfile.partner_id) {
-		return fail(404, "unknown_partner");
-	}
+	const profile = partnerProfile(partnerId);
+	if (!profile) return fail(404, "unknown_partner");
 
 	const queries = createAdminQueries(drizzle(env.DB));
 	const partner = partnerNamespace(env);
@@ -99,7 +98,7 @@ export async function handleAdminApi(
 			return json({
 				partner_id: partnerId,
 				env: env.YUNOMI_ENV,
-				profile_version: yukarinProfile.schema_version,
+				profile_version: profile.schema_version,
 				state: state && {
 					mood: state.mood,
 					energy: state.energy,
@@ -174,7 +173,7 @@ export async function handleAdminApi(
 		case "interests": {
 			const { interests } = await createInterestOpinionRepo(
 				drizzle(env.DB),
-			).current(yukarinProfile);
+			).current(profile);
 			const items = interests
 				.map((i) => ({
 					topic: i.topic,
@@ -192,7 +191,7 @@ export async function handleAdminApi(
 		case "opinions": {
 			const { opinions } = await createInterestOpinionRepo(
 				drizzle(env.DB),
-			).current(yukarinProfile);
+			).current(profile);
 			const items = opinions.map((o) => ({
 				topic: o.topic,
 				label: o.label,
@@ -220,7 +219,7 @@ export async function handleAdminApi(
 				partnerId,
 				days,
 				new Date(),
-				yukarinProfile.living_rhythm.lifestyle_day_boundary,
+				profile.living_rhythm.lifestyle_day_boundary,
 			);
 			return json({ items } satisfies KpisResponse);
 		}

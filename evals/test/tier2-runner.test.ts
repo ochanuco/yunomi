@@ -525,6 +525,14 @@ describe("Tier 2 CLI（Fake provider）", () => {
 		expect(logs.join("\n")).toContain("violations:");
 	});
 
+	it("--partner akarin は Akarin のプロファイルとシナリオで回す", async () => {
+		const { d, outDir } = deps();
+		expect(await main([...args, "--partner", "akarin"], d)).toBe(0);
+		const [file] = readdirSync(outDir);
+		const json = JSON.parse(readFileSync(join(outDir, file ?? ""), "utf8"));
+		expect(json.meta.partner_id).toBe("akarin");
+	});
+
 	it("--strict で違反があると 1", async () => {
 		const { d } = deps();
 		expect(await main([...args, "--strict"], d)).toBe(1);
@@ -541,6 +549,7 @@ describe("Tier 2 CLI（Fake provider）", () => {
 		expect(await main(["--samples", "0"], bad.d)).toBe(2);
 		expect(await main(["--env", "staging"], bad.d)).toBe(2);
 		expect(await main(["--scenario", "nope"], bad.d)).toBe(2);
+		expect(await main(["--partner", "nobody"], bad.d)).toBe(2);
 		expect(readdirSync(bad.outDir)).toEqual([]);
 	});
 });

@@ -76,6 +76,7 @@ export type ScenarioReport = {
 export type Tier2Report = {
 	meta: {
 		timestamp: string;
+		partner_id: string;
 		env: Env;
 		samples_per_scenario: number;
 		turn_model: string;
@@ -357,6 +358,7 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	return {
 		meta: {
 			timestamp: (opts.now?.() ?? new Date()).toISOString(),
+			partner_id: opts.profile.partner_id,
 			env: opts.env,
 			samples_per_scenario: opts.samples,
 			turn_model: router.primary,
@@ -425,7 +427,7 @@ export const formatSummary = (report: Tier2Report): string => {
 			.trimEnd(),
 	);
 	const out = [
-		`tier2 env=${report.meta.env} turn=${report.meta.turn_model} judge=${report.meta.judge_model} samples=${report.meta.samples_per_scenario}`,
+		`tier2 partner=${report.meta.partner_id} env=${report.meta.env} turn=${report.meta.turn_model} judge=${report.meta.judge_model} samples=${report.meta.samples_per_scenario}`,
 		...lines,
 	];
 	if (report.violations.length > 0) {

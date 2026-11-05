@@ -10,6 +10,7 @@ describe("loadConfig", () => {
 			ok: true,
 			value: {
 				discordToken: "t",
+				partnerId: "yukarin",
 				yunomiUrl: "http://localhost:8787",
 				access: null,
 				ochoko: null,
@@ -22,6 +23,12 @@ describe("loadConfig", () => {
 				logLevel: "info",
 			},
 		});
+	});
+
+	it("PARTNER_ID は名簿の ID だけを受け付ける", () => {
+		const r = loadConfig({ ...base, PARTNER_ID: "akarin" });
+		expect(r.ok && r.value.partnerId).toBe("akarin");
+		expect(loadConfig({ ...base, PARTNER_ID: "nobody" }).ok).toBe(false);
 	});
 
 	it("Access 認証と dev caller を読む", () => {

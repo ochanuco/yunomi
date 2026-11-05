@@ -1,4 +1,11 @@
-import { err, ok, type Result } from "@yunomi/core";
+import {
+	DEFAULT_PARTNER_ID,
+	err,
+	ok,
+	PARTNER_IDS,
+	type PartnerId,
+	type Result,
+} from "@yunomi/core";
 import * as v from "valibot";
 
 const nonEmpty = v.pipe(v.string(), v.nonEmpty());
@@ -6,6 +13,7 @@ const nonEmpty = v.pipe(v.string(), v.nonEmpty());
 const envSchema = v.pipe(
 	v.object({
 		DISCORD_TOKEN: nonEmpty,
+		PARTNER_ID: v.optional(v.picklist(PARTNER_IDS)),
 		YUNOMI_URL: v.pipe(v.string(), v.url()),
 		CF_ACCESS_CLIENT_ID: v.optional(nonEmpty),
 		CF_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
@@ -44,6 +52,8 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type GatewayConfig = {
 	discordToken: string;
+	/** この gateway の bot が受け持つパートナー。 */
+	partnerId: PartnerId;
 	yunomiUrl: string;
 	access: { clientId: string; clientSecret: string } | null;
 	devCaller: boolean;
@@ -81,6 +91,7 @@ export const loadConfig = (
 	const e = parsed.output;
 	return ok({
 		discordToken: e.DISCORD_TOKEN,
+		partnerId: e.PARTNER_ID ?? DEFAULT_PARTNER_ID,
 		yunomiUrl: e.YUNOMI_URL.replace(/\/+$/, ""),
 		access:
 			e.CF_ACCESS_CLIENT_ID && e.CF_ACCESS_CLIENT_SECRET

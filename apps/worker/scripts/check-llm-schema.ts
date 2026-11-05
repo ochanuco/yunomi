@@ -1,12 +1,12 @@
 import type { PendingStore } from "@yunomi/capabilities";
 import { turnOutput } from "@yunomi/conversation";
 import { ClaudeProvider, HAIKU, type ModelId, SONNET } from "@yunomi/llm";
-import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	type CapabilityEnv,
 	defaultCapabilities,
 } from "../src/capabilities.ts";
 import { toToolSpecs } from "../src/do/tool-loop.ts";
+import { defaultPartnerProfile } from "../src/partners.ts";
 
 // 本番と同じ登録の経路を、すべての認証情報が揃った env で通す。道具を足したときに一覧の更新漏れが起きない。
 const fullEnv: Required<CapabilityEnv> = {
@@ -34,7 +34,7 @@ const unusedPending = new Proxy({} as PendingStore, {
 });
 const capabilities = defaultCapabilities(fullEnv, {
 	pending: unusedPending,
-	policy: yukarinProfile.capability_defaults,
+	policy: defaultPartnerProfile.capability_defaults,
 	now: () => new Date(),
 });
 if (!capabilities) {
