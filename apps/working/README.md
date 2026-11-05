@@ -14,6 +14,7 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | `src/memory-cli/` | 記憶の道具 `yunomi-memory`。Worker の Working の記憶の口を読み書きする。node の組み込みだけで書き、`/opt/yunomi-memory/` に置いて node で直接動かす |
 | `mac-state/` | Mac から Orca の席の状態を送るスクリプトと launchd の plist の雛形（[mac-state/README.md](mac-state/README.md)） |
 | `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
+| `src/repo-map/` | 受付が chabatake の `repo-map.yaml` を取って `STATE_DIR` に写しを置く処理と、席の Claude の SessionStart hook。hook は node の組み込みだけで書き、`/opt/yunomi-repo-map/` に置いて node で直接動かす |
 | `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
 | `seat-env.sh` | start.sh が `orca-ide serve` をこれ越しに起動する。席の Claude は orca serve の環境変数を受け継ぐので、渡してよい変数だけに絞る |
@@ -80,6 +81,14 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 仕事のしかたには、投稿への返事は `worker_done` の本文に書くこと、途中で聞きたいことは `ask` で聞くこと、本文の最後の行に状態を書くことを入れてある。
 
+### 関連リポジトリセット
+
+席の Claude は、セッションの始まりに、手元のリポジトリを含むセットを chabatake の `repo-map.yaml` から `## 関連リポジトリセット: <セット名> — <説明>` の見出しと 1 リポジトリ 1 行で受け取る。Mac の SessionStart hook と同じ書式で、手元に clone があればその場所を `<…>` で添える。
+
+- 手元のリポジトリは、作業ディレクトリそのものと、その直下の clone。どれも origin の URL の最後の要素を名前にする。
+- 受付は起動時と 1 時間ごとに、`GH_TOKEN` で chabatake の main の `repo-map.yaml` を取り、検証して `STATE_DIR/repo-map.json` に置き換える。hook（`src/repo-map/hook.ts`、managed settings の SessionStart）はこの写しだけを読み、席を起動するたびに GitHub へは行かない。
+- 取れなかったときや中身が不正なときは、前の写しをそのまま使う。写しが無ければ何も出さない。
+
 ### 席の返事の添付
 
 席の Claude が `ask`・`worker_done`・`status` の本文に次の行を書くと、受付は行を本文から外し、ファイルを投稿のメッセージに付ける。コードブロックの中の行は本文のまま残す。`worker_done` の状態の行は、添付の行を外したあとの最後の行として読む。
@@ -102,6 +111,7 @@ managed settings（`/etc/claude-code/managed-settings.json`、root の持ち物�
 
 - PreToolUse hook（`src/guard/hook.ts`）: 秘密情報の読み出し（`printenv`、トークンの変数、`gh auth token`、`~/.claude`・`~/.config`・`STATE_DIR`・`.credentials.json` など）と、秘密情報や許可の記録の場所への書き込みを止める。持ち主が投稿で許可した操作は、auto モードの判定によらず 1 回だけ通す。それ以外は何も返さず auto モードに任せる。
 - PermissionDenied hook（同じ `hook.ts`）: auto モードが止めた操作を、その投稿に紐づけて記録する。受付が質問に書き添える。
+- SessionStart hook（`src/repo-map/hook.ts`）: 手元のリポジトリを含む関連リポジトリセットを出す（「関連リポジトリセット」の節）。
 - `ENABLE_TOOL_SEARCH=false`: MCP の道具を遅延読み込みせず、最初から読み込む。席の Claude は `ToolSearch` を使わずに chimera などの道具を呼べる。
 
 hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ先をその投稿にする。

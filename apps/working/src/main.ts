@@ -20,6 +20,7 @@ import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
 import { createOrcaCli } from "./orca.ts";
 import { buildSeatPreamble } from "./prompts.ts";
+import { startRepoMapSync } from "./repo-map/sync.ts";
 import { openSeatStore } from "./seat-store.ts";
 import { createWorkingServer } from "./server.ts";
 import { finishStandup, startStandup } from "./standup.ts";
@@ -200,6 +201,17 @@ const sleepTimer = setInterval(() => {
 	});
 }, 60_000);
 
+// 席の Claude の SessionStart hook は写しだけを読み、席を起動するたびに GitHub へ行かない
+const REPO_MAP_SYNC_MS = 60 * 60_000;
+const repoMapSync = startRepoMapSync({
+	exec: spawnExec,
+	env,
+	cwd: cfg.workDir,
+	stateDir: cfg.stateDir,
+	logger,
+	intervalMs: REPO_MAP_SYNC_MS,
+});
+
 const server = createWorkingServer({
 	sharedToken: cfg.sharedToken,
 	accept: (envelope) => {
@@ -259,6 +271,7 @@ const shutdown = (signal: string) => {
 	logger.info("shutting down", { signal });
 	stopped = true;
 	clearInterval(sleepTimer);
+	repoMapSync.stop();
 	standupTimer?.stop();
 	macStateServer?.close();
 	server.close();
