@@ -70,7 +70,7 @@ COPY apps/working/handoff/prompt.md apps/working/handoff/issue-template.md /home
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build --chown=worker:worker /out /home/worker/app
-COPY --chown=worker:worker apps/working/start.sh /home/worker/bin/start.sh
+COPY --chown=worker:worker apps/working/start.sh apps/working/release-orcad-lock.sh /home/worker/bin/
 
 # 8080 は gateway からの受付、8090 は Mac からの席の状態
 EXPOSE 8080 8090
