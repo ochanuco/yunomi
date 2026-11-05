@@ -55,11 +55,11 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 ### 席
 
 - 受付は起動時に、`SEATS_REPO`（既定は `~/work/seats`）に空の git リポジトリを用意して Orca に登録し、その root に受付の端末（`受付`、中身は `sleep infinity`）を作る。orchestration の送り手と受け手はこの端末になる。Run は `seats.json` に残し、作り直した端末で引き継ぐ（`run-use`）。
-- 席は投稿ごとに作る。`worktree create` で `seat-<投稿の ID>` の worktree を作り、その realpath を Claude CLI の信頼済みの場所（`.claude.json` の `projects[<realpath>].hasTrustDialogAccepted`）に登録してから、`worker-start --worktree path:<席> --agent claude --keep-open` で Claude を起動する。信頼していない場所の Claude は確認の画面で止まり、Orca は席を始めない。登録は Claude CLI と同じ `.claude.json.lock` のロックを取って書くので、動いている席の Claude の書き込みと混ざらない。10 秒より古いロック（落ちたプロセスの残り）は外して進む。hook は worktree の名前から投稿を引く。Mac の Orca から接続すると、同じ席と Claude の画面が見える。
+- 席は投稿ごとに作る。`worktree create` で `seat-<投稿の ID>` の worktree を作り、その realpath を Claude CLI の信頼済みの場所（`.claude.json` の `projects[<realpath>].hasTrustDialogAccepted`）に登録してから、その worktree に `claude --permission-mode auto` の端末を作り、15 秒待ってから `worker-start --terminal` で依頼を渡す。待つのは、claude.ai のコネクタ（chimera など）が Claude の起動から遅れて読み込まれ、すぐに渡すと最初のターンに間に合わないため。信頼していない場所の Claude は確認の画面で止まり、Orca は席を始めない。登録は Claude CLI と同じ `.claude.json.lock` のロックを取って書くので、動いている席の Claude の書き込みと混ざらない。10 秒より古いロック（落ちたプロセスの残り）は外して進む。hook は worktree の名前から投稿を引く。Mac の Orca から接続すると、同じ席と Claude の画面が見える。
 - 席を始められなかったときは、止まった所（作業場所の確認、Claude の起動、Orca の席の作成など）を短く投稿に書く。
 - 受付は `orchestration check --wait` で席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次に起動したときに受け取る。
 - 同時に Claude を動かしておく席は `SEAT_LIMIT`（既定は 6）まで。上限を超えた投稿には「順番待ち」と書き、空いたら古い順に始める。止めた席と順番待ちの席は数えない。
-- `決めてほしい` のまま `SEAT_SLEEP_AFTER_MINUTES`（既定は 120 分）たった席は、Claude だけ止める（worktree と会話は残す）。返事が来たら、その worktree で `claude --continue` の端末を作って `worker-start --terminal` で渡し、前の会話のまま起こす。
+- `決めてほしい` のまま `SEAT_SLEEP_AFTER_MINUTES`（既定は 120 分）たった席は、Claude だけ止める（worktree と会話は残す）。返事が来たら、その worktree で `claude --permission-mode auto --continue` の端末を作って `worker-start --terminal` で渡し、前の会話のまま起こす。
 - 席を閉じるときは、席の Claude を止め、worktree を消す。席の Claude には、完了にする前に commit と push を済ませるよう指示してある。
 - 起動時に `seats.json` と Orca の席を突き合わせる。対応表に無い席の端末と worktree（前回の残り）は片付け、対応表にある席は残す。Claude がいなくなっていた席は止めた扱いにし、作業中だったなら投稿で知らせて `決めてほしい` にする。
 
@@ -75,9 +75,15 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 ### 席の Claude の権限
 
-席の Claude は Orca が起動する（`--dangerously-skip-permissions` 付き）。道具を使うたびに managed settings の PreToolUse hook（`src/guard/hook.ts`）が通すかどうかを決め、hook が止めた操作は bypass でも実行されない。managed settings と hook は root の持ち物にし、作業場所の `.claude/settings.json` や Claude CLI 自身の書き換えでは外せない。
+席の Claude は、持ち主が手元で使うセッションと同じく Claude Code の auto モード（`--permission-mode auto`）で動く。取り消せない操作や外に出る操作を止めるかは、Claude Code の自動の判定が決める。席に話しかけられるのは持ち主だけ（`WORKING_OWNER_DISCORD_USER_IDS`）なので、投稿で明示的に頼んだ操作は持ち主の意思として扱われ、main への push やマージも聞かずに実行される。`main` への push やマージを止めたいときは、GitHub のブランチ保護とトークンの権限で止める。
 
-hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の worktree に、止めた操作の紐づけ先をその投稿にする。ほかの席の worktree も作業場所の外として扱う。
+managed settings（`/etc/claude-code/managed-settings.json`、root の持ち物）で次を決める。作業場所の `.claude/settings.json` や Claude CLI 自身の書き換えでは外せない。
+
+- PreToolUse hook（`src/guard/hook.ts`）: 秘密情報の読み出し（`printenv`、トークンの変数、`gh auth token`、`~/.claude`・`~/.config`・`STATE_DIR`・`.credentials.json` など）と、秘密情報や許可の記録の場所への書き込みを止める。持ち主が投稿で許可した操作は、auto モードの判定によらず 1 回だけ通す。それ以外は何も返さず auto モードに任せる。
+- PermissionDenied hook（同じ `hook.ts`）: auto モードが止めた操作を、その投稿に紐づけて記録する。受付が質問に書き添える。
+- `ENABLE_TOOL_SEARCH=false`: MCP の道具を遅延読み込みせず、最初から読み込む。席の Claude は `ToolSearch` を使わずに chimera などの道具を呼べる。
+
+hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ先をその投稿にする。
 
 席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR`、mise・uv・pnpm の置き場所だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口の service token は渡さない。
 
@@ -89,34 +95,6 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、作業場所をその席の 
 - `~/work` の下の `mise.toml` は信頼済みとして扱う（`MISE_TRUSTED_CONFIG_PATHS`）。`mise trust` は要らない。
 - C 拡張や node-gyp のビルドに使う `build-essential`・`python3`・`pkg-config` と、opencv-python が読む `libgl1`・`libglib2.0-0` を入れてある。
 - 受付（start.sh が起動する node）の `PATH` には shims を足さない。受付はイメージの node 24 で動く。
-
-聞かずに通す操作:
-
-- 読み取り（秘密情報や設定・許可の記録がある場所を除く）
-- 席の作業場所の中のファイルの編集と削除、テストやビルドの実行
-- `mise install` / `mise use`（`--global` を除く）/ `mise exec` / `mise run`、`pnpm install`・`uv sync`・`uv pip install` などの依存の導入
-- `git commit`、`origin` の `dev/` で始まるブランチへの push（押し先を `HEAD:dev/<topic>` のように書いたもの）
-- `gh issue create` / `comment`、`gh pr create` / `comment`、`gh label create`（申し送りに使う）と、`gh` の読み取り
-- `yunomi-memory read` と `yunomi-memory write --kind … --summary …`
-- `orca orchestration ask` / `send` / `check`（宛先を変える `--to` などを付けないもの）と `orca skills get`
-- `ToolSearch`（道具の説明を読み込むだけ）
-- MCP の道具（ログインしたアカウントのコネクタを含む）のうち、下で止めるもの以外。読み取りや生成（chimera の `create_request`・`plain_render`、Gmail の下書きなど）
-
-止める操作:
-
-- `dev/` 以外への push、押し先を書いていない push、force push、まとめての push、ブランチの削除
-- `gh pr merge`・`gh api`・`gh repo delete`・`gh release` など、上で通す以外の `gh`
-- 席を作る・止める・消すなど、上で通す以外の `orca`
-- 作業場所の外の削除と移動、作業場所の外（`/tmp` を除く）への書き込み
-- デプロイ・公開・課金・外部のサービスに届く道具（`wrangler`、`pnpm deploy`、`npm publish`、`uv publish`、`cargo publish`、`twine`、`tofu`、`stripe` など）、`curl` の POST などの送信。`mise exec -- …`・`uv run …`・`uvx …` で包んだものも中身で判定する
-- `mise use --global`・`mise settings set`（`--local` を除く）・`mise implode`・`mise self-update`
-- 秘密情報の読み出し（`printenv`、トークンの変数、`~/.claude`・`~/.config`・`STATE_DIR` など）
-- 中身を読めない実行（`bash -c`、`eval`、`node -e`、パイプからの `sh`）
-- MCP の道具のうち、名前に取り消せないか外に届く動詞（`send`、`reply`、`forward`、`respond`、`post`、`publish`、`deploy`、`release`、`share`、`invite`、`delete`、`trash`、`remove`、`destroy`、`purge`、`drop`、`revoke`、`transfer`、`merge`、`execute`、`exec`）が入っているもの。サーバー（コネクタ）では分けない
-
-Bash 以外の道具の許可は、道具の名前と引数（キーの順によらない JSON）が同じ操作に 1 回だけ効く。
-
-Bash は道具の名前と引数で読むので、書き方を変えれば抜けられる。うっかりの実行を止めるためのもので、`main` への push やマージは GitHub のブランチ保護とトークンの権限でも止めておく。
 
 ### 記憶の道具
 
@@ -130,7 +108,6 @@ yunomi-memory write --kind done --summary "<1行の要約>"     # 終わった�
 
 - 呼ぶ先は Worker の `/v1/partners/yukarin/working/memory`。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
 - 受付は起動時に `YUNOMI_URL` と `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` を `STATE_DIR/memory-credentials.json`（権限 600）に書き、`yunomi-memory` はそこから読む。service token は席の Claude の環境変数に載せず、標準出力にも標準エラーにも出さない。3 つのどれかが欠けていれば、ファイルを消して記憶の道具を使えなくする。
-- hook は `yunomi-memory read` と、`--kind` と `--summary` だけを付けた `write` を聞かずに通す。ほかの書き方と、`curl` などでの送信は今までどおり止める。
 - `summary` は改行を含まない 200 字以内。
 
 ### 席の状態の受け口
@@ -157,9 +134,9 @@ Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は 
 
 ### 取り消せない操作の許可
 
-1. hook が止めた操作は `STATE_DIR/guard/pending/` に投稿ごとに残る。席の Claude は止められると `ask` で許可を求める。受付は席から質問か報告が届くとそれを取り出し、席の言葉に続けて「決めてほしいこと」としてコマンドそのものを投稿に書き、タグを `決めてほしい` にする。止めた操作が残っていれば、完了の報告でも完了にしない。
+1. hook と auto モードが止めた操作は `STATE_DIR/guard/pending/` に投稿ごとに残る。席の Claude は止められると `ask` で許可を求める。受付は席から質問か報告が届くとそれを取り出し、席の言葉に続けて「決めてほしいこと」としてコマンドそのものを投稿に書き、タグを `決めてほしい` にする。止めた操作が残っていれば、完了の報告でも完了にしない。
 2. 持ち主がその投稿に `OK`・`許可`・`許可します` のどれか（全角・末尾の句点は許す）だけを返すと許可になる。返信の形で送るときは「決めてほしいこと」のメッセージへの返信にする。ほかの返事が来たら、待っていた操作は取りやめる。
-3. 許可すると、受付はその操作を `STATE_DIR/guard/grants/<投稿の ID>.json` に書き、許可したことを席への答えにする。hook はその投稿の席でだけ、同じ道具・同じ内容の操作を 1 回だけ通す。席から次の質問か報告が届いた時点で、使わなかった許可は失効し、次に同じ操作をするとまた止まる。
+3. 許可すると、受付はその操作を `STATE_DIR/guard/grants/<投稿の ID>.json` に書き、許可したことを席への答えにする。hook はその投稿の席でだけ、同じ道具・同じ内容（Bash 以外はキーの順によらない引数の JSON）の操作を、auto モードの判定によらず 1 回だけ通す。席から次の質問か報告が届いた時点で、使わなかった許可は失効し、次に同じ操作をするとまた止まる。
 
 止めた・聞いた・許可した・使った・失効した・取りやめたの記録は `STATE_DIR/guard/log.jsonl` に 1 行ずつ残る。
 

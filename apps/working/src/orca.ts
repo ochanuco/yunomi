@@ -188,6 +188,10 @@ export type OrcaCliOptions = {
 
 const RECEPTION_TITLE = "受付";
 const START_TIMEOUT_MS = 180_000;
+/** 席の Claude の起動。持ち主が手元で使うのと同じ auto モードにする。 */
+const SEAT_CLAUDE = "claude --permission-mode auto";
+/** 席の Claude を起動してから spec を渡すまで待つ時間。手元では 10 秒でコネクタが読み込まれていた。 */
+const MCP_WARMUP_MS = 15_000;
 
 export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 	const log = opts.logger;
@@ -276,6 +280,46 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			command: "claude trust",
 			reason: r.error.reason,
 		});
+	};
+
+	/**
+	 * 席の Claude を受付が起動する。Orca の agent の起動は Orca の設定の権限（--dangerously-skip-permissions）で動くので、
+	 * 端末を作って Claude を auto モードで起動し、その端末に spec を渡す。
+	 */
+	const launchClaude = async (
+		path: string,
+		title: string,
+		spec: string,
+		command: string,
+	): Promise<Result<SeatHandle, OrcaError>> => {
+		const trusted = await trustSeat(path);
+		if (!trusted.ok) return trusted;
+		const created = await call(
+			[
+				"terminal",
+				"create",
+				"--worktree",
+				`path:${path}`,
+				"--title",
+				title,
+				"--command",
+				command,
+			],
+			terminalSchema,
+		);
+		if (!created.ok) return created;
+		// claude.ai のコネクタ（chimera など）は Claude の起動から少し遅れて読み込まれ、最初のターンに間に合わない
+		await sleep(MCP_WARMUP_MS);
+		return startWith(
+			[
+				"--terminal",
+				created.value.terminal.handle,
+				"--worktree",
+				`path:${path}`,
+			],
+			spec,
+			title,
+		);
 	};
 
 	const startWith = async (
@@ -438,50 +482,11 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			);
 			if (!created.ok) return created;
 			const path = created.value.worktree.path;
-			const trusted = await trustSeat(path);
-			if (!trusted.ok) return trusted;
-			return startWith(
-				[
-					"--worktree",
-					`path:${path}`,
-					"--agent",
-					"claude",
-					// 既にある worktree の席は、報告のあと Orca が端末を閉じてしまう。返事で続けられるよう残す
-					"--keep-open",
-				],
-				spec,
-				title,
-			);
+			return launchClaude(path, title, spec, SEAT_CLAUDE);
 		},
-		resumeSeat: async ({ path, title, spec }) => {
-			const trusted = await trustSeat(path);
-			if (!trusted.ok) return trusted;
-			// Orca が Claude を新しく起動すると会話が残らないので、--continue で起こした端末に渡す
-			const created = await call(
-				[
-					"terminal",
-					"create",
-					"--worktree",
-					`path:${path}`,
-					"--title",
-					title,
-					"--command",
-					"claude --continue",
-				],
-				terminalSchema,
-			);
-			if (!created.ok) return created;
-			return startWith(
-				[
-					"--terminal",
-					created.value.terminal.handle,
-					"--worktree",
-					`path:${path}`,
-				],
-				spec,
-				title,
-			);
-		},
+		resumeSeat: async ({ path, title, spec }) =>
+			// 前の会話のまま起こす
+			launchClaude(path, title, spec, `${SEAT_CLAUDE} --continue`),
 		send: async ({ dispatchId, subject, body }) => {
 			const r = await call(
 				[

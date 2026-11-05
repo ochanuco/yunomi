@@ -1,5 +1,5 @@
 // hook として node で直接動かすため、node の組み込み以外を import しない。
-import { classifyBash, type GuardContext } from "./bash.ts";
+import { classifyBash, type GuardContext, PROTECTED_TOUCH } from "./bash.ts";
 import type { Ledger } from "./ledger.ts";
 import {
 	isUnder,
@@ -8,74 +8,43 @@ import {
 	sameOperation,
 } from "./operation.ts";
 
-const READERS = new Set(["Read", "Glob", "Grep"]);
-/** 道具の説明を読み込むだけの道具。 */
-const LOADERS = new Set(["ToolSearch"]);
-
-/**
- * MCP の道具の名前に入っていたら止める動詞。取り消せない操作と、外に届く操作。
- * 読み取りと生成（下書きや画像を作るなど）は、ほかの道具と同じく聞かずに通す。
- */
-const MCP_STOP_WORDS = new Set([
-	"send",
-	"reply",
-	"forward",
-	"respond",
-	"post",
-	"publish",
-	"deploy",
-	"release",
-	"share",
-	"invite",
-	"delete",
-	"trash",
-	"remove",
-	"destroy",
-	"purge",
-	"drop",
-	"revoke",
-	"transfer",
-	"merge",
-	"execute",
-	"exec",
+/** パスを受け取る道具。秘密情報や許可の記録の場所に触るものだけを止める。 */
+const PATH_TOOLS = new Set([
+	"Read",
+	"Glob",
+	"Grep",
+	"Edit",
+	"Write",
+	"MultiEdit",
+	"NotebookEdit",
 ]);
 
-const classifyMcp = (tool: string): string | null => {
-	// mcp__<サーバー>__<道具>。サーバー名ではなく道具の名前の動詞で決める
-	const name = tool.split("__").slice(2).join("__");
-	const words = name.toLowerCase().split(/[^a-z0-9]+/);
-	const hit = words.find((w) => MCP_STOP_WORDS.has(w));
-	return hit === undefined
-		? null
-		: `取り消せないか外に届く MCP の操作（${hit}）`;
-};
-
-const WRITERS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-
-/** 聞かずに実行してよいかを、道具ごとに調べる。止めるときは理由を返す。 */
+/**
+ * hook で止める操作かを調べる。止めるのは秘密情報の読み出しと、秘密情報や許可の記録の場所に触る操作だけ。
+ * 許可の記録を席の Claude が書き換えると自分で許可を出せてしまうので、書き込みも止める。
+ * ほかの取り消せない操作は Claude CLI の auto モードが決める。
+ */
 export const classify = (op: Operation, ctx: GuardContext): string | null => {
 	if (op.tool === "Bash") return classifyBash(op.target, ctx);
-	if (READERS.has(op.tool)) {
+	if (PATH_TOOLS.has(op.tool)) {
 		const path =
-			op.tool === "Read" ? op.target : (op.target.split(" ")[0] ?? "");
+			op.tool === "Glob" || op.tool === "Grep"
+				? (op.target.split(" ")[0] ?? "")
+				: op.target;
 		return ctx.protectedDirs.some((d) => isUnder(path, d) || isUnder(d, path))
-			? "秘密情報や設定・許可の記録がある場所に触る"
+			? PROTECTED_TOUCH
 			: null;
 	}
-	if (WRITERS.has(op.tool)) {
-		return isUnder(op.target, ctx.workDir) && op.target !== ctx.workDir
-			? null
-			: "作業場所の外への書き込み";
-	}
-	if (LOADERS.has(op.tool)) return null;
-	if (op.tool.startsWith("mcp__")) return classifyMcp(op.tool);
-	return `${op.tool} は聞かずに使える道具に入っていない`;
+	return null;
 };
 
 export type HookInput = {
+	hook_event_name?: string;
 	tool_name: string;
 	tool_input: Record<string, unknown>;
 	cwd?: string;
+	/** PermissionDenied のとき、auto モードが止めた理由。 */
+	reason?: string;
 };
 
 export type GuardRun = {
@@ -95,21 +64,24 @@ const denyText = (reason: string) =>
 	`この操作は持ち主の許可が要るので止めた（${reason}）。別の書き方や別の道具で同じことをしない。` +
 	"orca orchestration ask で、この操作が何のために要るかを短く書いて許可を求める。受付がこの操作をそのまま「決めてほしいこと」として質問に書き添える。朝会では聞かずに、決めてほしいことに入れる。";
 
-export const decide = (
-	input: HookInput,
-	run: GuardRun,
-	ledger: Ledger,
-): Decision => {
-	const op = operationOf(
+const opOf = (input: HookInput, run: GuardRun) =>
+	operationOf(
 		input.tool_name,
 		input.tool_input,
 		input.cwd ?? run.ctx.workDir,
 		run.ctx.home,
 	);
-	const reason = classify(op, run.ctx);
-	if (reason === null)
-		return { decision: "allow", reason: "聞かずに実行してよい操作" };
 
+/**
+ * PreToolUse。持ち主が 1 回だけ許可した操作は auto モードによらず通し、秘密に触る操作は止める。
+ * どちらでもなければ null を返し、auto モードに任せる。
+ */
+export const decide = (
+	input: HookInput,
+	run: GuardRun,
+	ledger: Ledger,
+): Decision | null => {
+	const op = opOf(input, run);
 	if (run.grantId !== null) {
 		const granted = run.grants.filter((g) => sameOperation(g, op)).length;
 		const used = ledger
@@ -126,6 +98,8 @@ export const decide = (
 			return { decision: "allow", reason: "持ち主が 1 回だけ許可した操作" };
 		}
 	}
+	const reason = classify(op, run.ctx);
+	if (reason === null) return null;
 	ledger.addPending(run.threadId, { operation: op, reason });
 	ledger.log({
 		event: "blocked",
@@ -134,4 +108,21 @@ export const decide = (
 		reason,
 	});
 	return { decision: "deny", reason: denyText(reason) };
+};
+
+/** PermissionDenied。auto モードが止めた操作を投稿に紐づけて残し、受付が質問に書き添えられるようにする。 */
+export const recordDenied = (
+	input: HookInput,
+	run: GuardRun,
+	ledger: Ledger,
+) => {
+	const op = opOf(input, run);
+	const reason = `auto モードが止めた${input.reason ? `（${input.reason.slice(0, 200)}）` : ""}`;
+	ledger.addPending(run.threadId, { operation: op, reason });
+	ledger.log({
+		event: "blocked",
+		thread_id: run.threadId,
+		operation: op,
+		reason,
+	});
 };
