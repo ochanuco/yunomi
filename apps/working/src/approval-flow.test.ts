@@ -52,14 +52,10 @@ const setup = async () => {
 		newGrantId: () => "g1",
 		logger: silentLogger,
 	});
-	const tool = (
-		threadId: string,
-		tool_name: string,
-		tool_input: Record<string, unknown>,
-	) => {
+	const runHook = (threadId: string, input: Record<string, unknown>) => {
 		const seatDir = join(seatsDir, `seat-${threadId}`);
-		const r = spawnSync(process.execPath, [HOOK], {
-			input: JSON.stringify({ tool_name, tool_input, cwd: seatDir }),
+		return spawnSync(process.execPath, [HOOK], {
+			input: JSON.stringify({ ...input, cwd: seatDir }),
 			env: {
 				PATH: process.env.PATH ?? "",
 				HOME: join(root, "home"),
@@ -69,10 +65,35 @@ const setup = async () => {
 			},
 			encoding: "utf8",
 		});
-		return r.status === 0
-			? (JSON.parse(r.stdout).hookSpecificOutput.permissionDecision as string)
-			: "error";
 	};
+	/** PreToolUse の答え。hook が何も返さなければ auto モードに任せる（pass）。 */
+	const tool = (
+		threadId: string,
+		tool_name: string,
+		tool_input: Record<string, unknown>,
+	) => {
+		const r = runHook(threadId, {
+			hook_event_name: "PreToolUse",
+			tool_name,
+			tool_input,
+		});
+		if (r.status !== 0) return "error";
+		if (r.stdout.trim() === "") return "pass";
+		return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision as string;
+	};
+	/** auto モードが止めたときに Claude CLI が呼ぶ PermissionDenied。 */
+	const denied = (
+		threadId: string,
+		tool_name: string,
+		tool_input: Record<string, unknown>,
+	) =>
+		runHook(threadId, {
+			hook_event_name: "PermissionDenied",
+			tool_name,
+			tool_input,
+			tool_use_id: "u1",
+			reason: "main への push は持ち主の確認が要る",
+		}).status;
 	const bash = (threadId: string, command: string) =>
 		tool(threadId, "Bash", { command });
 	const open = async (threadId: string) => {
@@ -80,71 +101,63 @@ const setup = async () => {
 		await intake.handle(say(threadId, "頼みます", { first: true }));
 		return seats.get(threadId);
 	};
-	return { d, o, seats, intake, seatsDir, bash, tool, open };
+	return { d, o, seats, intake, root, seatsDir, bash, tool, denied, open };
 };
 
-describe("席の Claude の取り消せない操作", () => {
-	it("聞かずに通す操作は通し、席の外への書き込みは止める", async () => {
+describe("席の Claude の操作と hook", () => {
+	it("秘密に触らない操作は hook では決めず、auto モードに任せる", async () => {
 		const s = await setup();
 		await s.open("p1");
-		expect(s.bash("p1", "git push -u origin HEAD:dev/x")).toBe("allow");
+		for (const [name, input] of [
+			["Bash", { command: "git push -u origin HEAD:dev/x" }],
+			["Bash", { command: 'orca orchestration ask --question "どうしますか"' }],
+			["ToolSearch", { query: "chimera", max_results: 5 }],
+			["mcp__claude_ai_chimera__create_request", { recipe: "x" }],
+			["mcp__claude_ai_chimera__list_catalog", {}],
+			["mcp__claude_ai_Gmail__search_threads", { query: "x" }],
+			["Write", { file_path: join(s.seatsDir, "seat-p1", "a.ts") }],
+		] as const) {
+			expect(s.tool("p1", name, input), name).toBe("pass");
+		}
+	});
+
+	it("秘密情報の読み出しと、許可の記録の書き換えは hook で止める", async () => {
+		const s = await setup();
+		await s.open("p1");
+		expect(s.bash("p1", "printenv")).toBe("deny");
+		expect(s.bash("p1", "cat ~/.claude/.credentials.json")).toBe("deny");
 		expect(
 			s.tool("p1", "Write", {
-				file_path: join(s.seatsDir, "seat-p1", "r", "a.ts"),
+				file_path: join(s.root, "state", "guard", "grants", "p1.json"),
 			}),
-		).toBe("allow");
-		// ほかの席の作業場所も、この席から見れば外
-		expect(
-			s.tool("p1", "Write", { file_path: join(s.seatsDir, "seat-p2", "a.ts") }),
 		).toBe("deny");
 	});
 
-	it("受付とのやりとりの orca だけを通し、席を作る・消す orca は止める", async () => {
-		const s = await setup();
-		await s.open("p1");
-		expect(
-			s.bash("p1", 'orca orchestration ask --question "どうしますか"'),
-		).toBe("allow");
-		expect(
-			s.bash(
-				"p1",
-				'orca orchestration send --type worker_done --body "済み" --outcome succeeded',
-			),
-		).toBe("allow");
-		expect(s.bash("p1", "orca worktree rm --worktree active")).toBe("deny");
-		expect(
-			s.bash("p1", "orca orchestration send --to dispatch:x --subject a"),
-		).toBe("deny");
-	});
-
-	it("main への push と gh pr merge を止めて投稿で聞き、OK の後に 1 回だけ通す。許可はほかの投稿の席に効かない", async () => {
+	it("auto モードが止めた操作を投稿で聞き、許可の後に同じ操作を 1 回だけ通す。キーの順が違っても同じ操作で、ほかの投稿の席には効かない", async () => {
 		const s = await setup();
 		const seat = await s.open("p1");
 		await s.open("p2");
-		expect(s.bash("p1", "git push origin main")).toBe("deny");
-		expect(s.bash("p1", "gh pr merge 3")).toBe("deny");
-
+		const input = { command: "git push origin HEAD:main", description: "push" };
+		expect(s.denied("p1", "Bash", input)).toBe(0);
 		await s.intake.onSeatMessage(
 			seatMessage({
 				type: "question",
 				dispatchId: seat?.dispatchId ?? null,
-				body: "マージと main への push をしてよいですか",
+				body: "main に push してよいですか",
 			}),
 		);
 		const asked = s.d.sentTo("p1").at(-1) ?? "";
-		expect(asked).toContain("git push origin main");
-		expect(asked).toContain("gh pr merge 3");
+		expect(asked).toContain("main に push してよいですか");
+		expect(asked).toContain("git push origin HEAD:main");
+		expect(asked).toContain("auto モードが止めた");
 
-		await s.intake.handle(say("p1", "OK"));
-		expect(s.bash("p2", "gh pr merge 3")).toBe("deny");
-		expect(s.bash("p1", "gh pr merge 3")).toBe("allow");
-		expect(s.bash("p1", "gh pr merge 3")).toBe("deny");
-		expect(s.bash("p1", "git push origin main")).toBe("allow");
+		await s.intake.handle(say("p1", "許可"));
+		expect(s.bash("p2", "git push origin HEAD:main")).toBe("pass");
+		expect(s.bash("p1", "git push origin HEAD:main")).toBe("allow");
+		expect(s.bash("p1", "git push origin HEAD:main")).toBe("pass");
 	});
-});
 
-describe("Bash 以外の道具の許可", () => {
-	it("MCP の送信を止めて投稿で聞き、許可の後に同じ引数なら 1 回だけ通す。キーの順が違っても同じ操作とみなす", async () => {
+	it("Bash 以外の道具も、許可は引数のキーの順によらず 1 回だけ効く", async () => {
 		const s = await setup();
 		const seat = await s.open("p1");
 		const input = {
@@ -152,9 +165,7 @@ describe("Bash 以外の道具の許可", () => {
 			subject: "見積もり",
 			body: "送ります",
 		};
-		expect(s.tool("p1", "mcp__claude_ai_Gmail__send_message", input)).toBe(
-			"deny",
-		);
+		s.denied("p1", "mcp__claude_ai_Gmail__send_message", input);
 		await s.intake.onSeatMessage(
 			seatMessage({
 				type: "question",
@@ -165,7 +176,7 @@ describe("Bash 以外の道具の許可", () => {
 		expect(s.d.sentTo("p1").at(-1)).toContain(
 			"mcp__claude_ai_Gmail__send_message",
 		);
-		await s.intake.handle(say("p1", "許可"));
+		await s.intake.handle(say("p1", "OK"));
 		const reordered = {
 			body: "送ります",
 			subject: "見積もり",
@@ -175,21 +186,23 @@ describe("Bash 以外の道具の許可", () => {
 			"allow",
 		);
 		expect(s.tool("p1", "mcp__claude_ai_Gmail__send_message", input)).toBe(
-			"deny",
+			"pass",
 		);
 	});
 
-	it("ToolSearch と MCP の読み取り・生成は聞かずに通す", async () => {
+	it("hook が止めた秘密の読み出しも、許可の後に 1 回だけ通す", async () => {
 		const s = await setup();
-		await s.open("p1");
-		expect(
-			s.tool("p1", "ToolSearch", { query: "chimera", max_results: 5 }),
-		).toBe("allow");
-		expect(
-			s.tool("p1", "mcp__claude_ai_chimera__create_request", { recipe: "x" }),
-		).toBe("allow");
-		expect(
-			s.tool("p1", "mcp__claude_ai_Gmail__search_threads", { query: "x" }),
-		).toBe("allow");
+		const seat = await s.open("p1");
+		expect(s.bash("p1", "gh auth status --show-token")).toBe("deny");
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat?.dispatchId ?? null,
+				body: "トークンの状態を見てよいですか",
+			}),
+		);
+		await s.intake.handle(say("p1", "許可"));
+		expect(s.bash("p1", "gh auth status --show-token")).toBe("allow");
+		expect(s.bash("p1", "gh auth status --show-token")).toBe("deny");
 	});
 });

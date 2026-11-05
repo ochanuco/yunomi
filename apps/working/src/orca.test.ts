@@ -221,8 +221,18 @@ describe("createOrcaCli", () => {
 		expect(t.order).toEqual([
 			"worktree create",
 			"trust /ws/seat-p1",
+			"terminal create",
 			"orchestration worker-start",
 		]);
+		// Orca の agent の起動（--dangerously-skip-permissions）ではなく、auto モードの Claude を受付が起動する
+		expect(t.argsOf("terminal create").at(-1)).toEqual(
+			expect.arrayContaining([
+				"--worktree",
+				"path:/ws/seat-p1",
+				"--command",
+				"claude --permission-mode auto",
+			]),
+		);
 		expect(t.argsOf("worktree create")[0]).toEqual(
 			expect.arrayContaining([
 				"--repo",
@@ -238,13 +248,13 @@ describe("createOrcaCli", () => {
 				"rx",
 				"--run",
 				"run-new",
+				"--terminal",
+				"rx",
 				"--worktree",
 				"path:/ws/seat-p1",
-				"--agent",
-				"claude",
-				"--keep-open",
 			]),
 		);
+		expect(t.argsOf("orchestration worker-start")[0]).not.toContain("--agent");
 	});
 
 	it("信頼済みにできなければ Claude を起動しない", async () => {
@@ -266,14 +276,16 @@ describe("createOrcaCli", () => {
 		expect(t.argsOf("orchestration worker-start")).toEqual([]);
 	});
 
-	it("止めた席は claude --continue の端末を作って渡し、前の会話のまま起こす", async () => {
+	it("止めた席は auto モードの claude --continue の端末を作って渡し、前の会話のまま起こす", async () => {
 		const t = setup({
 			"terminal create": (args) => ({
 				stdout: {
 					ok: true,
 					result: {
 						terminal: {
-							handle: args.includes("claude --continue") ? "t9" : "rx",
+							handle: args.includes("claude --permission-mode auto --continue")
+								? "t9"
+								: "rx",
 						},
 					},
 				},

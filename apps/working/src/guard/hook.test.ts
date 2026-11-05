@@ -30,110 +30,53 @@ const bash = (command: string) => ({
 
 describe("classify: Bash 以外の道具", () => {
 	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
-	it("作業場所の中の編集と、秘密のない場所の読み取りは通す", () => {
-		expect(
-			classify({ tool: "Write", target: "/home/worker/work/r/a.ts" }, ctx),
-		).toBeNull();
-		expect(classify({ tool: "Read", target: "/etc/hosts" }, ctx)).toBeNull();
-		expect(
-			classify({ tool: "Grep", target: "/home/worker/work foo" }, ctx),
-		).toBeNull();
-	});
-	it("作業場所の外の編集、秘密のある場所の読み取り、知らない道具は止める", () => {
-		expect(
-			classify({ tool: "Edit", target: "/home/worker/.bashrc" }, ctx),
-		).not.toBeNull();
-		expect(
-			classify(
-				{ tool: "Read", target: "/home/worker/.claude/.credentials.json" },
-				ctx,
-			),
-		).not.toBeNull();
-		expect(
-			classify({ tool: "Grep", target: "/home/worker TOKEN" }, ctx),
-		).not.toBeNull();
-		expect(classify({ tool: "WebFetch", target: "{}" }, ctx)).not.toBeNull();
-	});
-});
-
-describe("classify: ToolSearch と MCP の道具", () => {
-	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
-	const free = (tool: string) => classify({ tool, target: "{}" }, ctx);
-	it("ToolSearch は道具の説明を読み込むだけなので通す", () => {
-		expect(free("ToolSearch")).toBeNull();
-	});
-	it("MCP の読み取りと生成は、どのサーバーの道具でも通す", () => {
-		for (const tool of [
-			"mcp__claude_ai_chimera__get_generation",
-			"mcp__claude_ai_chimera__list_catalog",
-			"mcp__claude_ai_chimera__create_request",
-			"mcp__claude_ai_chimera__derive_request",
-			"mcp__claude_ai_chimera__plain_render",
-			"mcp__claude_ai_chimera__redraw_generation",
-			"mcp__claude_ai_chimera__deliver_generation",
-			"mcp__claude_ai_chimera__dof_generation",
-			"mcp__claude_ai_chimera__set_evaluation",
-			"mcp__claude_ai_chimera__record_publication",
-			"mcp__claude_ai_chimera__promote_to_pose",
-			"mcp__claude_ai_Gmail__search_threads",
-			"mcp__claude_ai_Gmail__get_thread",
-			"mcp__claude_ai_Gmail__create_draft",
-			"mcp__claude_ai_Gmail__untrash_message",
-			"mcp__claude_ai_Google_Drive__read_file_content",
-			"mcp__claude_ai_Google_Drive__get_file_permissions",
-			"mcp__claude_ai_Google_Calendar__list_events",
-			"mcp__claude_ai_Google_Sheets__get_values",
-			"mcp__claude_ai_Cloudflare_Developer_Platform__workers_list",
+	it("秘密に触らない道具は hook では決めない", () => {
+		for (const op of [
+			{ tool: "Write", target: "/home/worker/work/r/a.ts" },
+			{ tool: "Edit", target: "/home/worker/.bashrc" },
+			{ tool: "Read", target: "/etc/hosts" },
+			{ tool: "Grep", target: "/home/worker/work foo" },
+			{ tool: "ToolSearch", target: "{}" },
+			{ tool: "WebFetch", target: "{}" },
+			{ tool: "mcp__claude_ai_chimera__create_request", target: "{}" },
+			{ tool: "mcp__claude_ai_Gmail__send_message", target: "{}" },
 		]) {
-			expect(free(tool), tool).toBeNull();
+			expect(classify(op, ctx), op.tool).toBeNull();
 		}
 	});
-	it("送信・削除・共有・公開・デプロイなど、取り消せないか外に届く MCP の操作は止める", () => {
-		for (const tool of [
-			"mcp__claude_ai_Gmail__send_message",
-			"mcp__claude_ai_Gmail__reply",
-			"mcp__claude_ai_Gmail__forward",
-			"mcp__claude_ai_Gmail__trash_thread",
-			"mcp__claude_ai_Gmail__delete_draft",
-			"mcp__claude_ai_Google_Drive__share_file",
-			"mcp__claude_ai_Google_Drive__trash_file",
-			"mcp__claude_ai_Google_Calendar__delete_event",
-			"mcp__claude_ai_Google_Calendar__respond_to_event",
-			"mcp__claude_ai_Cloudflare_Developer_Platform__d1_database_delete",
-			"mcp__claude_ai_Claude_Docs__delete",
-			"mcp__posthog__exec",
-			"mcp__someone__deploy_site",
+	it("秘密や許可の記録の場所を読む・書く操作は止める", () => {
+		for (const op of [
+			{ tool: "Read", target: "/home/worker/.claude/.credentials.json" },
+			{ tool: "Grep", target: "/home/worker TOKEN" },
+			{ tool: "Write", target: "/home/worker/state/guard/grants/t1.json" },
+			{ tool: "Edit", target: "/etc/claude-code/managed-settings.json" },
 		]) {
-			expect(free(tool), tool).not.toBeNull();
+			expect(classify(op, ctx), op.target).not.toBeNull();
 		}
 	});
 });
 
 describe("decide", () => {
-	it("許可は同じ操作に 1 回だけ使え、2 回目は止めて記録する", () => {
+	it("許可は同じ操作に 1 回だけ使え、秘密に触らない操作はそのあと auto モードに任せる", () => {
 		const dir = tempDir();
 		const ledger = createLedger(dir);
 		const base = guardRunFromEnv({ HOME: "/home/worker" });
 		const op = { tool: "Bash", target: "git push origin main" };
 		const run = { ...base, threadId: "t1", grants: [op], grantId: "g1" };
 
-		expect(decide(bash("git push origin main"), run, ledger).decision).toBe(
+		expect(decide(bash("git push origin main"), run, ledger)?.decision).toBe(
 			"allow",
 		);
-		expect(decide(bash("git push origin main"), run, ledger).decision).toBe(
-			"deny",
-		);
-		// 許可していない別の操作は、許可があっても止める
-		expect(decide(bash("gh pr merge 1"), run, ledger).decision).toBe("deny");
+		expect(decide(bash("git push origin main"), run, ledger)).toBeNull();
+		expect(decide(bash("printenv"), run, ledger)?.decision).toBe("deny");
 		expect(ledger.takePending("t1").map((p) => p.operation.target)).toEqual([
-			"git push origin main",
-			"gh pr merge 1",
+			"printenv",
 		]);
 		const events = readFileSync(join(dir, "log.jsonl"), "utf8")
 			.trim()
 			.split("\n")
 			.map((l) => JSON.parse(l).event);
-		expect(events).toEqual(["used", "blocked", "blocked"]);
+		expect(events).toEqual(["used", "blocked"]);
 	});
 });
 
@@ -190,33 +133,48 @@ describe("hook.ts（Claude CLI から呼ばれる形で動かす）", () => {
 		cwd: `${SEATS}/seat-t1`,
 	});
 
-	it("聞かずに通す操作は allow を返す", () => {
+	it("秘密に触らない操作には何も返さず、auto モードに任せる", () => {
 		const state = tempDir();
-		const r = runHook(seatBash("git push -u origin HEAD:dev/x"), envFor(state));
+		const r = runHook(seatBash("git push origin main"), envFor(state));
 		expect(r.status).toBe(0);
-		expect(r.out).toEqual(
-			expect.objectContaining({
-				hookEventName: "PreToolUse",
-				permissionDecision: "allow",
-			}),
-		);
+		expect(r.out).toBeNull();
 	});
 
-	it("止める操作は deny を返し、席の投稿に紐づけて残す", () => {
+	it("秘密の読み出しは deny を返し、席の投稿に紐づけて残す", () => {
 		const state = tempDir();
-		const r = runHook(seatBash("gh pr merge 3"), envFor(state));
+		const r = runHook(seatBash("printenv"), envFor(state));
 		expect(r.status).toBe(0);
 		expect(r.out.permissionDecision).toBe("deny");
 		expect(r.out.permissionDecisionReason).toContain("orca orchestration ask");
 		expect(createLedger(join(state, "guard")).takePending("t1")).toEqual([
 			{
-				operation: { tool: "Bash", target: "gh pr merge 3" },
-				reason: expect.stringContaining("gh pr merge"),
+				operation: { tool: "Bash", target: "printenv" },
+				reason: "秘密情報の読み出し",
 			},
 		]);
 	});
 
-	it("受付が書いた許可は 1 回だけ通す", () => {
+	it("auto モードが止めた操作（PermissionDenied）を、席の投稿に紐づけて残す", () => {
+		const state = tempDir();
+		const r = runHook(
+			{
+				hook_event_name: "PermissionDenied",
+				...seatBash("gh pr merge 3"),
+				tool_use_id: "u1",
+				reason: "マージは持ち主の確認が要る",
+			},
+			envFor(state),
+		);
+		expect(r.status).toBe(0);
+		expect(createLedger(join(state, "guard")).takePending("t1")).toEqual([
+			{
+				operation: { tool: "Bash", target: "gh pr merge 3" },
+				reason: "auto モードが止めた（マージは持ち主の確認が要る）",
+			},
+		]);
+	});
+
+	it("受付が書いた許可は auto モードによらず 1 回だけ通す", () => {
 		const state = tempDir();
 		createLedger(join(state, "guard")).grant("t1", {
 			grant_id: "g1",
@@ -226,9 +184,7 @@ describe("hook.ts（Claude CLI から呼ばれる形で動かす）", () => {
 		expect(runHook(seatBash("gh pr merge 3"), env).out.permissionDecision).toBe(
 			"allow",
 		);
-		expect(runHook(seatBash("gh pr merge 3"), env).out.permissionDecision).toBe(
-			"deny",
-		);
+		expect(runHook(seatBash("gh pr merge 3"), env).out).toBeNull();
 	});
 
 	it("入力が読めないときは exit 2 で止める", () => {
