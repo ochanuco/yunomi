@@ -29,6 +29,11 @@ export type SeatResidue = {
 
 /** 受付と席のやりとりに使う Orca の操作。受付はこの口だけで Orca に触る。 */
 export type Orca = {
+	/**
+	 * 同じコンテナの orca serve が受け付けられるようになるまで待つ。
+	 * serve は受付と同時に起動し、ready になる前の CLI は runtime_unavailable で即座に失敗する。
+	 */
+	waitReady: (timeoutMs: number) => Promise<Result<void, OrcaError>>;
 	/** 受付の端末を作り直し、Run を引き継ぐ（無ければ作る）。 */
 	prepare: (prev: {
 		runId: string | null;
@@ -83,6 +88,9 @@ const envelope = v.object({
 });
 
 const runSchema = v.object({ runId: v.string() });
+const statusSchema = v.object({
+	runtime: v.optional(v.object({ state: v.optional(v.string()) })),
+});
 const terminalSchema = v.object({
 	terminal: v.object({ handle: v.string() }),
 });
@@ -164,6 +172,7 @@ export type OrcaCliOptions = {
 	specDir: string;
 	logger: Logger;
 	timeoutMs?: number;
+	sleep?: (ms: number) => Promise<void>;
 };
 
 const RECEPTION_TITLE = "受付";
@@ -308,7 +317,25 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 
 	const terminals = () => call(["terminal", "list"], terminalsSchema);
 
+	const sleep =
+		opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+
 	return {
+		waitReady: async (timeoutMs) => {
+			const deadline = Date.now() + timeoutMs;
+			let last = "not checked";
+			for (;;) {
+				const r = await call(["status"], statusSchema, 10_000);
+				if (r.ok && r.value.runtime?.state === "ready") return ok(undefined);
+				last = r.ok
+					? `state ${r.value.runtime?.state ?? "unknown"}`
+					: r.error.reason;
+				if (Date.now() >= deadline) {
+					return err({ type: "OrcaFailed", command: "status", reason: last });
+				}
+				await sleep(1_000);
+			}
+		},
 		prepare: async (prev) => {
 			const repo = await ensureSeatsRepo();
 			if (!repo.ok) return repo;

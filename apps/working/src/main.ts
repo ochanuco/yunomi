@@ -88,6 +88,7 @@ const orca = createOrcaCli({
 	specDir: join(cfg.stateDir, "specs"),
 	logger,
 });
+const ORCA_READY_TIMEOUT_MS = 180_000;
 const seats = await openSeatStore(cfg.stateDir);
 const approvals = await openApprovalStore(cfg.stateDir);
 const ledger = createLedger(guardDirOf(cfg.stateDir));
@@ -100,6 +101,12 @@ const standupDeps = {
 	logger,
 };
 
+// start.sh は受付と orca serve を同時に起動するので、serve が受け付けるまで待ってから席の準備をする
+const ready = await orca.waitReady(ORCA_READY_TIMEOUT_MS);
+if (!ready.ok) {
+	logger.error("orca serve not ready", { reason: ready.error.reason });
+	process.exit(1);
+}
 const prepared = await orca.prepare(seats.orca());
 if (!prepared.ok) {
 	logger.error("orca prepare failed", { reason: prepared.error.reason });
