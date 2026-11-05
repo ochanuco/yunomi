@@ -12,6 +12,17 @@
 				]
 			}
 		],
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "/usr/local/bin/node /opt/yunomi-repo-map/hook.ts",
+						"timeout": 30
+					}
+				]
+			}
+		],
 		"PermissionDenied": [
 			{
 				"matcher": "*",

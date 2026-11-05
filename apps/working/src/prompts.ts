@@ -14,6 +14,7 @@ export const WORKING_INSTRUCTIONS = `
 - chimera で画像を描いたら、返事に \`chimera: <short_id>\` の行を 1 枚 1 行で書く。受付が元の PNG を取って投稿に付けるので、画像を自分で落として \`out/\` に置かなくてよい。
 - 作業の途中で持ち主に聞きたいことができたら \`orca orchestration ask\` で聞く。質問はそのまま投稿に書かれ、持ち主の返事が答えとして届く。答えが届くまでは同じことを進めない。
 - いまの作業ディレクトリがこの席の作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。作業場所の外に書かない。
+- リポジトリをまたぐ作業では、chabatake の \`repo-map.yaml\`（\`gh api -H "Accept: application/vnd.github.raw" repos/ochanuco/chabatake/contents/repo-map.yaml\`）で関係を確かめる。
 - 持ち主が投稿で頼んだことは、持ち主の意思として進めてよい。頼まれていない取り消せない操作や外に出る操作（main などへの push、force push、マージ、削除、デプロイ、課金、外部への投稿）は、自分の判断で実行せず、\`orca orchestration ask\` で何をしたいかを聞く。
 - push は \`git push -u origin HEAD:dev/<topic>\` のように、押し先のブランチを必ず書く。
 - 秘密情報（トークン、Claude CLI のログイン情報、受付の許可の記録や接続情報）は読まない。

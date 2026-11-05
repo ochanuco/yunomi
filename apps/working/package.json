@@ -13,7 +13,8 @@
 		"@yunomi/core": "workspace:*",
 		"@yunomi/protocol": "workspace:*",
 		"tsx": "^4.21.0",
-		"valibot": "^1.5.0"
+		"valibot": "^1.5.0",
+		"yaml": "^2.9.1"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.2",

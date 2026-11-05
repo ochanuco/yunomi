@@ -66,6 +66,8 @@ COPY apps/working/src/guard/hook.ts apps/working/src/guard/decide.ts \
 	apps/working/src/guard/env.ts apps/working/src/guard/ledger.ts \
 	apps/working/src/guard/bash.ts apps/working/src/guard/shell.ts \
 	apps/working/src/guard/operation.ts /opt/yunomi-guard/
+# 席の Claude の SessionStart で、作業中のリポジトリを含むセットを repo-map の写しから出す。
+COPY apps/working/src/repo-map/hook.ts apps/working/src/repo-map/render.ts /opt/yunomi-repo-map/
 
 # Working の記憶の口を呼ぶ CLI。接続情報は受付が STATE_DIR に書き、この CLI の中でだけ読む。
 COPY apps/working/src/memory-cli/cli.ts apps/working/src/memory-cli/bin.ts /opt/yunomi-memory/
