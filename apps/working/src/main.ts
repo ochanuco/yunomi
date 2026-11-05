@@ -1,14 +1,17 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createClaudeCli, READ_ONLY_POLICY } from "./claude-cli.ts";
+import { openApprovalStore } from "./approval-store.ts";
+import { claudeEnv, createClaudeCli, WORK_POLICY } from "./claude-cli.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
+import { guardDirOf } from "./guard/env.ts";
+import { createLedger } from "./guard/ledger.ts";
 import { createIntake } from "./intake.ts";
 import { createLogger } from "./logger.ts";
-import { WORKING_INSTRUCTIONS } from "./prompts.ts";
+import { buildSystemPrompt } from "./prompts.ts";
 import { createWorkingServer } from "./server.ts";
 import { openSessionStore } from "./session-store.ts";
 
@@ -27,7 +30,17 @@ const persona = await promisify(execFile)(cfg.personaScript, {
 const systemPromptFile = join(cfg.stateDir, "system-prompt.md");
 await mkdir(cfg.stateDir, { recursive: true });
 await mkdir(cfg.workDir, { recursive: true });
-await writeFile(systemPromptFile, `${persona.stdout}\n${WORKING_INSTRUCTIONS}`);
+await writeFile(
+	systemPromptFile,
+	buildSystemPrompt({
+		persona: persona.stdout,
+		handoffPrompt: await readFile(join(cfg.handoffDir, "prompt.md"), "utf8"),
+		issueTemplate: await readFile(
+			join(cfg.handoffDir, "issue-template.md"),
+			"utf8",
+		),
+	}),
+);
 
 const discord = createDiscordRest({ token: cfg.discordToken });
 const me = await discord.me();
@@ -43,9 +56,15 @@ const intake = createIntake({
 		cwd: cfg.workDir,
 		systemPromptFile,
 		timeoutMs: cfg.claudeTimeoutMs,
-		policy: READ_ONLY_POLICY,
+		policy: WORK_POLICY,
+		env: claudeEnv(process.env, {
+			workDir: cfg.workDir,
+			stateDir: cfg.stateDir,
+		}),
 	}),
 	sessions: await openSessionStore(cfg.stateDir),
+	approvals: await openApprovalStore(cfg.stateDir),
+	ledger: createLedger(guardDirOf(cfg.stateDir)),
 	botUserId: me.value.id,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,

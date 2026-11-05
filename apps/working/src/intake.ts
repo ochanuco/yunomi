@@ -1,6 +1,17 @@
+import { randomUUID } from "node:crypto";
 import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
-import type { ClaudeRunner } from "./claude-cli.ts";
+import {
+	approvalRequestText,
+	approvedNote,
+	approvedPrompt,
+	isApproval,
+	uniquePending,
+} from "./approval.ts";
+import type { ApprovalStore } from "./approval-store.ts";
+import type { ClaudeRunner, GuardRunInput } from "./claude-cli.ts";
 import type { DiscordApi } from "./discord-rest.ts";
+import type { Ledger } from "./guard/ledger.ts";
+import { type Operation, sameOperation } from "./guard/operation.ts";
 import { createKeyedQueue } from "./keyed-queue.ts";
 import type { Logger } from "./logger.ts";
 import {
@@ -24,12 +35,17 @@ export type IntakeDeps = {
 	discord: DiscordApi;
 	claude: ClaudeRunner;
 	sessions: SessionStore;
+	/** 投稿で許可を待っている操作。 */
+	approvals: ApprovalStore;
+	/** hook が止めた操作と、許可の記録。 */
+	ledger: Ledger;
 	botUserId: string;
 	/** この人たちの発言だけで作業する。 */
 	ownerUserIds: ReadonlySet<string>;
 	workTextChannelId: string;
 	workForumChannelId: string;
 	newSessionId: () => string;
+	newGrantId?: () => string;
 	now?: () => Date;
 	logger: Logger;
 };
@@ -48,6 +64,7 @@ export type Intake = {
 export const createIntake = (deps: IntakeDeps): Intake => {
 	const log = deps.logger;
 	const now = deps.now ?? (() => new Date());
+	const newGrantId = deps.newGrantId ?? randomUUID;
 	const queue = createKeyedQueue();
 	const parentOf = new Map<string, string | null>();
 	let tagIds: Map<WorkStatus, string> | null = null;
@@ -106,28 +123,89 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		return replied.ok && replied.value.authorId === deps.botUserId;
 	};
 
+	/** 1 回の作業で hook が止めた操作を投稿に書き、許可を待つ。 */
+	const requestApproval = async (threadId: string): Promise<boolean> => {
+		const blocked = uniquePending(deps.ledger.takePending(threadId));
+		if (blocked.length === 0) return false;
+		const sent = await deps.discord.send(
+			threadId,
+			approvalRequestText(blocked),
+		);
+		if (!sent.ok) {
+			log.error("approval request failed", {
+				thread_id: threadId,
+				error: sent.error.type,
+			});
+			return true;
+		}
+		const operations = blocked.map((b) => b.operation);
+		const messageId = sent.value.messageIds[0] ?? "";
+		await deps.approvals.set(threadId, {
+			messageIds: sent.value.messageIds,
+			operations,
+		});
+		deps.ledger.log({
+			event: "requested",
+			thread_id: threadId,
+			message_id: messageId,
+			operations,
+		});
+		log.info("approval requested", { thread_id: threadId, operations });
+		return true;
+	};
+
+	/** 許可したのに使われなかった操作は、その回かぎりで失効させる。 */
+	const expireGrant = (threadId: string, guard: GuardRunInput) => {
+		if (guard.grantId === null) return;
+		const used = deps.ledger.used(guard.grantId);
+		const unused = guard.grants.filter(
+			(g) => !used.some((u) => sameOperation(u, g)),
+		);
+		deps.ledger.clearUsed(guard.grantId);
+		if (unused.length === 0) return;
+		deps.ledger.log({
+			event: "expired",
+			thread_id: threadId,
+			grant_id: guard.grantId,
+			operations: unused,
+		});
+		log.info("approval expired unused", {
+			thread_id: threadId,
+			operations: unused,
+		});
+	};
+
 	/** Claude に投げ、返事を投稿に書いてタグを付け替える。 */
 	const work = async (
 		threadId: string,
-		first: { sessionId: string; prompt: string } | { reply: Payload },
+		first:
+			| { sessionId: string; prompt: string }
+			| { reply: Payload; prompt: string },
+		granted: {
+			grantId: string;
+			operations: readonly Operation[];
+		} | null = null,
 	) => {
 		await setStatus(threadId, "作業中");
+		const guard: GuardRunInput = {
+			threadId,
+			grants: granted?.operations ?? [],
+			grantId: granted?.grantId ?? null,
+		};
 		let result: Awaited<ReturnType<ClaudeRunner["run"]>>;
 		if ("sessionId" in first) {
 			result = await deps.claude.run({
 				prompt: first.prompt,
 				session: { kind: "new", id: first.sessionId },
+				guard,
 			});
 		} else {
 			const known = deps.sessions.get(threadId);
 			result = known
 				? await deps.claude.run({
-						prompt: replyPrompt({
-							now: now(),
-							authorName: first.reply.author.display_name,
-							content: first.reply.content,
-						}),
+						prompt: first.prompt,
 						session: { kind: "resume", id: known },
+						guard,
 					})
 				: { ok: false, error: { type: "SessionNotFound", sessionId: "" } };
 			if (!result.ok && result.error.type === "SessionNotFound") {
@@ -140,14 +218,18 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				]);
 				const sessionId = deps.newSessionId();
 				await deps.sessions.set(threadId, sessionId);
+				const recovery = recoveryPrompt({
+					now: now(),
+					title: thread.ok ? thread.value.name : null,
+					history: history.ok ? history.value : [],
+					botUserId: deps.botUserId,
+				});
 				result = await deps.claude.run({
-					prompt: recoveryPrompt({
-						now: now(),
-						title: thread.ok ? thread.value.name : null,
-						history: history.ok ? history.value : [],
-						botUserId: deps.botUserId,
-					}),
+					prompt: granted
+						? `${recovery}\n\n${approvedNote(granted.operations)}`
+						: recovery,
 					session: { kind: "new", id: sessionId },
+					guard,
 				});
 			}
 		}
@@ -161,12 +243,16 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 						? result.error.reason
 						: undefined,
 			});
+			expireGrant(threadId, guard);
 			await deps.discord.send(threadId, FAILURE_TEXT);
+			await requestApproval(threadId);
 			await setStatus(threadId, "決めてほしい");
 			return;
 		}
+		expireGrant(threadId, guard);
 		await deps.sessions.set(threadId, result.value.sessionId);
-		const { body, status } = takeStatus(result.value.text);
+		const taken = takeStatus(result.value.text);
+		const body = taken.body;
 		if (body !== "") {
 			const sent = await deps.discord.send(threadId, body);
 			if (!sent.ok) {
@@ -176,6 +262,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				});
 			}
 		}
+		// 止めた操作があれば、Claude の書いた状態によらず持ち主の判断を待つ
+		const status = (await requestApproval(threadId))
+			? "決めてほしい"
+			: taken.status;
 		await setStatus(threadId, status);
 		log.info("work turn done", { thread_id: threadId, status });
 	};
@@ -251,6 +341,66 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		});
 	};
 
+	/** 投稿内の返事。許可を待っている操作があれば、許可かどうかを先に見る。 */
+	const answer = async (threadId: string, p: Payload) => {
+		const reply = {
+			reply: p,
+			prompt: replyPrompt({
+				now: now(),
+				authorName: p.author.display_name,
+				content: p.content,
+			}),
+		};
+		const request = deps.approvals.get(threadId);
+		if (request === null) {
+			await work(threadId, reply);
+			return;
+		}
+		// 許可でも取りやめでも、待っていた操作はここで片付け、古い依頼に後から OK を返しても通さない
+		await deps.approvals.delete(threadId);
+		if (
+			!isApproval(
+				{ content: p.content, replyToMessageId: p.reply_to_message_id ?? null },
+				request,
+			)
+		) {
+			deps.ledger.log({
+				event: "dismissed",
+				thread_id: threadId,
+				operations: [...request.operations],
+			});
+			log.info("approval dismissed", { thread_id: threadId });
+			await work(threadId, reply);
+			return;
+		}
+		const grantId = newGrantId();
+		deps.ledger.log({
+			event: "granted",
+			thread_id: threadId,
+			grant_id: grantId,
+			message_id: p.message_id,
+			operations: [...request.operations],
+		});
+		log.info("approval granted", {
+			thread_id: threadId,
+			grant_id: grantId,
+			operations: request.operations,
+		});
+		await work(
+			threadId,
+			{
+				reply: p,
+				prompt: approvedPrompt({
+					now: now(),
+					authorName: p.author.display_name,
+					content: p.content,
+					operations: request.operations,
+				}),
+			},
+			{ grantId, operations: request.operations },
+		);
+	};
+
 	return {
 		handle: async (envelope) => {
 			const p = envelope.payload;
@@ -277,7 +427,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				await queue.run(threadId, () => startFromForumPost(p));
 				return;
 			}
-			await queue.run(threadId, () => work(threadId, { reply: p }));
+			await queue.run(threadId, () => answer(threadId, p));
 		},
 	};
 };

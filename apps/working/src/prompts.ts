@@ -8,11 +8,37 @@ export const WORKING_INSTRUCTIONS = `
 あなたはいま Discord の仕事フォーラムの投稿で、頼まれた仕事をしている。あなたの返事はそのままその投稿に書き込まれる。
 
 - 返事は Discord のメッセージとして読める長さと書式にする。
-- 使える道具は読み取りだけ。書き込みや実行が要るときは、何をしたいかを書いて相手に決めてもらう。
+- いまの作業ディレクトリが作業場所。リポジトリはこの中に \`gh repo clone <owner>/<repo>\` で clone し、その中で作業する。
+- 聞かずにやってよいこと: 読み取り、作業場所の中のファイルの編集と削除、テストやビルドの実行、git commit、\`dev/\` で始まるブランチへの push、issue の作成とコメント、PR の作成。
+- push は \`git push -u origin HEAD:dev/<topic>\` のように、押し先のブランチを必ず書く。
+- それ以外の取り消せない操作や外に出る操作（main などへの push、force push、マージ、ブランチ・リポジトリ・リリースの削除、作業場所の外の削除、デプロイ、課金、Discord など外部への投稿、秘密情報の読み出し）は、実行しようとすると止められる。止められたら、別の書き方や別の道具で回避しない。止めた操作は受付が「決めてほしいこと」として投稿に書き添えるので、返事ではそれが何のために要るかを書く。
+- 持ち主が許可した操作は、書かれたとおり一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
 - 返事の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
   - \`状態: 決めてほしい\`: 相手の判断や情報を待っている
   - \`状態: 引き継ぎ\`: この環境ではできず、Mac の agent に任せたい
   - \`状態: 完了\`: 頼まれたことが終わった
+`;
+
+/**
+ * Claude CLI の system prompt。人格、仕事のしかた、Mac への引き継ぎの手順、申し送りの雛形の順に並べる。
+ * 引き継ぎの手順は雛形が後ろに続く前提で書いてある。
+ */
+export const buildSystemPrompt = (input: {
+	persona: string;
+	handoffPrompt: string;
+	issueTemplate: string;
+}) =>
+	`${input.persona.trimEnd()}
+
+${WORKING_INSTRUCTIONS.trim()}
+
+${input.handoffPrompt.trim()}
+
+### 申し送りの雛形
+
+\`\`\`\`markdown
+${input.issueTemplate.trim()}
+\`\`\`\`
 `;
 
 const clock = (now: Date) => `いま: ${formatJstForPrompt(now)}`;

@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { err, ok, type Result } from "@yunomi/core";
 import * as v from "valibot";
+import { GUARD_ENV } from "./guard/env.ts";
+import type { Operation } from "./guard/operation.ts";
 
 /**
  * Claude CLI に渡す道具と権限。取り消せない操作をどう扱うかはここを差し替えて決める。
@@ -10,10 +12,51 @@ export type ClaudePolicy = {
 	permissionMode: string;
 };
 
-/** 読むだけの道具に絞り、許可の要る操作は聞かずに断る（-p では聞き返せないため）。 */
-export const READ_ONLY_POLICY: ClaudePolicy = {
-	tools: ["Read", "Glob", "Grep"],
+/**
+ * 読み書きと Bash を渡し、通すかどうかは managed settings の PreToolUse hook（src/guard）が決める。
+ * allow のルールを置かないので、hook が落ちたときは dontAsk が断る。
+ * 作業場所の .claude/settings.json に権限を足されないよう、managed と --settings 以外の設定は読まない。
+ */
+export const WORK_POLICY: ClaudePolicy = {
+	tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
 	permissionMode: "dontAsk",
+};
+
+/** hook に渡す、この作業の投稿と持ち主が 1 回だけ許可した操作。 */
+export type GuardRunInput = {
+	threadId: string;
+	grants: readonly Operation[];
+	grantId: string | null;
+};
+
+/** Claude CLI に渡す環境変数。受付の秘密（Discord のトークン、gateway と共有するトークン）は渡さない。 */
+const CLAUDE_ENV_KEYS = [
+	"HOME",
+	"PATH",
+	"LANG",
+	"LC_ALL",
+	"TZ",
+	"USER",
+	"CLAUDE_CONFIG_DIR",
+	"GH_TOKEN",
+	"GIT_AUTHOR_NAME",
+	"GIT_AUTHOR_EMAIL",
+	"GIT_COMMITTER_NAME",
+	"GIT_COMMITTER_EMAIL",
+] as const;
+
+export const claudeEnv = (
+	env: Record<string, string | undefined>,
+	guard: { workDir: string; stateDir: string },
+): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const key of CLAUDE_ENV_KEYS) {
+		const val = env[key];
+		if (val !== undefined) out[key] = val;
+	}
+	out[GUARD_ENV.workDir] = guard.workDir;
+	out[GUARD_ENV.stateDir] = guard.stateDir;
+	return out;
 };
 
 export type ClaudeError =
@@ -28,6 +71,7 @@ export type ClaudeRunner = {
 	run: (input: {
 		prompt: string;
 		session: SessionRef;
+		guard: GuardRunInput;
 	}) => Promise<Result<{ sessionId: string; text: string }, ClaudeError>>;
 	/** フォーラム投稿の件名にする短い要約。セッションを残さない。 */
 	summarize: (text: string) => Promise<Result<string, ClaudeError>>;
@@ -41,7 +85,12 @@ export type ExecResult = {
 export type Exec = (
 	bin: string,
 	args: readonly string[],
-	opts: { stdin: string; cwd: string; timeoutMs: number },
+	opts: {
+		stdin: string;
+		cwd: string;
+		timeoutMs: number;
+		env: Record<string, string>;
+	},
 ) => Promise<ExecResult>;
 
 const resultSchema = v.object({
@@ -54,6 +103,7 @@ export const spawnExec: Exec = (bin, args, opts) =>
 	new Promise((resolve) => {
 		const child = spawn(bin, args, {
 			cwd: opts.cwd,
+			env: opts.env,
 			stdio: ["pipe", "pipe", "pipe"],
 			timeout: opts.timeoutMs,
 		});
@@ -78,6 +128,8 @@ export type ClaudeCliOptions = {
 	systemPromptFile: string;
 	timeoutMs: number;
 	policy: ClaudePolicy;
+	/** Claude CLI に渡す環境変数。受付の秘密（Discord のトークンなど）を含めない。 */
+	env: Record<string, string>;
 	exec?: Exec;
 };
 
@@ -114,7 +166,7 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 	};
 
 	return {
-		run: async ({ prompt, session }) => {
+		run: async ({ prompt, session, guard }) => {
 			const args = [
 				"-p",
 				"--output-format",
@@ -125,6 +177,8 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 				opts.policy.tools.join(","),
 				"--permission-mode",
 				opts.policy.permissionMode,
+				"--setting-sources",
+				"",
 				session.kind === "new" ? "--session-id" : "--resume",
 				session.id,
 			];
@@ -132,6 +186,16 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 				stdin: prompt,
 				cwd: opts.cwd,
 				timeoutMs: opts.timeoutMs,
+				env: {
+					...opts.env,
+					[GUARD_ENV.threadId]: guard.threadId,
+					...(guard.grantId === null
+						? {}
+						: {
+								[GUARD_ENV.grantId]: guard.grantId,
+								[GUARD_ENV.grants]: JSON.stringify(guard.grants),
+							}),
+				},
 			});
 			if (
 				session.kind === "resume" &&
@@ -160,7 +224,12 @@ export const createClaudeCli = (opts: ClaudeCliOptions): ClaudeRunner => {
 					"--tools",
 					"",
 				],
-				{ stdin: SUMMARY_PROMPT + text, cwd: opts.cwd, timeoutMs: 60_000 },
+				{
+					stdin: SUMMARY_PROMPT + text,
+					cwd: opts.cwd,
+					timeoutMs: 60_000,
+					env: opts.env,
+				},
 			);
 			const r = parse(out);
 			if (!r.ok) return r;
