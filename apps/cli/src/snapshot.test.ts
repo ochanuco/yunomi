@@ -48,6 +48,7 @@ const harness = (over: Partial<Deps> = {}, restoreStatus = 200) => {
 									open_loops: 0,
 									interest_states: 0,
 									opinion_states: 0,
+									work_notes: 0,
 									relationships: 0,
 								},
 							}

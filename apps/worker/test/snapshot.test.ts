@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import {
+	type CurrentSnapshot,
 	SNAPSHOT_SCHEMA_VERSION,
 	type Snapshot,
 	SnapshotRestoreResponseSchema,
@@ -39,6 +40,7 @@ beforeEach(async () => {
 		"open_loops",
 		"interest_states",
 		"opinion_states",
+		"work_notes",
 		"interest_changes",
 		"audit_events",
 		"audit_daily_kpis",
@@ -100,6 +102,11 @@ const seedD1 = async (partner = PARTNER_ID) => {
 		VALUES (?, 'tea', 'good', 0.6, 0.5, '[]', '[]', '2026-10-05T00:00:00Z')`,
 		partner,
 	);
+	await run(
+		`INSERT INTO work_notes (id, partner_id, entity_id, kind, summary, created_at)
+		VALUES ('w1', ?, 'e1', 'decided', '移行は来週に回す', '2026-10-06T00:00:00Z')`,
+		partner,
+	);
 };
 
 /** 履歴・audit・KPI。Snapshot に入らず、restore でも変わらないことを確かめる。 */
@@ -138,7 +145,7 @@ const seedDo = async () => {
 	});
 };
 
-const build = async (): Promise<Snapshot> => {
+const build = async (): Promise<CurrentSnapshot> => {
 	const r = await buildSnapshot({
 		db: env.DB,
 		partner: partnerStub(),
@@ -184,6 +191,7 @@ describe("Snapshot の組み立て", () => {
 		expect(s.d1.open_loops[0]?.summary).toBe("面接の結果待ち");
 		expect(s.d1.interest_states).toHaveLength(1);
 		expect(s.d1.opinion_states).toHaveLength(1);
+		expect(s.d1.work_notes[0]?.summary).toBe("移行は来週に回す");
 		expect(s.do.state?.version).toBe(4);
 		expect(s.do.relationships[0]).toMatchObject({
 			entity_id: "e1",
@@ -220,7 +228,9 @@ describe("Snapshot の組み立て", () => {
 	it("Valibot は未知の列と schema_version の不一致を拒否する", async () => {
 		await seedD1();
 		const s = await build();
-		expect(parseSnapshot({ ...s, schema_version: 2 }).ok).toBe(false);
+		expect(parseSnapshot({ ...s, schema_version: 9 }).ok).toBe(false);
+		// v1 は work_notes を持たない形なので、v1 を名乗って work_notes を含むものは拒否する
+		expect(parseSnapshot({ ...s, schema_version: 1 }).ok).toBe(false);
 		expect(
 			parseSnapshot({
 				...s,
@@ -283,7 +293,10 @@ describe("R2 への保存と削除", () => {
 			"00000000-0000-7000-8000-000000000003",
 			"00000000-0000-7000-8000-000000000002",
 		]);
-		expect(left[0]).toMatchObject({ size: 3, schema_version: 1 });
+		expect(left[0]).toMatchObject({
+			size: 3,
+			schema_version: SNAPSHOT_SCHEMA_VERSION,
+		});
 	});
 });
 
@@ -308,7 +321,7 @@ describe("Admin API", () => {
 		expect(parsed.items[0]).toMatchObject({
 			id: summary.id,
 			size: summary.size,
-			schema_version: 1,
+			schema_version: SNAPSHOT_SCHEMA_VERSION,
 			env: "development",
 		});
 
@@ -378,6 +391,7 @@ describe("restore", () => {
 			PARTNER_ID,
 		);
 		await run("DELETE FROM open_loops");
+		await run("DELETE FROM work_notes");
 		await run("UPDATE interest_states SET score = 0.01");
 		await runInDurableObject(partnerStub(), (_o, state) => {
 			state.storage.sql.exec(
@@ -403,7 +417,13 @@ describe("restore", () => {
 		expect(body).toMatchObject({
 			snapshot_id: source.snapshot_id,
 			source_env: "development",
-			counts: { facts: 1, open_loops: 1, relationships: 1, entities: 1 },
+			counts: {
+				facts: 1,
+				open_loops: 1,
+				work_notes: 1,
+				relationships: 1,
+				entities: 1,
+			},
 		});
 		// Discord や外部サービスへ何も送らない
 		expect(fetchSpy).not.toHaveBeenCalled();
@@ -431,6 +451,23 @@ describe("restore", () => {
 			(await env.DB.prepare("SELECT * FROM audit_daily_kpis").all()).results,
 		).toEqual(kpiBefore.results);
 		expect(await count("interest_changes")).toBe(historyBefore);
+	});
+
+	it("work_notes を持たない v1 の Snapshot も復元でき、work_notes は残す", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		const { work_notes: _omit, ...d1V1 } = current.d1;
+		const v1: Snapshot = { ...current, schema_version: 1, d1: d1V1 };
+		expect(parseSnapshot(v1).ok).toBe(true);
+
+		await run("DELETE FROM facts");
+		const res = await restoreRequest(v1);
+		expect(res.status).toBe(200);
+		const body = v.parse(SnapshotRestoreResponseSchema, await res.json());
+		expect(body.counts).toMatchObject({ facts: 1, work_notes: 0 });
+		expect(await count("facts")).toBe(1);
+		expect(await count("work_notes")).toBe(1);
 	});
 
 	it("restore を 1 行のログに残す", async () => {
@@ -478,7 +515,7 @@ describe("restore", () => {
 	it("参照先の無い行が混ざったら D1 を変えずに失敗する", async () => {
 		await seedD1();
 		const source = await build();
-		const broken: Snapshot = {
+		const broken: CurrentSnapshot = {
 			...source,
 			d1: {
 				...source.d1,

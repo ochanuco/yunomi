@@ -184,9 +184,9 @@ Yukarin の長期記憶と現在値の時点コピー。日次バックアップ
 
 #### 中身
 
-JSON（`schema_version` 1、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
+JSON（`schema_version` 2、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
 
-- `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states`。`entities` と `external_identities` は partner を持たないので全行
+- `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes`。`entities` と `external_identities` は partner を持たないので全行
 - `do`: `state`（`partner_state`）と `relationships`（日次累積の `acc_*` を含む全列）
 
 含めない: `audit_events`・`audit_daily_kpis`・履歴（`state_transitions` / `relationship_events` / `interest_changes` / `opinion_changes`）、DO の `recent_messages`（会話本文）・`processed_events`・`channel_state`・`entity_cache`・`llm_health`、secret。会話要約は未実装で項目が無い。D1 の対象列は `src/snapshot.ts` の `D1_SNAPSHOT_TABLES` で、テストが実スキーマとの一致を確かめる。
@@ -212,7 +212,7 @@ owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 
 - `GET .../snapshots/:snapshotId`: 暗号化済みの blob（`application/octet-stream`）をそのまま返す。無ければ 404
 - `POST .../snapshots/restore`: body は復号済みの Snapshot JSON。`YUNOMI_ENV=production` では 403 `restore_disabled_in_production`。検証に失敗すれば 400、`partner_id` の不一致や DB の失敗は 422。成功すると `{ snapshot_id, source_env, counts }`
 
-restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
+restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。`schema_version` 1 の Snapshot も受け付ける。v1 は `work_notes` を持たないので、その restore では `work_notes` を消さずに残す。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
 
 #### seed の運用
 

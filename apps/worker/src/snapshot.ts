@@ -1,4 +1,5 @@
 import type {
+	CurrentSnapshot,
 	Snapshot,
 	SnapshotRestoreCounts,
 	SnapshotSummary,
@@ -118,6 +119,11 @@ export const D1_SNAPSHOT_TABLES = {
 		scoped: true,
 		key: [],
 	},
+	work_notes: {
+		columns: ["id", "entity_id", "kind", "summary", "created_at"],
+		scoped: true,
+		key: [],
+	},
 } satisfies Record<string, D1Table>;
 
 type TableName = keyof typeof D1_SNAPSHOT_TABLES;
@@ -170,7 +176,7 @@ export type SnapshotContext = {
 /** 含める・含めないものの境界はここだけで決まる。出力は SnapshotSchema で検証する。 */
 export const buildSnapshot = async (
 	ctx: SnapshotContext,
-): Promise<Result<Snapshot, SnapshotError>> => {
+): Promise<Result<CurrentSnapshot, SnapshotError>> => {
 	const [tables, doState] = await Promise.all([
 		Promise.all(
 			TABLE_NAMES.map(
@@ -193,9 +199,12 @@ export const buildSnapshot = async (
 		},
 	};
 	const parsed = parseSnapshot(candidate);
-	return parsed.ok
+	if (!parsed.ok) {
+		return err({ type: "snapshot_invalid", message: parsed.message });
+	}
+	return parsed.value.schema_version === SNAPSHOT_SCHEMA_VERSION
 		? ok(parsed.value)
-		: err({ type: "snapshot_invalid", message: parsed.message });
+		: err({ type: "snapshot_invalid", message: "schema_version が現行でない" });
 };
 
 export type CreateSnapshotContext = SnapshotContext & {
@@ -264,17 +273,21 @@ export const restoreSnapshot = async (
 			message: "snapshot の partner_id が対象と一致しない",
 		});
 	}
-	const rows = snapshot.d1 as Record<TableName, Row[]>;
+	const rows = snapshot.d1 as Partial<Record<TableName, Row[]>>;
+	// 古い版の Snapshot に無いテーブルは、空ではなく「不明」なので触らずに残す。
+	const present = TABLE_NAMES.filter((t) => rows[t] !== undefined);
 	const statements = [
-		...[...SCOPED_TABLES]
+		...SCOPED_TABLES.filter((t) => rows[t] !== undefined)
 			.reverse()
 			.map((t) =>
 				ctx.db
 					.prepare(`DELETE FROM ${t} WHERE partner_id = ?`)
 					.bind(ctx.partnerId),
 			),
-		...TABLE_NAMES.flatMap((t) =>
-			rows[t].map((row) => insertStatement(ctx.db, t, row, ctx.partnerId)),
+		...present.flatMap((t) =>
+			(rows[t] ?? []).map((row) =>
+				insertStatement(ctx.db, t, row, ctx.partnerId),
+			),
 		),
 	];
 	try {
@@ -306,6 +319,7 @@ export const restoreSnapshot = async (
 		open_loops: snapshot.d1.open_loops.length,
 		interest_states: snapshot.d1.interest_states.length,
 		opinion_states: snapshot.d1.opinion_states.length,
+		work_notes: "work_notes" in snapshot.d1 ? snapshot.d1.work_notes.length : 0,
 		relationships: snapshot.do.relationships.length,
 	});
 };
