@@ -353,6 +353,7 @@ describe("createOrcaCli", () => {
 			{
 				id: "m1",
 				type: "worker_done",
+				from: "",
 				subject: "",
 				body: "済み",
 				dispatchId: "d1",
@@ -362,6 +363,7 @@ describe("createOrcaCli", () => {
 			{
 				id: "m2",
 				type: "escalation",
+				from: "",
 				subject: "",
 				body: "x",
 				dispatchId: "d1",

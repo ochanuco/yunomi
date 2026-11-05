@@ -6,8 +6,10 @@ import { openApprovalStore } from "./approval-store.ts";
 import { grantPathOf, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import {
+	backgroundRunning,
 	createIntake,
 	type IntakeDeps,
+	isRestartRequest,
 	seatStartFailedText,
 } from "./intake.ts";
 import { silentLogger } from "./logger.ts";
@@ -589,5 +591,120 @@ describe("席を始められなかったとき", () => {
 		expect(of("OrcaFailed", "selector_not_found")).toContain(
 			"Orca が席を作れなかった",
 		);
+	});
+});
+
+describe("裏の作業を待つ席", () => {
+	const tail = (footer: string) =>
+		`Worker t1 ended its turn without sending worker_done.\nLast output:\n● バックグラウンドで回しました。終わるまで待ちます。\n${footer}`;
+
+	it("裏の shell を残してターンを終えた知らせは、止まったと書かない", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "escalation",
+				dispatchId: seat.dispatchId,
+				stopReason: "finished",
+				body: tail("✻ Worked for 7s · done 2:06 PM · 1 shell still running"),
+			}),
+		);
+		expect(s.d.sentTo("p1")).toEqual([]);
+		expect(s.seats.get("p1")?.status).toBe("working");
+		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
+	});
+
+	it("裏の作業が残っているかを端末の末尾から見分ける", () => {
+		expect(backgroundRunning(tail("✻ done · 1 shell still running"))).toBe(
+			true,
+		);
+		expect(
+			backgroundRunning(tail("⏵⏵ auto mode on · 2 shells · ↓ to manage")),
+		).toBe(true);
+		expect(backgroundRunning(tail("✻ Worked for 9s · done 10:41 AM"))).toBe(
+			false,
+		);
+	});
+});
+
+describe("途中経過", () => {
+	it("席の status は、完了を待たずにそのまま投稿に書き、状態とタグは変えない", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "status",
+				dispatchId: seat.dispatchId,
+				body: "描画を待っています。5 分ほどです。",
+			}),
+		);
+		// Dispatch を付けずに送られても、送り手の端末から席を引く
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "status",
+				dispatchId: null,
+				from: seat.terminal ?? "",
+				body: "止まってはいません。描き終わったら続けます。",
+			}),
+		);
+		expect(s.d.sentTo("p1")).toEqual([
+			"描画を待っています。5 分ほどです。",
+			"止まってはいません。描き終わったら続けます。",
+		]);
+		expect(s.seats.get("p1")?.status).toBe("working");
+		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
+	});
+});
+
+describe("起動し直して", () => {
+	it("席の Claude を止めて、同じ worktree で前の会話のまま起こす", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どれにしますか",
+			}),
+		);
+		await s.intake.handle(say("p1", "起動し直して"));
+		expect(s.o.opsOf("stopSeat")).toEqual([
+			expect.objectContaining({ terminal: seat.terminal }),
+		]);
+		const [resume] = s.o.opsOf("resumeSeat") as {
+			path: string;
+			spec: string;
+		}[];
+		expect(resume?.path).toBe("/seats/seat-p1");
+		expect(resume?.spec).toContain("起動し直した");
+		expect(resume?.spec).toContain("「どれにしますか」");
+		expect(s.o.opsOf("send")).toEqual([]);
+		expect(s.o.opsOf("reply")).toEqual([]);
+		expect(s.d.sentTo("p1").at(-1)).toContain("起動し直します");
+		expect(s.seats.get("p1")?.status).toBe("working");
+		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
+	});
+
+	it("決まった言い方だけを起動し直す頼みとみなす", () => {
+		for (const t of [
+			"起動し直して",
+			"起動しなおして。",
+			"再起動して",
+			"<@1> 再起動",
+			"起動し直してください",
+		]) {
+			expect(isRestartRequest(t), t).toBe(true);
+		}
+		for (const t of ["起動し直してから A をやって", "再起動しないで", "OK"]) {
+			expect(isRestartRequest(t), t).toBe(false);
+		}
+	});
+
+	it("席が無い投稿では、ふつうの返事として新しい席を作る", async () => {
+		const s = await setup();
+		s.d.addThread("p9", "x");
+		await s.intake.handle(say("p9", "起動し直して"));
+		expect(s.o.opsOf("stopSeat")).toEqual([]);
+		expect(s.o.opsOf("startSeat")).toHaveLength(1);
 	});
 });

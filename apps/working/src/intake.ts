@@ -24,6 +24,7 @@ import {
 	messageLink,
 	replyPrompt,
 	requestPrompt,
+	restartNote,
 	seatSpec,
 	wakeNote,
 } from "./prompts.ts";
@@ -93,6 +94,30 @@ export const seatStartFailedText = (error: OrcaError) => {
 					: "Orca が席を作れなかった";
 	return `席を始められませんでした（${where}）。返事をくれれば、もう一度始めます。`;
 };
+
+const RESTARTING_TEXT =
+	"席の Claude を起動し直します。前の会話のまま続けます。";
+
+const MENTION = /<@[!&]?\d+>/g;
+
+/** 席を起動し直す頼み。ほかの返事と取り違えないよう、決まった言い方だけにする。 */
+export const isRestartRequest = (content: string) =>
+	/^(起動し(直|なお)して(ください)?|再起動して(ください)?|再起動)$/.test(
+		content
+			.replace(MENTION, "")
+			.normalize("NFKC")
+			.trim()
+			.replace(/[。.!！]+$/, ""),
+	);
+
+/**
+ * escalation の本文（席の端末の末尾）に、裏で動いている shell やタスクが出ているか。
+ * Claude CLI は裏の作業が残っていると「1 shell still running」「· 2 shells ·」のように書く。
+ */
+export const backgroundRunning = (body: string) =>
+	/\b\d+ (?:background )?(?:shells?|tasks?|monitors?)(?: still)? running\b|· \d+ (?:shells?|tasks?|monitors?) ·/i.test(
+		body,
+	);
 
 const ALIVE = new Set(["working", "asking", "waiting"]);
 
@@ -509,6 +534,61 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		log.info("seat done", { thread_id: threadId, status: taken.status });
 	};
 
+	/** Dispatch を付けずに送られたメッセージは、送り手の端末か Dispatch から席を引く。 */
+	const seatOfMessage = (msg: SeatMessage): Seat | null => {
+		if (msg.dispatchId) return deps.seats.byDispatch(msg.dispatchId);
+		return (
+			deps.seats
+				.all()
+				.find((s) => s.terminal !== null && s.terminal === msg.from) ??
+			deps.seats.byDispatch(msg.from)
+		);
+	};
+
+	/** 途中経過や、持ち主の質問への答え。完了を待たずに投稿に書く。 */
+	const onStatus = async (seat: Seat, msg: SeatMessage) => {
+		if (seat.standup) return;
+		const body = msg.body.trim();
+		if (body === "") return;
+		const sent = await deps.discord.send(seat.threadId, body);
+		if (!sent.ok) {
+			log.error("status post failed", {
+				thread_id: seat.threadId,
+				error: sent.error.type,
+			});
+		}
+	};
+
+	/** 持ち主の頼みで席の Claude を止め、同じ会話のまま起こし直す。コネクタの認証を足したあとなどに使う。 */
+	const restart = async (threadId: string): Promise<boolean> => {
+		const seat = deps.seats.get(threadId);
+		if (seat === null || seat.path === null || seat.status === "queued")
+			return false;
+		if (seat.status !== "sleeping") {
+			const stopped = await deps.orca.stopSeat(seat);
+			if (!stopped.ok) {
+				log.error("seat restart stop failed", {
+					thread_id: threadId,
+					reason: stopped.error.reason,
+				});
+				await deps.discord.send(threadId, FAILURE_TEXT);
+				return true;
+			}
+		}
+		const asked = seat.status === "asking" ? seat.question : null;
+		await deps.discord.send(threadId, RESTARTING_TEXT);
+		await launch({
+			...seat,
+			status: "sleeping",
+			terminal: null,
+			questionId: null,
+			expectStop: false,
+			pending: [restartNote(asked)],
+		});
+		log.info("seat restarted", { thread_id: threadId });
+		return true;
+	};
+
 	const onEscalation = async (seat: Seat, msg: SeatMessage) => {
 		const threadId = seat.threadId;
 		if (msg.dispatchId !== seat.dispatchId) return;
@@ -517,6 +597,11 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			return;
 		}
 		if (msg.stopReason !== null && seat.status !== "working") return;
+		// 裏の shell やタイマーを待つためにターンを終えただけなので、止まったとは書かない
+		if (msg.stopReason !== null && backgroundRunning(msg.body)) {
+			log.info("seat waiting on background work", { thread_id: threadId });
+			return;
+		}
 		expireGrant(threadId);
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
 		if (seat.standup) {
@@ -613,6 +698,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			authorName: p.author.display_name,
 			content: p.content,
 		});
+		if (isRestartRequest(p.content) && (await restart(threadId))) return;
 		const request = deps.approvals.get(threadId);
 		if (request === null) {
 			await deliver(threadId, reply, null);
@@ -721,9 +807,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			await queue.run(threadId, () => answer(threadId, p));
 		},
 		onSeatMessage: async (msg) => {
-			const seat = msg.dispatchId
-				? deps.seats.byDispatch(msg.dispatchId)
-				: null;
+			const seat = seatOfMessage(msg);
 			if (seat === null) {
 				log.warn("seat message for unknown dispatch", {
 					type: msg.type,
@@ -737,6 +821,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				if (msg.type === "question") await onQuestion(current, msg);
 				else if (msg.type === "worker_done") await onDone(current, msg);
 				else if (msg.type === "escalation") await onEscalation(current, msg);
+				else if (msg.type === "status") await onStatus(current, msg);
 			});
 		},
 		startStandup: async (spec) => {

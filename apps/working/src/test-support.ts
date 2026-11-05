@@ -220,6 +220,7 @@ export const seatMessage = (
 	m: Partial<SeatMessage> & Pick<SeatMessage, "type" | "dispatchId">,
 ): SeatMessage => ({
 	id: `msg${++seq}`,
+	from: "",
 	subject: "",
 	body: "",
 	outcome: null,
