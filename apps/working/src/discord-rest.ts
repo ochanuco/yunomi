@@ -3,11 +3,13 @@ import {
 	err,
 	externalServiceUnavailable,
 	ok,
+	permissionDenied,
 	type Result,
 	rateLimited,
 	validationFailed,
 } from "@yunomi/core";
 import * as v from "valibot";
+import type { Logger } from "./logger.ts";
 
 const API = "https://discord.com/api/v10";
 /** Discord のメッセージ本文の上限。 */
@@ -83,9 +85,19 @@ export type DiscordApi = {
 
 export type DiscordRestOptions = {
 	token: string;
+	/** 2xx 以外の応答を残す。未設定なら残さない。 */
+	logger?: Logger;
 	fetch?: typeof fetch;
 	timeoutMs?: number;
 };
+
+const errorBodySchema = v.object({
+	code: v.optional(v.number()),
+	message: v.optional(v.string()),
+});
+
+/** Discord のエラーコード。Missing Access と Missing Permissions は bot の権限の不足。 */
+const PERMISSION_CODES = new Set([50001, 50013]);
 
 const toPosted = (m: v.InferOutput<typeof messageSchema>): PostedMessage => ({
 	id: m.id,
@@ -153,6 +165,21 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 			return err(rateLimited({ retryAfterMs: waitMs }));
 		}
 		if (!res.ok) {
+			const parsed = v.safeParse(
+				errorBodySchema,
+				await res.json().catch(() => null),
+			);
+			const code = parsed.success ? (parsed.output.code ?? null) : null;
+			const route = `${method} ${path.split("?")[0]}`;
+			opts.logger?.warn("discord request rejected", {
+				route,
+				status: res.status,
+				code,
+				message: parsed.success ? (parsed.output.message ?? null) : null,
+			});
+			if (res.status === 403 && code !== null && PERMISSION_CODES.has(code)) {
+				return err(permissionDenied({ actor: "discord bot", action: route }));
+			}
 			return err(externalServiceUnavailable({ service: "discord" }));
 		}
 		if (schema === null) return ok(undefined);

@@ -68,6 +68,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 	const queue = createKeyedQueue();
 	const parentOf = new Map<string, string | null>();
 	let tagIds: Map<WorkStatus, string> | null = null;
+	// 投稿に書けなかった最後の返事。セッションには残っているので、次の発言のときに先に出し直す
+	const undelivered = new Map<string, string>();
 
 	const statusTags = async (): Promise<Map<WorkStatus, string>> => {
 		if (tagIds) return tagIds;
@@ -186,6 +188,19 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			operations: readonly Operation[];
 		} | null = null,
 	) => {
+		const unsent = undelivered.get(threadId);
+		if (unsent !== undefined) {
+			const resent = await deps.discord.send(threadId, unsent);
+			if (resent.ok) {
+				undelivered.delete(threadId);
+				log.info("undelivered reply resent", { thread_id: threadId });
+			} else {
+				log.error("resend failed", {
+					thread_id: threadId,
+					error: resent.error.type,
+				});
+			}
+		}
 		await setStatus(threadId, "作業中");
 		const guard: GuardRunInput = {
 			threadId,
@@ -256,11 +271,17 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		if (body !== "") {
 			const sent = await deps.discord.send(threadId, body);
 			if (!sent.ok) {
+				// 返事が届いていないので完了にはしない。止めた操作の依頼も次の回まで持ち越す
+				undelivered.set(threadId, body);
 				log.error("reply failed", {
 					thread_id: threadId,
 					error: sent.error.type,
 				});
+				await setStatus(threadId, "決めてほしい");
+				log.warn("work turn undelivered", { thread_id: threadId });
+				return;
 			}
+			undelivered.delete(threadId);
 		}
 		// 止めた操作があれば、Claude の書いた状態によらず持ち主の判断を待つ
 		const status = (await requestApproval(threadId))
