@@ -16,6 +16,8 @@ const envSchema = v.pipe(
 		YUNOMI_DEV_CALLER: v.optional(v.string()),
 		AVATAR_DIR: v.optional(nonEmpty),
 		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
+		WORK_CATEGORY_IDS: v.optional(nonEmpty),
+		WORKING_URL: v.optional(v.pipe(v.string(), v.url())),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -48,6 +50,10 @@ export type GatewayConfig = {
 	avatarDir: string | null;
 	/** VC でこの人の声だけを聞く。未設定なら耳を閉じて入る。 */
 	ownerUserId: string | null;
+	/** この Discord カテゴリの発言は Worker に送らず Working へ回す。 */
+	workCategoryIds: ReadonlySet<string>;
+	/** Working 受付の URL。未設定なら仕事カテゴリの発言は捨てる。 */
+	workingUrl: string | null;
 	logLevel: LogLevel;
 };
 
@@ -89,6 +95,13 @@ export const loadConfig = (
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
 		avatarDir: e.AVATAR_DIR ?? null,
 		ownerUserId: e.OWNER_DISCORD_USER_ID ?? null,
+		workCategoryIds: new Set(
+			(e.WORK_CATEGORY_IDS ?? "")
+				.split(",")
+				.map((id) => id.trim())
+				.filter((id) => id !== ""),
+		),
+		workingUrl: e.WORKING_URL ?? null,
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };

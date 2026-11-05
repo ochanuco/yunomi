@@ -17,6 +17,7 @@ import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
 import { createVoiceStateHandler } from "./voice-state.ts";
+import { createWorkingClient } from "./working-client.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
 const PARTNER_ID = "yukarin";
@@ -58,6 +59,13 @@ const yunomi = new YunomiClient({
 	devCaller: cfg.devCaller,
 	logger,
 });
+
+const working = cfg.workingUrl
+	? createWorkingClient({ url: cfg.workingUrl })
+	: null;
+if (cfg.workCategoryIds.size > 0 && !working) {
+	logger.warn("WORK_CATEGORY_IDS is set but WORKING_URL is not; dropping");
+}
 
 const ochoko = cfg.ochoko
 	? createOchokoClient({
@@ -160,6 +168,8 @@ discord.on(Events.MessageCreate, (message) => {
 		botUserId,
 		voice,
 		avatars,
+		workCategoryIds: cfg.workCategoryIds,
+		working,
 		logger,
 	});
 	void handle(toMessageLike(message), {

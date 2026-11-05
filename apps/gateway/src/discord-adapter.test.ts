@@ -15,7 +15,12 @@ const fakeMessage = (over: Record<string, unknown> = {}) =>
 		guild: { members: { me: { roles: { botRole: null } } } },
 		reference: null,
 		attachments: new Map(),
-		channel: { type: ChannelType.GuildVoice, isTextBased: () => true },
+		channel: {
+			type: ChannelType.GuildVoice,
+			isTextBased: () => true,
+			isThread: () => false,
+			parentId: "cat1",
+		},
 		inGuild: () => true,
 		...over,
 	}) as never;
@@ -37,6 +42,33 @@ describe("isRelayable", () => {
 });
 
 describe("toMessageLike", () => {
+	it("チャンネルの親カテゴリを categoryId に載せる", () => {
+		expect(toMessageLike(fakeMessage()).categoryId).toBe("cat1");
+	});
+
+	it("スレッドは親チャンネルのカテゴリを載せる", () => {
+		const m = fakeMessage({
+			channel: {
+				isTextBased: () => true,
+				isThread: () => true,
+				parentId: "parent-channel",
+				parent: { parentId: "cat2" },
+			},
+		});
+		expect(toMessageLike(m).categoryId).toBe("cat2");
+	});
+
+	it("カテゴリ外のチャンネルは null", () => {
+		const m = fakeMessage({
+			channel: {
+				isTextBased: () => true,
+				isThread: () => false,
+				parentId: null,
+			},
+		});
+		expect(toMessageLike(m).categoryId).toBeNull();
+	});
+
 	it("作者がいる VC を authorVoiceChannelId に載せる", () => {
 		expect(toMessageLike(fakeMessage()).authorVoiceChannelId).toBe("vc1");
 	});
