@@ -3,6 +3,7 @@
 # どちらかが終わったらコンテナごと終わらせ、再起動は Docker に任せる。
 set -euo pipefail
 cd /home/worker/app
+/home/worker/bin/release-orcad-lock.sh "$@"
 node_modules/.bin/tsx src/main.ts &
 if [ "$#" -gt 0 ]; then
 	"$@" &

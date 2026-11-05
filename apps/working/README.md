@@ -15,6 +15,7 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
 | `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
+| `release-orcad-lock.sh` | `orca-ide serve` の前に start.sh が呼ぶ。前のコンテナの orcad が volume に残した `orcad.lock` を消す |
 
 Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<arch>.deb` を使う。CLI の名前は `orca` ではなく `orca-ide`。版は `ORCA_VERSION` で Mac の Orca と揃える。
 
