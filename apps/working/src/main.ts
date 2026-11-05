@@ -3,6 +3,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { openApprovalStore } from "./approval-store.ts";
+import {
+	createAttachmentCollector,
+	createChimeraImages,
+} from "./attachments.ts";
 import { childEnv, createSummarizer } from "./claude-cli.ts";
 import { claudeConfigPathOf, trustWorkspace } from "./claude-trust.ts";
 import { loadConfig } from "./config.ts";
@@ -120,6 +124,24 @@ if (!prepared.ok) {
 await seats.setOrca(prepared.value);
 logger.info("orca prepared", { run_id: prepared.value.runId });
 
+if (!cfg.chimera) {
+	logger.warn("chimera images disabled", {
+		reason:
+			"CHIMERA_URL / CHIMERA_ACCESS_CLIENT_ID / CHIMERA_ACCESS_CLIENT_SECRET",
+	});
+}
+// chimera の service token は受付だけが持つ。席の Claude には seat-env.sh が渡さない
+const collectAttachments = createAttachmentCollector({
+	chimera: cfg.chimera
+		? createChimeraImages({
+				baseUrl: cfg.chimera.url,
+				clientId: cfg.chimera.clientId,
+				clientSecret: cfg.chimera.clientSecret,
+			})
+		: null,
+	logger,
+});
+
 const intake = createIntake({
 	discord,
 	orca,
@@ -127,6 +149,7 @@ const intake = createIntake({
 	approvals,
 	ledger,
 	summarize,
+	collectAttachments,
 	remember: async (summary) => {
 		if (!cfg.memory) return;
 		const out = await spawnExec(

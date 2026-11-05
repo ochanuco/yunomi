@@ -1,8 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { ok } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import { openApprovalStore } from "./approval-store.ts";
+import {
+	type ChimeraImages,
+	createAttachmentCollector,
+} from "./attachments.ts";
 import { grantPathOf, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import {
@@ -35,11 +45,13 @@ const setup = async (
 		seatLimit?: number;
 		stateDir?: string;
 		orca?: ReturnType<typeof fakeOrca>;
+		seatsDir?: string;
+		chimera?: ChimeraImages;
 	} = {},
 ) => {
 	const stateDir = opts.stateDir ?? tempDir();
 	const d = fakeDiscord();
-	const o = opts.orca ?? fakeOrca();
+	const o = opts.orca ?? fakeOrca(opts.seatsDir);
 	let clock = T0.getTime();
 	const remembered: string[] = [];
 	const standup: { text: string; blocked: number }[] = [];
@@ -53,6 +65,10 @@ const setup = async (
 		approvals: await openApprovalStore(stateDir),
 		ledger,
 		summarize: vi.fn(async () => ok("請求書の整理")),
+		collectAttachments: createAttachmentCollector({
+			chimera: opts.chimera ?? null,
+			logger: silentLogger,
+		}),
 		remember: async (s) => {
 			remembered.push(s);
 		},
@@ -614,6 +630,75 @@ describe("裏の作業を待つ席", () => {
 		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
 	});
 
+	it("裏の作業を待つ間の書き込みには、最後の途中経過を添えて作業中と即答し、席にも渡す", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "status",
+				dispatchId: seat.dispatchId,
+				body: "描画を待っています。\n5 分ほどです。",
+			}),
+		);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "escalation",
+				dispatchId: seat.dispatchId,
+				stopReason: "finished",
+				body: tail("✻ done · 1 shell still running"),
+			}),
+		);
+		await s.intake.handle(say("p1", "止まってない？"));
+		expect(s.d.sentTo("p1").at(-1)).toBe(
+			"作業中です。（描画を待っています。 5 分ほどです。）",
+		);
+		const [sent] = s.o.opsOf("send") as { body: string }[];
+		expect(sent?.body).toContain("手が空いたら status で答え");
+		expect(sent?.body).toContain("止まってない？");
+		// 席が答えるまでの次の書き込みにも即答する
+		await s.intake.handle(say("p1", "まだ？"));
+		expect(s.d.sentTo("p1").at(-1)).toBe(
+			"作業中です。（描画を待っています。 5 分ほどです。）",
+		);
+		expect(s.seats.get("p1")?.status).toBe("working");
+	});
+
+	it("途中経過が無ければ、いまやっていることは省く。席が報告したら即答はやめる", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "escalation",
+				dispatchId: seat.dispatchId,
+				stopReason: "finished",
+				body: tail("· 2 shells ·"),
+			}),
+		);
+		await s.intake.handle(say("p1", "どう？"));
+		expect(s.d.sentTo("p1")).toEqual(["作業中です。"]);
+		const current = s.seats.get("p1");
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: current?.dispatchId ?? null,
+				body: "A と B のどちらにしますか",
+			}),
+		);
+		await s.intake.handle(say("p1", "A で"));
+		expect(s.d.sentTo("p1")).toEqual([
+			"作業中です。",
+			"A と B のどちらにしますか",
+		]);
+	});
+
+	it("裏の作業を待っていない席には即答しない", async () => {
+		const s = await setup();
+		await openPost(s);
+		await s.intake.handle(say("p1", "ついでに C も"));
+		expect(s.d.sentTo("p1")).toEqual([]);
+		expect(s.o.opsOf("send")).toHaveLength(1);
+	});
+
 	it("裏の作業が残っているかを端末の末尾から見分ける", () => {
 		expect(backgroundRunning(tail("✻ done · 1 shell still running"))).toBe(
 			true,
@@ -706,5 +791,78 @@ describe("起動し直して", () => {
 		await s.intake.handle(say("p9", "起動し直して"));
 		expect(s.o.opsOf("stopSeat")).toEqual([]);
 		expect(s.o.opsOf("startSeat")).toHaveLength(1);
+	});
+});
+
+describe("席の返事の添付", () => {
+	const seatWithOut = async (chimera?: ChimeraImages) => {
+		const root = tempDir();
+		const s = await setup({ seatsDir: root, ...(chimera ? { chimera } : {}) });
+		const seat = await openPost(s);
+		const out = join(seat.path ?? "", "out");
+		mkdirSync(out, { recursive: true });
+		writeFileSync(join(out, "shot.png"), "png");
+		writeFileSync(join(root, "secret.txt"), "secret");
+		symlinkSync(join(root, "secret.txt"), join(out, "link.txt"));
+		return { s, seat };
+	};
+
+	it("worker_done の添付の行を本文から外して投稿に付け、状態の行も読む", async () => {
+		const { s, seat } = await seatWithOut();
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				outcome: "succeeded",
+				body: "直しました。\n添付: out/shot.png\n状態: 完了\n添付: out/link.txt",
+			}),
+		);
+		expect(s.d.sent.filter((m) => m.channelId === "p1")).toEqual([
+			{
+				channelId: "p1",
+				content:
+					"直しました。\n\n添付できなかったもの:\n- out/link.txt（out/ の外を指している）",
+				files: ["shot.png"],
+			},
+		]);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-done"]);
+	});
+
+	it("ask と status の添付も付け、chimera の行は chimera から取って付ける", async () => {
+		const chimera = vi.fn(async (id: string) =>
+			ok({
+				name: `${id}.png`,
+				contentType: "image/png",
+				data: new Uint8Array([1]),
+			}),
+		);
+		const { s, seat } = await seatWithOut(chimera);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "status",
+				dispatchId: seat.dispatchId,
+				body: "1 枚目です。\nchimera: abc123",
+			}),
+		);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか\nchimera: abc123\n添付: out/shot.png\n添付: ../secret.txt",
+			}),
+		);
+		const posted = s.d.sent.filter((m) => m.channelId === "p1");
+		expect(posted[0]).toEqual({
+			channelId: "p1",
+			content: "1 枚目です。",
+			files: ["abc123.png"],
+		});
+		expect(posted[1]?.content).toBe(
+			"どちらにしますか\n\n添付できなかったもの:\n- ../secret.txt（out/ の外のパス）",
+		);
+		expect(posted[1]?.files).toEqual(["abc123.png", "shot.png"]);
+		// 席が覚える質問は添付の行を外した本文
+		expect(s.seats.get("p1")?.question).toBe(posted[1]?.content);
+		expect(chimera).toHaveBeenCalledTimes(2);
 	});
 });

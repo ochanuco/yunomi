@@ -40,6 +40,10 @@ export type Seat = {
 	queuedAt: Date | null;
 	/** 朝会の席。終わったら決めてほしいことを投稿にする。 */
 	standup: boolean;
+	/** 席の Claude が裏の shell やタイマーを待つためにターンを終えている。 */
+	background: boolean;
+	/** 席の Claude が最後に送った途中経過。持ち主に「いまやっていること」として返す。 */
+	lastStatus: string | null;
 };
 
 const dateSchema = v.pipe(
@@ -60,6 +64,8 @@ const seatSchema = v.object({
 	pending: v.array(v.string()),
 	queued_at: dateSchema,
 	standup: v.boolean(),
+	background: v.optional(v.boolean(), false),
+	last_status: v.optional(v.nullable(v.string()), null),
 });
 
 const fileSchema = v.object({
@@ -92,6 +98,8 @@ export const newSeat = (threadId: string, standup = false): Seat => ({
 	pending: [],
 	queuedAt: null,
 	standup,
+	background: false,
+	lastStatus: null,
 });
 
 /**
@@ -135,6 +143,8 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 				pending: s.pending,
 				queuedAt: s.queued_at,
 				standup: s.standup,
+				background: s.background,
+				lastStatus: s.last_status,
 			});
 		}
 	}
@@ -160,6 +170,8 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 						pending: s.pending,
 						queued_at: s.queuedAt?.getTime() ?? null,
 						standup: s.standup,
+						background: s.background,
+						last_status: s.lastStatus,
 					},
 				]),
 			),

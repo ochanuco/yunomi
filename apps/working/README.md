@@ -44,6 +44,8 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | 投稿への返事 | その席に渡す（`send`）。作業中なら席のターンの終わりに届く |
 | 席の質問（`ask`）、取り消せない操作で止まったとき | 投稿に書いてタグを `決めてほしい` にし、返事を答えとして返す（`reply`） |
 | 席の途中経過（`send --type status`） | そのまま投稿に書く。状態とタグは変えない |
+| 席が裏の作業を待っている間に投稿に書く | すぐ「作業中です。（最後の途中経過）」と返し、書き込みは席に渡す |
+| 席の返事（`ask`・`worker_done`・`status`）に `添付:` や `chimera:` の行がある | 行を本文から外し、席のファイルや chimera の元の画像を投稿に付ける |
 | 投稿に「起動し直して」と書く | 席の Claude を止め、同じ worktree で `--continue` で起こす（コネクタの認証を足したあとなどに使う） |
 | 席の完了報告（`worker_done`） | 投稿に書いてタグを `完了` にし、記憶に 1 行残し、席を閉じる |
 | 完了のあとにまた書く | 同じ投稿に新しい席を作り、これまでのやりとり（最大 100 件）を渡す |
@@ -61,6 +63,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 席を始められなかったときは、止まった所（作業場所の確認、Claude の起動、Orca の席の作成など）を短く投稿に書く。
 - 受付は `orchestration check --wait` で席からのメッセージを待ち続ける。受付が落ちている間に届いたものも、次に起動したときに受け取る。
 - 席の Claude が `worker_done` を送らずにターンを終えたとき、Orca の知らせ（escalation）に付く端末の末尾に裏で動いている shell やタスク（「1 shell still running」など）が出ていれば、待っているだけとみなして投稿に書かない。それ以外は「作業が途中で止まりました」と書いて `決めてほしい` にする。
+- 裏の作業を待っている席の投稿に持ち主が書くと、受付はすぐ「作業中です。（いまやっていること）」と返す。いまやっていることは席の Claude が最後に送った途中経過（`status`）で、改行を詰めて 200 字で切る。無ければ「作業中です。」だけにする。書き込みは、手が空いたら `status` で答えるよう添えて席に渡す。席が質問か報告を送るか、裏の作業なしでターンを終えるまで、この即答を続ける。
 - 「起動し直して」「再起動して」（全角・末尾の句点は許す）だけの返事は、席の Claude への返事にせず起動し直す。席が無ければふつうの返事として扱う。
 - 同時に Claude を動かしておく席は `SEAT_LIMIT`（既定は 6）まで。上限を超えた投稿には「順番待ち」と書き、空いたら古い順に始める。止めた席と順番待ちの席は数えない。
 - `決めてほしい` のまま `SEAT_SLEEP_AFTER_MINUTES`（既定は 120 分）たった席は、Claude だけ止める（worktree と会話は残す）。返事が来たら、その worktree で `claude --permission-mode auto --continue` の端末を作って `worker-start --terminal` で渡し、前の会話のまま起こす。
@@ -77,6 +80,20 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 
 仕事のしかたには、投稿への返事は `worker_done` の本文に書くこと、途中で聞きたいことは `ask` で聞くこと、本文の最後の行に状態を書くことを入れてある。
 
+### 席の返事の添付
+
+席の Claude が `ask`・`worker_done`・`status` の本文に次の行を書くと、受付は行を本文から外し、ファイルを投稿のメッセージに付ける。コードブロックの中の行は本文のまま残す。`worker_done` の状態の行は、添付の行を外したあとの最後の行として読む。
+
+| 行 | 付けるもの |
+| --- | --- |
+| `添付: out/<ファイル名>` | 席の worktree の直下の `out/` にあるファイル |
+| `chimera: <short_id>` | chimera の `/g/<short_id>/image` から取った元の PNG |
+
+- `out/` の外のパス（絶対パス、`..` で外に出るもの）と、実体が worktree の `out/` の外にあるシンボリックリンクは付けない。
+- Discord の上限（1 件に 10 個、1 ファイル 10 MB、1 件の合計 24 MB）を超えるもの、無いファイル、取れなかった画像は付けず、本文の最後に「添付できなかったもの」として理由と一緒に書く。同じ名前のファイルには番号を付ける。
+- chimera は Cloudflare Access の後ろにある。受付は `CHIMERA_ACCESS_CLIENT_ID` / `CHIMERA_ACCESS_CLIENT_SECRET` を `CF-Access-Client-Id` / `CF-Access-Client-Secret` に載せ、User-Agent（`yunomi-working/1.0`）を明示して取る。転送（Access のログイン画面）や画像でない応答は失敗として扱う。`CHIMERA_URL` と service token のどれかが欠けていれば、`chimera:` の行は「受付に chimera の設定が無い」と書く。
+- 使い方は `WORKING_INSTRUCTIONS` に書いてある（chimera で描いたら short_id を返事に書く）。
+
 ### 席の Claude の権限
 
 席の Claude は、持ち主が手元で使うセッションと同じく Claude Code の auto モード（`--permission-mode auto`）で動く。取り消せない操作や外に出る操作を止めるかは、Claude Code の自動の判定が決める。席に話しかけられるのは持ち主だけ（`WORKING_OWNER_DISCORD_USER_IDS`）なので、投稿で明示的に頼んだ操作は持ち主の意思として扱われ、main への push やマージも聞かずに実行される。`main` への push やマージを止めたいときは、GitHub のブランチ保護とトークンの権限で止める。
@@ -89,7 +106,7 @@ managed settings（`/etc/claude-code/managed-settings.json`、root の持ち物�
 
 hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ先をその投稿にする。
 
-席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR`、mise・uv・pnpm の置き場所だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口の service token は渡さない。
+席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR`、mise・uv・pnpm の置き場所だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口と chimera の service token は渡さない。
 
 ### 席のビルドとテスト
 
@@ -162,6 +179,8 @@ Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は 
 | `GIT_AUTHOR_NAME` など | いいえ | 席の Claude の commit の作者。`GIT_AUTHOR_*` と `GIT_COMMITTER_*` を渡す |
 | `YUNOMI_URL` | いいえ | Worker の URL。`yunomi-memory` が Working の記憶の口（`/v1/partners/:partnerId/working/memory`）を呼ぶ |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | いいえ | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる。席の Claude には渡さない |
+| `CHIMERA_URL` | いいえ | chimera の URL。`chimera:` の行の画像を取る |
+| `CHIMERA_ACCESS_CLIENT_ID` / `CHIMERA_ACCESS_CLIENT_SECRET` | いいえ | chimera の Access service token。受付だけが使い、席の Claude には渡さない |
 | `MEMORY_BIN` | いいえ | 朝会で記憶を読む CLI。既定は `yunomi-memory` |
 | `MAC_STATE_TOKEN` | いいえ | Mac と共有するトークン。設定したときだけ席の状態の受け口を開く |
 | `MAC_STATE_PORT` | いいえ | 席の状態の受け口のポート。既定は `8090` |
