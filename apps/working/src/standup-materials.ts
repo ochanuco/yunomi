@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { Exec } from "./claude-cli.ts";
+import type { Exec } from "./exec.ts";
 import type { Logger } from "./logger.ts";
 import type { MacStateStore } from "./mac-state.ts";
 

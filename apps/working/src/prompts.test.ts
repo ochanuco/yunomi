@@ -3,20 +3,20 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	acceptTitle,
-	buildSystemPrompt,
+	buildSeatPreamble,
 	WORKING_INSTRUCTIONS,
 } from "./prompts.ts";
 
 const handoff = join(import.meta.dirname, "..", "handoff");
 
-describe("buildSystemPrompt", () => {
+describe("buildSeatPreamble", () => {
 	it("人格、仕事のしかた、引き継ぎの手順、申し送りの雛形の順に並べる", () => {
 		const handoffPrompt = readFileSync(join(handoff, "prompt.md"), "utf8");
 		const issueTemplate = readFileSync(
 			join(handoff, "issue-template.md"),
 			"utf8",
 		);
-		const text = buildSystemPrompt({
+		const text = buildSeatPreamble({
 			persona: "あなたは人格である。\n",
 			handoffPrompt,
 			issueTemplate,

@@ -13,7 +13,7 @@ try {
 	) {
 		throw new Error("hook input is malformed");
 	}
-	const run = guardRunFromEnv(process.env);
+	const run = guardRunFromEnv(process.env, input.cwd);
 	const d = decide(input, run, createLedger(run.guardDir));
 	process.stdout.write(
 		JSON.stringify({

@@ -1,0 +1,266 @@
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import type { Exec } from "./exec.ts";
+import { silentLogger } from "./logger.ts";
+import { createOrcaCli } from "./orca.ts";
+import { tempDir } from "./test-support.ts";
+
+type Reply = { code?: number; stdout?: unknown; stderr?: string };
+
+/** orca-ide のモック。コマンドの頭の 2 語で応答を引く。 */
+const fakeExec = (
+	table: Record<string, Reply | ((args: readonly string[]) => Reply)>,
+) =>
+	vi.fn<Exec>(async (bin, args) => {
+		const key = bin === "git" ? "git" : args.slice(0, 2).join(" ");
+		const hit = table[key];
+		const r =
+			typeof hit === "function"
+				? hit(args)
+				: (hit ?? { stdout: { ok: true, result: {} } });
+		return {
+			code: r.code ?? 0,
+			stdout:
+				typeof r.stdout === "string"
+					? r.stdout
+					: JSON.stringify(r.stdout ?? {}),
+			stderr: r.stderr ?? "",
+		};
+	});
+
+const setup = (table: Parameters<typeof fakeExec>[0]) => {
+	const root = tempDir();
+	const seatsRepo = join(root, "seats");
+	mkdirSync(join(seatsRepo, ".git"), { recursive: true });
+	const exec = fakeExec({
+		"repo list": {
+			stdout: { ok: true, result: { repos: [{ id: "r1", path: seatsRepo }] } },
+		},
+		"terminal list": { stdout: { ok: true, result: { terminals: [] } } },
+		"terminal create": {
+			stdout: { ok: true, result: { terminal: { handle: "rx" } } },
+		},
+		"orchestration run-create": {
+			stdout: { ok: true, result: { runId: "run-new" } },
+		},
+		...table,
+	});
+	const orca = createOrcaCli({
+		bin: "orca-ide",
+		exec,
+		env: { HOME: "/h" },
+		seatsRepo,
+		seatsDir: join(root, "ws"),
+		specDir: join(root, "specs"),
+		logger: silentLogger,
+	});
+	const argsOf = (cmd: string) =>
+		exec.mock.calls
+			.filter(([, a]) => a.slice(0, 2).join(" ") === cmd)
+			.map(([, a]) => a);
+	return { orca, exec, argsOf, seatsRepo };
+};
+
+describe("createOrcaCli", () => {
+	it("prepare は前の受付の端末を閉じ、新しい受付の端末で Run を引き継ぐ", async () => {
+		const t = setup({
+			"orchestration run-use": {
+				stdout: { ok: true, result: { runId: "run1" } },
+			},
+		});
+		const r = await t.orca.prepare({ runId: "run1", reception: "rx-old" });
+		expect(r).toEqual({ ok: true, value: { runId: "run1", reception: "rx" } });
+		expect(t.argsOf("terminal close")[0]).toContain("rx-old");
+		expect(t.argsOf("terminal create")[0]).toEqual(
+			expect.arrayContaining([
+				"--worktree",
+				`path:${t.seatsRepo}`,
+				"--command",
+				"sleep infinity",
+			]),
+		);
+		expect(t.argsOf("orchestration run-use")[0]).toEqual(
+			expect.arrayContaining(["--id", "run1", "--from", "rx"]),
+		);
+		expect(t.argsOf("orchestration run-create")).toEqual([]);
+	});
+
+	it("Run を引き継げなければ作り直す", async () => {
+		const t = setup({
+			"orchestration run-use": {
+				code: 1,
+				stdout: { ok: false, error: { code: "not_found", message: "no run" } },
+			},
+		});
+		const r = await t.orca.prepare({ runId: "gone", reception: null });
+		expect(r.ok && r.value.runId).toBe("run-new");
+	});
+
+	it("席は空の git リポジトリから新しい worktree を作り、spec はファイルで渡す", async () => {
+		let spec = "";
+		const t = setup({
+			"orchestration worker-start": (args) => {
+				const file = args[args.indexOf("--spec-file") + 1] ?? "";
+				spec = readFileSync(file, "utf8");
+				return {
+					stdout: {
+						ok: true,
+						result: {
+							dispatchId: "d1",
+							terminal: "t1",
+							workspace: "r1::/ws/seat-p1",
+						},
+					},
+				};
+			},
+		});
+		await t.orca.prepare({ runId: null, reception: null });
+		const r = await t.orca.startSeat({
+			name: "seat-p1",
+			title: "件名",
+			spec: "頼みます",
+		});
+		expect(r).toEqual({
+			ok: true,
+			value: { dispatchId: "d1", terminal: "t1", path: "/ws/seat-p1" },
+		});
+		expect(spec).toBe("頼みます");
+		expect(t.argsOf("orchestration worker-start")[0]).toEqual(
+			expect.arrayContaining([
+				"--from",
+				"rx",
+				"--run",
+				"run-new",
+				"--worktree",
+				"new-top-level",
+				"--repo",
+				"id:r1",
+				"--name",
+				"seat-p1",
+				"--agent",
+				"claude",
+			]),
+		);
+	});
+
+	it("止めた席は claude --continue の端末を作って渡し、前の会話のまま起こす", async () => {
+		const t = setup({
+			"terminal create": (args) => ({
+				stdout: {
+					ok: true,
+					result: {
+						terminal: {
+							handle: args.includes("claude --continue") ? "t9" : "rx",
+						},
+					},
+				},
+			}),
+			"orchestration worker-start": {
+				stdout: {
+					ok: true,
+					result: {
+						dispatchId: "d9",
+						terminal: "t9",
+						workspace: "r1::/ws/seat-p1",
+					},
+				},
+			},
+		});
+		await t.orca.prepare({ runId: null, reception: null });
+		const r = await t.orca.resumeSeat({
+			path: "/ws/seat-p1",
+			title: "件名",
+			spec: "続き",
+		});
+		expect(r.ok && r.value.dispatchId).toBe("d9");
+		expect(t.argsOf("orchestration worker-start")[0]).toEqual(
+			expect.arrayContaining([
+				"--terminal",
+				"t9",
+				"--worktree",
+				"path:/ws/seat-p1",
+			]),
+		);
+		expect(t.argsOf("orchestration worker-start")[0]).not.toContain("--agent");
+	});
+
+	it("届いたメッセージを読み、失敗は OrcaFailed にする", async () => {
+		const t = setup({
+			"orchestration check": {
+				stdout: {
+					ok: true,
+					result: {
+						messages: [
+							{
+								id: "m1",
+								type: "worker_done",
+								body: "済み",
+								payload: { dispatchId: "d1", outcome: "succeeded" },
+							},
+							{
+								id: "m2",
+								type: "escalation",
+								body: "x",
+								payload: { dispatchId: "d1", stopReason: "finished" },
+							},
+						],
+					},
+				},
+			},
+			"orchestration reply": { code: 1, stdout: "", stderr: "error: boom" },
+		});
+		await t.orca.prepare({ runId: null, reception: null });
+		const r = await t.orca.waitMessages(1000);
+		expect(r.ok && r.value).toEqual([
+			{
+				id: "m1",
+				type: "worker_done",
+				subject: "",
+				body: "済み",
+				dispatchId: "d1",
+				outcome: "succeeded",
+				stopReason: null,
+			},
+			{
+				id: "m2",
+				type: "escalation",
+				subject: "",
+				body: "x",
+				dispatchId: "d1",
+				outcome: null,
+				stopReason: "finished",
+			},
+		]);
+		expect(t.argsOf("orchestration check")[0]).toEqual(
+			expect.arrayContaining([
+				"--terminal",
+				"rx",
+				"--run",
+				"run-new",
+				"--wait",
+			]),
+		);
+		const failed = await t.orca.reply({ messageId: "q", body: "a" });
+		expect(failed).toEqual({
+			ok: false,
+			error: {
+				type: "OrcaFailed",
+				command: "orchestration reply",
+				reason: "error: boom",
+			},
+		});
+	});
+
+	it("席を止めたあと端末が残っていれば失敗にする", async () => {
+		const t = setup({
+			"terminal list": {
+				stdout: { ok: true, result: { terminals: [{ handle: "t1" }] } },
+			},
+		});
+		const r = await t.orca.stopSeat({ dispatchId: "d1", terminal: "t1" });
+		expect(r.ok).toBe(false);
+		expect(t.argsOf("orchestration worker-stop")).toHaveLength(1);
+		expect(t.argsOf("terminal close")[0]).toContain("t1");
+	});
+});
