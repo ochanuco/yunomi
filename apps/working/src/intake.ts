@@ -43,6 +43,7 @@ import {
 	type SeatLabel,
 	type SeatStore,
 } from "./seat-store.ts";
+import type { RunKind } from "./standup-timer.ts";
 import {
 	replaceStatusTag,
 	takeStatus,
@@ -72,8 +73,12 @@ export type IntakeDeps = {
 	collectAttachments: AttachmentCollector;
 	/** 終わった仕事を、席を受け持ったパートナーの記憶に 1 行残す。 */
 	remember: (summary: string, partner: PartnerId) => Promise<void>;
-	/** 朝会の席が返した決めてほしいことを投稿にする。 */
-	standupDone: (text: string, blocked: readonly Pending[]) => Promise<void>;
+	/** 朝会か見回りの席が返した決めてほしいことを投稿にする。 */
+	standupDone: (
+		text: string,
+		blocked: readonly Pending[],
+		kind: RunKind,
+	) => Promise<void>;
 	/** 新しい席に最初に渡す前置き（人格、仕事のしかた、引き継ぎの指示）。 */
 	preamble: string;
 	botUserId: string;
@@ -115,7 +120,11 @@ const STOPPED_TEXT =
 const RESTARTED_TEXT =
 	"受付を作り直したので、作業が途中で止まりました。返事をくれれば、そこから続けます。";
 const STANDUP_NO_ASK =
-	"朝会では持ち主に聞けない。聞きたいことは決めてほしいことに入れて、JSON で返す。";
+	"朝会と見回りでは持ち主に聞けない。聞きたいことは決めてほしいことに入れて、JSON で返す。";
+
+/** 朝会と見回りの席は、席の ID の頭で見分ける。受付が作り直されても分かる。 */
+const runKindOf = (seat: Seat): RunKind =>
+	seat.threadId.startsWith("patrol-") ? "patrol" : "standup";
 
 /**
  * 席を始められなかったときに投稿に書く文。持ち主が次に何をすればよいか分かるよう、止まった所だけを短く書く。
@@ -177,8 +186,8 @@ export type Intake = {
 	handle: (envelope: DiscordMessageCreatedEnvelope) => Promise<void>;
 	/** 席から届いたメッセージ（質問、完了の報告、止まった知らせ）を投稿に運ぶ。 */
 	onSeatMessage: (msg: SeatMessage) => Promise<void>;
-	/** 朝会の席を作る。席の名前にする ID を返す。 */
-	startStandup: (spec: string) => Promise<string>;
+	/** 朝会か見回りの席を作る。席の名前にする ID を返す。 */
+	startStandup: (spec: string, kind?: RunKind) => Promise<string>;
 	/** 決めてほしいまま時間がたった席の Claude を止める。 */
 	sleepIdle: () => Promise<void>;
 	/** 起動時に、対応表と Orca の席を突き合わせる。 */
@@ -827,7 +836,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		expireGrant(threadId);
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
 		if (seat.standup) {
-			await deps.standupDone(msg.body, blocked);
+			await deps.standupDone(msg.body, blocked, runKindOf(seat));
 			await closeSeat(seat);
 			return;
 		}
@@ -943,7 +952,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		expireGrant(threadId);
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
 		if (seat.standup) {
-			await deps.standupDone("", blocked);
+			await deps.standupDone("", blocked, runKindOf(seat));
 			await closeSeat(seat);
 			return;
 		}
@@ -1186,8 +1195,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				else if (msg.type === "status") await onStatus(current, msg);
 			});
 		},
-		startStandup: async (spec) => {
-			const threadId = `standup-${randomUUID()}`;
+		startStandup: async (spec, kind = "standup") => {
+			const threadId = `${kind}-${randomUUID()}`;
 			await queue.run(threadId, () => openSeat(newSeat(threadId, true), spec));
 			return threadId;
 		},

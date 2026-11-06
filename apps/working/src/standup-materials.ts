@@ -8,7 +8,41 @@ export const LOGIN_EXPIRY_WARN_MS = 7 * 24 * 60 * 60 * 1000;
 const REPO_LIMIT = 20;
 const RENOVATE_REPO_LIMIT = 40;
 
-type Unavailable = { unavailable: string };
+export type Unavailable = { unavailable: string };
+
+export const failed = (x: unknown): x is Unavailable =>
+	typeof x === "object" && x !== null && "unavailable" in x;
+
+export type GithubPr = {
+	repo: string;
+	number: number;
+	title: string;
+	url: string;
+	draft: boolean;
+	author: string | null;
+	updated_at: Date | null;
+};
+export type Handoff = {
+	repo: string;
+	number: number;
+	title: string;
+	url: string;
+	picked: boolean;
+};
+export type WorkingPr = {
+	repo: string;
+	number: number;
+	title: string;
+	url: string;
+	branch: string;
+	draft: boolean;
+};
+export type RenovatePr = WorkingPr & {
+	onboarding: boolean;
+	ci: "success" | "failure" | "pending";
+	mergeable: string;
+	merge_state: string;
+};
 
 export type StandupMaterials = {
 	memory: unknown;
@@ -19,11 +53,14 @@ export type StandupMaterials = {
 		  }
 		| Unavailable;
 	github: {
-		open_prs: unknown[] | Unavailable;
-		failing_prs: unknown[] | Unavailable;
-		handoffs: unknown[] | Unavailable;
-		working_prs: unknown[] | Unavailable;
-		renovate_prs: unknown[] | Unavailable;
+		open_prs: GithubPr[] | Unavailable;
+		failing_prs: GithubPr[] | Unavailable;
+		handoffs: Handoff[] | Unavailable;
+		working_prs: WorkingPr[] | Unavailable;
+		/** repo ごとに引くので、取れなかった repo は `{repo, unavailable}` で入る。 */
+		renovate_prs:
+			| (RenovatePr | (Unavailable & { repo: string }))[]
+			| Unavailable;
 	};
 	claude_login: { expires_at: Date | null; expires_soon: boolean };
 };
@@ -176,9 +213,6 @@ export const gatherStandupMaterials = async (
 		}
 		return parsed.output;
 	};
-	const failed = (x: unknown): x is Unavailable =>
-		typeof x === "object" && x !== null && "unavailable" in x;
-
 	const owner = deps.githubOwner;
 	const prFields = "repository,number,title,url,isDraft,updatedAt,author";
 	const [memory, latest, openPrs, failingPrs, handoffs, auth] =
@@ -248,7 +282,7 @@ export const gatherStandupMaterials = async (
 			),
 		]);
 
-	const pr = (p: v.InferOutput<typeof searchPrSchema>[number]) => ({
+	const pr = (p: v.InferOutput<typeof searchPrSchema>[number]): GithubPr => ({
 		repo: p.repository.nameWithOwner,
 		number: p.number,
 		title: p.title,
@@ -259,7 +293,7 @@ export const gatherStandupMaterials = async (
 	});
 
 	// Working が出す PR は GH_TOKEN の人が dev/ ブランチから出したもの。search は head を返さないので、repo ごとに引く
-	let workingPrs: unknown[] | Unavailable;
+	let workingPrs: WorkingPr[] | Unavailable;
 	if (failed(openPrs)) {
 		workingPrs = openPrs;
 	} else {
@@ -305,7 +339,7 @@ export const gatherStandupMaterials = async (
 	}
 
 	// Renovate の PR は CI とコンフリクトの状態が要る。search はそれを返さないので、repo ごとに引く
-	let renovatePrs: unknown[] | Unavailable;
+	let renovatePrs: StandupMaterials["github"]["renovate_prs"];
 	if (failed(openPrs)) {
 		renovatePrs = openPrs;
 	} else {

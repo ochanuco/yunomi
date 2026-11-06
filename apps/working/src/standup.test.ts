@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ExecResult } from "./exec.ts";
 import { silentLogger } from "./logger.ts";
 import { openMacStateStore } from "./mac-state.ts";
+import type { PatrolSnapshot, PatrolStore } from "./patrol.ts";
 import { finishStandup, parseDecisions, startStandup } from "./standup.ts";
 import {
 	ciOf,
@@ -20,6 +21,7 @@ const NOW = new Date("2026-11-05T00:00:00Z");
 
 const materials = (
 	over: Partial<StandupMaterials["claude_login"]> = {},
+	github: Partial<StandupMaterials["github"]> = {},
 ): StandupMaterials => ({
 	memory: { facts: [] },
 	mac_state: { unavailable: "x" },
@@ -29,12 +31,34 @@ const materials = (
 		handoffs: [],
 		working_prs: [],
 		renovate_prs: [],
+		...github,
 	},
 	claude_login: {
 		expires_at: new Date("2026-12-01T00:00:00Z"),
 		expires_soon: false,
 		...over,
 	},
+});
+
+const memoryStore = (initial: PatrolSnapshot | null = null) => {
+	const store: PatrolStore & { saved: PatrolSnapshot | null } = {
+		saved: initial,
+		load: async () => store.saved,
+		save: async (s) => {
+			store.saved = s;
+		},
+	};
+	return store;
+};
+
+const failingPr = (number: number) => ({
+	repo: "ochanuco/yunomi",
+	number,
+	title: `PR ${number}`,
+	url: `https://github.com/ochanuco/yunomi/pull/${number}`,
+	draft: false,
+	author: "ochanuco",
+	updated_at: NOW,
 });
 
 const decisionsReply = (n: number) =>
@@ -66,6 +90,8 @@ describe("startStandup", () => {
 		const start = vi.fn(async (_spec: string) => "standup-1");
 		await startStandup({
 			deps: t.deps,
+			kind: "standup",
+			store: memoryStore(),
 			gather: async () => materials(),
 			preamble: "【前置き】",
 			start,
@@ -82,6 +108,8 @@ describe("startStandup", () => {
 		const t = setup();
 		await startStandup({
 			deps: t.deps,
+			kind: "standup",
+			store: memoryStore(),
 			gather: async () =>
 				materials({
 					expires_at: new Date("2026-11-08T00:00:00Z"),
@@ -92,6 +120,87 @@ describe("startStandup", () => {
 		});
 		expect(t.discord.posts[0]?.name).toContain("ログイン");
 		expect(t.discord.posts[0]?.content).toContain("2026-11-08 09:00 JST");
+	});
+});
+
+describe("startStandup の見回り", () => {
+	const patrol = (
+		store: PatrolStore,
+		github: Partial<StandupMaterials["github"]>,
+		start = vi.fn(async (_spec: string, _kind: string) => "patrol-1"),
+	) =>
+		startStandup({
+			deps: setup().deps,
+			kind: "patrol",
+			store,
+			gather: async () =>
+				materials(
+					{ expires_at: new Date("2026-11-06T00:00:00Z"), expires_soon: true },
+					github,
+				),
+			preamble: "",
+			start,
+		}).then((id) => ({ id, start }));
+
+	it("初めての回は覚えるだけで、席を立てない", async () => {
+		const store = memoryStore();
+		const r = await patrol(store, { failing_prs: [failingPr(1)] });
+		expect(r.id).toBeNull();
+		expect(r.start).not.toHaveBeenCalled();
+		expect(store.saved?.failing_prs).toEqual({ "ochanuco/yunomi#1": "" });
+	});
+
+	it("前の回から変わっていなければ席を立てない", async () => {
+		const store = memoryStore();
+		await patrol(store, { failing_prs: [failingPr(1)] });
+		const r = await patrol(store, { failing_prs: [failingPr(1)] });
+		expect(r.start).not.toHaveBeenCalled();
+	});
+
+	it("新しく落ちた PR だけを材料にして席を立て、ログインの期限は投稿しない", async () => {
+		const store = memoryStore();
+		await patrol(store, { failing_prs: [failingPr(1)] });
+		const t = setup();
+		const start = vi.fn(async (_spec: string, _kind: string) => "patrol-1");
+		await startStandup({
+			deps: t.deps,
+			kind: "patrol",
+			store,
+			gather: async () =>
+				materials(
+					{ expires_at: new Date("2026-11-06T00:00:00Z"), expires_soon: true },
+					{ failing_prs: [failingPr(1), failingPr(2)] },
+				),
+			preamble: "",
+			start,
+		});
+		const [spec, kind] = start.mock.calls[0] ?? [];
+		expect(kind).toBe("patrol");
+		expect(spec).toContain("見回りをする");
+		expect(spec).toContain("pull/2");
+		expect(spec).not.toContain('pull/1"');
+		expect(t.discord.posts).toEqual([]);
+		// 同じ件は次の回では拾わない
+		const again = await patrol(store, {
+			failing_prs: [failingPr(1), failingPr(2)],
+		});
+		expect(again.start).not.toHaveBeenCalled();
+	});
+
+	it("席を立てられなければ覚えず、次の回で拾い直す", async () => {
+		const store = memoryStore();
+		await patrol(store, {});
+		await expect(
+			patrol(
+				store,
+				{ failing_prs: [failingPr(3)] },
+				vi.fn(async () => {
+					throw new Error("orca down");
+				}),
+			),
+		).rejects.toThrow("orca down");
+		const r = await patrol(store, { failing_prs: [failingPr(3)] });
+		expect(r.start).toHaveBeenCalledOnce();
 	});
 });
 
@@ -130,6 +239,18 @@ describe("finishStandup", () => {
 		expect(r.posted).toEqual(["thread1"]);
 		expect(t.discord.posts[0]?.content).toContain("gh pr merge 3");
 		expect(t.approvals.get("thread1")?.operations).toEqual([op]);
+	});
+
+	it("見回りの投稿は時刻で、止めた操作の件名も見回りにする", async () => {
+		const t = setup();
+		await finishStandup(
+			t.deps,
+			decisionsReply(1),
+			[{ operation: { tool: "Bash", target: "gh pr merge 3" }, reason: "x" }],
+			"patrol",
+		);
+		expect(t.discord.posts[0]?.content).toContain("09:00 の見回りから");
+		expect(t.discord.posts[1]?.name).toBe("見回りで止めた操作");
 	});
 });
 

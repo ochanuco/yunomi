@@ -43,6 +43,7 @@ describe("loadConfig", () => {
 					enabled: true,
 					at: { hour: 9, minute: 0 },
 					githubOwner: "ochanuco",
+					heartbeatIntervalMs: 2 * 3600_000,
 				},
 			},
 		});
@@ -89,8 +90,19 @@ describe("loadConfig", () => {
 			enabled: false,
 			at: { hour: 8, minute: 30 },
 			githubOwner: "ochanuco",
+			heartbeatIntervalMs: 2 * 3600_000,
 		});
 		expect(loadConfig({ ...base, STANDUP_TIME: "25:00" }).ok).toBe(false);
+		const hourly = loadConfig({ ...base, HEARTBEAT_INTERVAL_MINUTES: "60" });
+		expect(hourly.ok && hourly.value.standup.heartbeatIntervalMs).toBe(
+			3600_000,
+		);
+		const off = loadConfig({ ...base, HEARTBEAT_ENABLED: "false" });
+		expect(off.ok && off.value.standup.heartbeatIntervalMs).toBeNull();
+		// 短すぎる間隔は席が重なりトークン代もかさむので受けない
+		expect(loadConfig({ ...base, HEARTBEAT_INTERVAL_MINUTES: "10" }).ok).toBe(
+			false,
+		);
 		// service token が欠けていれば記憶の口は使わない
 		const partial = loadConfig({
 			...base,

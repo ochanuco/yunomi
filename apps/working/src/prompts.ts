@@ -205,22 +205,18 @@ export const wakeNote = (question: string | null) =>
 
 export const STANDUP_TITLE_LIMIT = 60;
 
-/** 朝会の席に渡す指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
-export const standupPrompt = (input: { now: Date; materials: string }) =>
-	`${clock(input.now)}
-朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
-
-- 材料: 記憶（memory）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR、Renovate の PR）。
-- 取り消せること（調べる、issue や PR にコメントする、dev/ ブランチで直して push する、yunomi-memory に残す）は、ここで済ませてよい。済ませたことは決めてほしいことに入れない。
+const SEAT_RULES = `- 取り消せること（調べる、issue や PR にコメントする、dev/ ブランチで直して push する、yunomi-memory に残す）は、ここで済ませてよい。済ませたことは決めてほしいことに入れない。
 - 取り消せない操作は実行しない。要るなら決めてほしいことに入れ、何をしたいかを書く。ただし Renovate の PR のマージは持ち主が許している（下）。
 - Renovate の PR（renovate_prs）は次のように片付ける。onboarding が true のもの（Renovate を入れる最初の PR）と draft は触らない。
   - ci が success で merge_state が CLEAN なら、\`gh pr merge <url>\` でマージする（repo で使えるなら --squash）。持ち主は「CI が通っているならマージしてよい」と言っている。
-  - mergeable が CONFLICTING なら、PR 本文の rebase のチェックボックス（\`<!-- rebase-check -->\` の付いた \`- [ ]\`）を \`- [x]\` にして Renovate に作り直させる。もう付いていて直っていなければ、ブランチを clone して base を merge し、コンフリクトを解いて同じブランチに push する（force push はしない）。CI が通れば次の朝会でマージする。
+  - mergeable が CONFLICTING なら、PR 本文の rebase のチェックボックス（\`<!-- rebase-check -->\` の付いた \`- [ ]\`）を \`- [x]\` にして Renovate に作り直させる。もう付いていて直っていなければ、ブランチを clone して base を merge し、コンフリクトを解いて同じブランチに push する（force push はしない）。CI が通れば次の回でマージする。
   - ci が failure なら、原因を調べ、直せるなら同じブランチに直しを push する。直せなければ、何が落ちていて何を決めてほしいかを決めてほしいことに入れる。
   - ci が pending のもの、merge_state が BLOCKED などで理由がわからないものは、様子を見る。
-  - マージしたものは決めてほしいことに入れず、yunomi-memory に done で残す。
-- 決めてほしいことは、持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。無い日は 0 件でよい。
-- Claude CLI のログインの期限は受付が見るので入れない。
+  - マージしたものは決めてほしいことに入れず、yunomi-memory に done で残す。`;
+
+const decisionsContract = (
+	materials: string,
+) => `- Claude CLI のログインの期限は受付が見るので入れない。
 - 1 件は 1 つの投稿になる。title は ${STANDUP_TITLE_LIMIT} 字以内の件名、body は投稿の本文（Discord で読める長さ。何を決めてほしいか、選択肢、関係する PR や issue の URL）。
 
 持ち主はまだ投稿を見ていないので、\`orca orchestration ask\` では聞かない。止められた操作も聞かずに、決めてほしいことに入れる。
@@ -231,12 +227,33 @@ export const standupPrompt = (input: { now: Date; materials: string }) =>
 \`\`\`
 
 --- 材料 ---
-${input.materials}
+${materials}
 --- ここまで ---`;
 
-/** 受付が朝会の投稿の最後に足す。 */
-export const standupPostFooter = (day: string) =>
-	`\n\n（${day} の朝会から。この投稿に返事をすると続きをします）`;
+/** 朝会の席に渡す指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
+export const standupPrompt = (input: { now: Date; materials: string }) =>
+	`${clock(input.now)}
+朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
+
+- 材料: 記憶（memory）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR、Renovate の PR）。
+${SEAT_RULES}
+- 決めてほしいことは、持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。無い日は 0 件でよい。
+${decisionsContract(input.materials)}`;
+
+/** 見回りの席に渡す指示。前の回から変わった件だけを渡す。 */
+export const patrolPrompt = (input: { now: Date; materials: string }) =>
+	`${clock(input.now)}
+見回りをする。朝会や前の見回りのあとに GitHub で変わったことだけを見る。持ち主はまだ投稿を見ていない。
+
+- 材料: 前の回から新しく出た件と状態が変わった件（changes。種類は open_prs、failing_prs、handoffs、working_prs、renovate_prs）、記憶（memory）、Mac の Orca の席の状態（mac_state）。
+- changes に無い件は前の回で見てあるので、触らず、決めてほしいことにも入れない。
+${SEAT_RULES}
+- 決めてほしいことは、changes の件のうち持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。たいていの回は 0 件になる。
+${decisionsContract(input.materials)}`;
+
+/** 受付が朝会と見回りの投稿の最後に足す。`from` は「2026-11-06 の朝会」「15:00 の見回り」など。 */
+export const standupPostFooter = (from: string) =>
+	`\n\n（${from}から。この投稿に返事をすると続きをします）`;
 
 export const loginExpiryDecision = (expiresAt: Date) => ({
 	title: "Claude CLI のログインの更新",
