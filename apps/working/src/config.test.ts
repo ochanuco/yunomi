@@ -45,8 +45,27 @@ describe("loadConfig", () => {
 					githubOwner: "ochanuco",
 					heartbeatIntervalMs: 2 * 3600_000,
 				},
+				activityLog: null,
 			},
 		});
+	});
+
+	it("活動ログはスレッドがあるときだけまとめ、時刻の既定は 23:30", () => {
+		const r = loadConfig({ ...base, ACTIVITY_LOG_THREAD_ID: "900" });
+		expect(r.ok && r.value.activityLog).toEqual({
+			threadId: "900",
+			at: { hour: 23, minute: 30 },
+		});
+		const early = loadConfig({
+			...base,
+			ACTIVITY_LOG_THREAD_ID: "900",
+			ACTIVITY_LOG_TIME: "08:00",
+		});
+		expect(early.ok && early.value.activityLog?.at).toEqual({
+			hour: 8,
+			minute: 0,
+		});
+		expect(loadConfig({ ...base, ACTIVITY_LOG_TIME: "8:00" }).ok).toBe(false);
 	});
 
 	it("Akarin の bot トークンがあれば読む", () => {

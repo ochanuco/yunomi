@@ -3,6 +3,12 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
+import {
+	gatherActivityPrs,
+	openActivityLog,
+	postActivityLog,
+	startDailyTimer,
+} from "./activity-log.ts";
 import { openApprovalStore } from "./approval-store.ts";
 import {
 	createAttachmentCollector,
@@ -139,6 +145,7 @@ const approvals = await openApprovalStore(cfg.stateDir);
 const ledger = createLedger(guardDirOf(cfg.stateDir));
 const macState = openMacStateStore(cfg.stateDir);
 const patrolStore = openPatrolStore(cfg.stateDir);
+const activityLog = openActivityLog(cfg.stateDir);
 const standupDeps = {
 	discord,
 	approvals,
@@ -212,6 +219,7 @@ const intake = createIntake({
 			logger.warn("memory write failed", { stderr: out.stderr.slice(0, 300) });
 		}
 	},
+	recordActivity: activityLog.record,
 	standupDone: async (text, blocked, kind) => {
 		await finishStandup(standupDeps, text, blocked, kind);
 	},
@@ -330,12 +338,42 @@ const standupTimer = cfg.standup.enabled
 		})
 	: null;
 
+const activityLogConfig = cfg.activityLog;
+const activityLogTimer = activityLogConfig
+	? startDailyTimer({
+			at: activityLogConfig.at,
+			run: () =>
+				postActivityLog({
+					log: activityLog,
+					gatherPrs: (since, until) =>
+						gatherActivityPrs({
+							exec: spawnExec,
+							env,
+							cwd: cfg.workDir,
+							owner: cfg.standup.githubOwner,
+							since,
+							until,
+							logger,
+						}),
+					discord,
+					threadId: activityLogConfig.threadId,
+					now: () => new Date(),
+					logger,
+				}),
+			logger,
+		})
+	: null;
+if (!activityLogConfig) {
+	logger.info("activity log disabled", { reason: "ACTIVITY_LOG_THREAD_ID" });
+}
+
 const shutdown = (signal: string) => {
 	logger.info("shutting down", { signal });
 	stopped = true;
 	clearInterval(sleepTimer);
 	repoMapSync.stop();
 	standupTimer?.stop();
+	activityLogTimer?.stop();
 	macStateServer?.close();
 	server.close();
 	process.exit(0);
