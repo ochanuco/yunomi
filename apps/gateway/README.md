@@ -30,6 +30,24 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
+## 2 つ目のパートナーの gateway
+
+パートナーごとに Discord の bot を分け、gateway も 1 つずつ動かす。Akarin の gateway は Yukarin のものと同じイメージで、環境変数だけを変える。
+
+| 名前 | Akarin の gateway での値 |
+| --- | --- |
+| `PARTNER_ID` | `akarin` |
+| `DISCORD_TOKEN` | Akarin の bot の token（Yukarin とは別の bot） |
+| `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の gateway と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
+| `WORK_CATEGORY_IDS` | Yukarin の gateway と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
+| `WORKING_URL` / `WORKING_TOKEN` | 渡さない。仕事カテゴリの発言を Working へ渡すのは Yukarin の gateway だけで、Akarin の gateway はその発言を捨てる（起動時に警告ログが 1 回出る） |
+| `OCHOKO_URL` / `AIVOICE_TOKEN` / `KUKICHA_URL` / `KUKICHA_TOKEN` / `OWNER_DISCORD_USER_ID` | Akarin はまだ声を持たないので渡さない |
+| `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
+
+Worker 側では、Akarin の bot の user id（`AKARIN_DISCORD_USER_ID`）と token（`AKARIN_DISCORD_BOT_TOKEN`）が要る（`apps/worker/README.md` の「もうひとりのパートナー」）。user id が無いと、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を第三者の発言として見分けない。
+
+どちらの gateway も、もうひとりの bot の発言を `is_bot=true` で自分のパートナーに中継する。どちらが返事をするかは Worker が決める。
+
 ## サーバーへの招待
 
 bot の権限は、招待 URL の `permissions` でサーバーごとに決まる。VC に入るには「接続」と「発言」が要り、無いと Discord は何も返さずに接続を無視する（Gateway のログには、30 秒後の `voice connection not ready` だけが出る）。招待済みのサーバーでも、同じ URL を開いて承認し直せば、bot のロールの権限が置き換わる。

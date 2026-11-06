@@ -90,6 +90,8 @@ const verdict = (over: Partial<JudgeVerdict> = {}) =>
 		invented_facts: false,
 		meta_talk: false,
 		used_cooling_down_joke: false,
+		misattributes_overheard: false,
+		acknowledges_overheard: false,
 		rationale: "テスト。",
 		...over,
 	});
@@ -379,6 +381,48 @@ describe("Tier 2 runner（Fake provider）", () => {
 		expect(all.violations.map((x) => `${x.scenario}:${x.metric}`)).toEqual([
 			"first-person-question:meta_talk_rate",
 		]);
+	});
+
+	it("横で聞いた話の取り違えは 1 回でも違反にし、聞いていたと分かる言い方の率は期待範囲で見る", async () => {
+		const reply = (over: Partial<JudgeVerdict>) => [
+			turn("reply", "横で聞いてました。混んでいたんですね。", 0),
+			verdict(over),
+		];
+		const report = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply({ misattributes_overheard: true }),
+				...reply({ misattributes_overheard: true }),
+				...reply({ misattributes_overheard: true }),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["overheard-acknowledged"]),
+			samples: 3,
+		});
+		expect(
+			report.scenarios[0]?.metrics.misattributed_overheard_rate,
+		).toMatchObject({ successes: 3, n: 3 });
+		expect(
+			report.violations.map((x) => `${x.scenario}:${x.metric}`).sort(),
+		).toEqual([
+			"overheard-acknowledged:misattributed_overheard_rate",
+			"overheard-acknowledged:overheard_acknowledged_rate",
+		]);
+
+		const good = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply({ acknowledges_overheard: true }),
+				...reply({ acknowledges_overheard: true }),
+				...reply({ acknowledges_overheard: true }),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["overheard-acknowledged"]),
+			samples: 3,
+		});
+		expect(good.violations).toEqual([]);
 	});
 
 	it("複数件の返事は、質問で終わるかを最後の 1 件で、judge を全文で見る", async () => {

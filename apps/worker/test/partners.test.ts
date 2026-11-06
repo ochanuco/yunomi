@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index.ts";
 import { partnerProfile, partnerProfiles } from "../src/partners.ts";
 import { listSnapshots } from "../src/snapshot-store.ts";
-import { BOT, llmOk, newScenario, T0, turn } from "./e2e/harness.ts";
+import { llmOk, newScenario, T0, turn } from "./e2e/harness.ts";
 import { envelopeBody, inbound, partnerStub } from "./helpers.ts";
 
 const AKARIN = "akarin";
@@ -18,7 +18,11 @@ const sendAs = async (partnerId: string, s: ReturnType<typeof newScenario>) => {
 		partnerId,
 		channelId: s.channelId,
 		author: s.author,
-		mentionedUserIds: [BOT],
+		mentionedUserIds: [
+			partnerId === AKARIN
+				? (env.AKARIN_DISCORD_USER_ID as string)
+				: env.PARTNER_DISCORD_USER_ID,
+		],
 		content: "あかりん、おはよう",
 	});
 	const res = await exports.default.fetch(

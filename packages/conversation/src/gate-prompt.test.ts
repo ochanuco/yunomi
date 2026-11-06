@@ -52,6 +52,29 @@ const all = (p: ReturnType<typeof buildGatePrompt>) =>
 	);
 
 describe("buildGatePrompt", () => {
+	it("もうひとりのパートナーの発言は bot ではなく、もうひとりのパートナーとして見せる", () => {
+		const text = all(
+			buildGatePrompt(
+				input({
+					recent: [
+						{
+							speaker: "紲星あかり",
+							text: "いますよ",
+							minutesAgo: 1,
+							isPartner: false,
+							isBot: true,
+							isOtherPartner: true,
+						},
+					],
+				}),
+			),
+		);
+		expect(text).toContain(
+			"紲星あかり（もうひとりのパートナー）（1 分前）: いますよ",
+		);
+		expect(text).not.toContain("（bot）");
+	});
+
 	it("判定基準・人物紹介・興味・直近ログ・間隔・新しい発言を渡す", () => {
 		const p = buildGatePrompt(input());
 		const text = all(p);

@@ -32,8 +32,12 @@ export default defineConfig(({ mode }) => {
 				ACCESS_AUD: bindings.text(r.accessAud),
 				// service token の common_name -> 呼び出し元。
 				ACCESS_CALLERS: bindings.json(r.accessCallers),
-				// メンション判定と自己発言の除外に使う。
+				// Yukarin の bot の user id。メンション判定と自己発言の除外に使う。
 				PARTNER_DISCORD_USER_ID: bindings.text(r.partnerDiscordUserId),
+				// Akarin の bot の user id。未設定（空）なら、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を見分けない。
+				AKARIN_DISCORD_USER_ID: bindings.text(
+					process.env.AKARIN_DISCORD_USER_ID ?? "",
+				),
 				// Admin API を許可する owner の email。
 				OWNER_EMAILS: bindings.json(listFromEnv("OWNER_EMAILS")),
 				// github_read が repo を省略されたときに読む repo。
@@ -73,6 +77,8 @@ export default defineConfig(({ mode }) => {
 							HOME_ASSISTANT_URL: bindings.secret(),
 							HOME_ENTITY_IDS: bindings.secret(),
 							OWNER_DISCORD_USER_ID: bindings.secret(),
+							// Akarin の bot の token。DISCORD_BOT_TOKEN（Yukarin）と同じく、返事の送信と添付の読み取りに使う。
+							AKARIN_DISCORD_BOT_TOKEN: bindings.secret(),
 						}
 					: {}),
 				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。

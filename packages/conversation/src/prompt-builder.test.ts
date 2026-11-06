@@ -172,6 +172,36 @@ describe("PromptBuilder", () => {
 		expect(task).toContain("声を出せないときは必ず false");
 	});
 
+	it("もうひとりのパートナーの発言に印を付け、その名前があるときだけ横で聞いた話の扱いを入れる", () => {
+		const plain = builder.build(baseInput());
+		expect(
+			plain.system.some((b) => b.text.includes("## もうひとりのパートナー")),
+		).toBe(false);
+
+		const input = baseInput();
+		input.recent = [
+			{
+				speaker: "結月ゆかり",
+				text: "お弁当は私が作ります",
+				otherPartner: true,
+			},
+		];
+		input.otherPartners = ["結月ゆかり"];
+		const built = builder.build(input);
+		expect(built.messages[0]?.content).toContain(
+			"結月ゆかり（もうひとりのパートナー）: お弁当は私が作ります",
+		);
+		const idx = built.system.findIndex((b) =>
+			b.text.startsWith("## もうひとりのパートナー"),
+		);
+		expect(built.system[idx - 1]?.text).toContain("## チャンネル・在席");
+		expect(built.system[idx]?.cache).toBe(false);
+		expect(built.system[idx]?.text).toContain("横で聞いていた話として扱う");
+		expect(built.system[idx]?.text).toContain(
+			"open_loops には、新着メッセージであなたに向けて話されたことだけを入れる",
+		);
+	});
+
 	it("同じ入力から同じプロンプトが決定的に出る", () => {
 		const a = builder.build(baseInput());
 		const b = builder.build(baseInput());

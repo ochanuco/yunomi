@@ -48,6 +48,19 @@ describe("toEnvelope", () => {
 		expect(toInboundMessage(r.value).ok).toBe(true);
 	});
 
+	it("もうひとりのパートナーの bot の発言は、is_bot を付けてこの gateway のパートナー宛てに中継する", () => {
+		const r = toEnvelope(
+			msg({ author: { id: "888", bot: true, displayName: "結月ゆかり" } }),
+			{ ...opts, partnerId: "akarin" },
+		);
+		expect(r.ok && r.value.partner_id).toBe("akarin");
+		expect(r.ok && r.value.payload.author).toEqual({
+			id: "888",
+			display_name: "結月ゆかり",
+			is_bot: true,
+		});
+	});
+
 	it("bot へのメンションを mentions に含める", () => {
 		const r = toEnvelope(msg({ mentionedUserIds: ["999", "5", "5"] }), opts);
 		expect(r.ok && r.value.payload.mentions).toEqual(["999", "5"]);

@@ -15,3 +15,9 @@ services:
     # Working 受付（apps/working/compose.example.yaml）に WORKING_URL=http://host.docker.internal:8180/events で届く
     extra_hosts:
       - host.docker.internal:host-gateway
+
+  # 2 つ目のパートナー（Akarin）。別の bot で、PARTNER_ID=akarin を渡し、WORKING_URL は渡さない
+  yunomi-gateway-akarin:
+    image: ghcr.io/ochanuco/yunomi-gateway:sha-0000000
+    restart: unless-stopped
+    env_file: .env.akarin

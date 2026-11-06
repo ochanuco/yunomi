@@ -49,7 +49,9 @@ export type RateKey =
 	| "open_loop_rate"
 	| "memory_candidate_rate"
 	| "opinion_shift_rate"
-	| "interest_up_rate";
+	| "interest_up_rate"
+	| "misattributed_overheard_rate"
+	| "overheard_acknowledged_rate";
 
 export type Metrics = {
 	samples_ok: number;
@@ -155,6 +157,12 @@ export const computeMetrics = (
 				s.interest_raised === null ? [] : [s.interest_raised],
 			),
 		),
+		misattributed_overheard_rate: rate(
+			judgedFlags(samples, (j) => j.misattributes_overheard),
+		),
+		overheard_acknowledged_rate: rate(
+			judgedFlags(samples, (j) => j.acknowledges_overheard),
+		),
 	};
 };
 
@@ -198,7 +206,8 @@ export const checkViolations = (
 			| "open_loop_rate"
 			| "memory_candidate_rate"
 			| "opinion_shift_rate"
-			| "interest_up_rate",
+			| "interest_up_rate"
+			| "overheard_acknowledged_rate",
 		range: { min: number; max: number } | undefined,
 	) => {
 		const ci = m[key];
@@ -210,6 +219,7 @@ export const checkViolations = (
 	inRange("memory_candidate_rate", e.memory_candidate_rate);
 	inRange("opinion_shift_rate", e.opinion_shift_rate);
 	inRange("interest_up_rate", e.interest_up_rate);
+	inRange("overheard_acknowledged_rate", e.overheard_acknowledged_rate);
 
 	const maxRate = (key: RateKey, max: number) => {
 		const ci = m[key];
@@ -224,6 +234,9 @@ export const checkViolations = (
 	}
 	if (e.must_not_invent_facts) maxRate("invented_facts_rate", 0);
 	if (e.joke_cooldown_respected) maxRate("cooling_down_joke_rate", 0);
+	if (e.must_not_misattribute_overheard) {
+		maxRate("misattributed_overheard_rate", 0);
+	}
 	maxRate("fanon_overuse_rate", 0.3);
 	maxRate("meta_talk_rate", 0.2);
 

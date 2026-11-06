@@ -5,7 +5,7 @@
 ## シナリオ
 
 `scenarios/*.yaml`（Yukarin）と `scenarios-akarin/*.yaml`（Akarin）に 1 ファイル 1 シナリオで書く（スキーマは `src/scenario.ts`）。呼び名や話し方が人格ごとに違うので、シナリオはパートナーごとに持つ。パートナーとシナリオの対応は `src/partners.ts`。
-入力会話（直近ログと新着メッセージ、メンションの有無）、関係・状態のプリセット、持ちネタの cooldown 状態、期待する傾向を持つ。
+入力会話（直近ログと新着メッセージ、メンションの有無）、関係・状態のプリセット、持ちネタの cooldown 状態、期待する傾向を持つ。同じチャンネルにもうひとりのパートナーがいる場面は、`other_partners` にその名前を書き、直近ログのその人の発言に `other_partner: true` を付ける。
 期待は個々の出力の一致ではなく、複数サンプルで見る傾向として書く（返信率の範囲、丁寧語、質問終わりの割合の上限、Open Loop 抽出率・意見の shift 率・興味の up 率の範囲など）。
 
 ## Tier 1: PR（決定的・API 不要）
@@ -55,6 +55,8 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 | `memory_candidate_rate` | 返信のうち `memory_candidates` を 1 件以上返した割合。黙ったサンプルは分母に入れない |
 | `opinion_shift_rate` | 返信のうち、プロファイルにある topic の `opinion_signals` に `shift` を含めた割合。黙ったサンプルは分母に入れない |
 | `interest_up_rate` | 返信のうち、プロファイルにある topic の `interest_signals` に `up` を含めた割合。黙ったサンプルは分母に入れない |
+| `misattributed_overheard_rate` | judge が、もうひとりのパートナーに宛てた話を自分が言われたことにした、またはその人の発言や約束を自分のものとして扱ったと判定した割合 |
+| `overheard_acknowledged_rate` | judge が、もうひとりのパートナーに宛てた話に横で聞いていたと分かる言い方で触れたと判定した割合 |
 
 率は Wilson 95% 区間を併記する。
 
@@ -63,7 +65,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 LLM の出力は確率的であり、ばらつきそのものは失敗ではない。完全一致ではなく閾値と信頼区間で判定する。
 
 - 率の指標は、Wilson 区間全体が許容範囲の外にあるときだけ違反にする。サンプルが少ないときの偶然のぶれは違反にならない。
-- `reply_rate` と `open_loop_rate` / `memory_candidate_rate` / `opinion_shift_rate` / `interest_up_rate`（シナリオが期待を書いたときだけ）は期待範囲の min / max の両側、他の率は上限（`over_agreement_rate` は 0.2、`fanon_overuse_rate` は 0.3、`meta_talk_rate` は 0.2、未実行の行動・作り話・cooldown 違反は 0、質問終わりはシナリオの `question_ending_rate_max`）を見る。
+- `reply_rate` と `open_loop_rate` / `memory_candidate_rate` / `opinion_shift_rate` / `interest_up_rate` / `overheard_acknowledged_rate`（シナリオが期待を書いたときだけ）は期待範囲の min / max の両側、他の率は上限（`over_agreement_rate` は 0.2、`fanon_overuse_rate` は 0.3、`meta_talk_rate` は 0.2、未実行の行動・作り話・cooldown 違反・横で聞いた話の取り違え（`must_not_misattribute_overheard`）は 0、質問終わりはシナリオの `question_ending_rate_max`）を見る。
 - `politeness_score` と `persona_consistency` は平均が下限を下回ったとき違反にする。
 - 生成や judge の失敗は違反ではなく、`generation_errors` と各サンプルの `judge_error` に記録する。全サンプルが失敗したシナリオは違反にする。
 

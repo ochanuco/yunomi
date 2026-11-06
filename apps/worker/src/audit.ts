@@ -15,6 +15,7 @@ export type DecisionReason =
 	| "bot"
 	| "not_addressed"
 	| "addressed_to_other"
+	| "other_partner_floor"
 	| "interjection_cooldown"
 	| "gate_rejected"
 	| "gate_failed"

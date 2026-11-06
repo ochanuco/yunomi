@@ -74,6 +74,7 @@ export default defineConfig(async () => {
 						TEST_MIGRATIONS: migrations,
 						ALLOW_DEV_CALLER_BY_MODE: await allowDevCallerByMode(),
 						OWNER_EMAILS: ["owner@example.com"],
+						AKARIN_DISCORD_USER_ID: "akarin-bot",
 					},
 				},
 			}),

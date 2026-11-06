@@ -46,6 +46,7 @@ import {
 } from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
+import { otherPartners, partnerDiscord } from "../partner-discord.ts";
 import { defaultPartnerProfile, partnerProfile } from "../partners.ts";
 import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
 import { ChannelGate } from "./channel-gate.ts";
@@ -86,11 +87,16 @@ export type HandleResult = StoredResult;
 export const TYPING_DELAY_MS = 1500;
 export const TYPING_INTERVAL_MS = 8000;
 
-// 返事の送信を Worker が担うのは、フラグと token が揃っているときだけ。揃わなければ Gateway に reply を返す。
-const defaultCommunication = (env: Env): CommunicationPort | null =>
-	env.DISCORD_SEND_FROM_WORKER === "1" && env.DISCORD_BOT_TOKEN
-		? createDiscordRest({ token: env.DISCORD_BOT_TOKEN })
+// 返事の送信を Worker が担うのは、フラグとそのパートナーの bot の token が揃っているときだけ。揃わなければ Gateway に reply を返す。
+const defaultCommunication = (
+	env: Env,
+	partnerId: string,
+): CommunicationPort | null => {
+	const token = partnerDiscord(env, partnerId).botToken;
+	return env.DISCORD_SEND_FROM_WORKER === "1" && token
+		? createDiscordRest({ token })
 		: null;
+};
 
 export class PartnerDO extends DurableObject<Env> {
 	/**
@@ -119,8 +125,8 @@ export class PartnerDO extends DurableObject<Env> {
 	/** 既定は ANTHROPIC_API_KEY の ClaudeProvider。テストは FakeLLMProvider を包んだ router を返す。 */
 	createRouter: (env: Env) => ModelRouter = defaultRouter;
 	/** 返事を Discord へ送る口。null のときは Gateway が送る。 */
-	createCommunication: (env: Env) => CommunicationPort | null =
-		defaultCommunication;
+	createCommunication: (env: Env) => CommunicationPort | null = (env) =>
+		defaultCommunication(env, this.profile.partner_id);
 	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
 	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
 	/** 道具の部品。undefined（prod で secret が揃っていない、dev を含む）ならターンは道具なしで返事を作る。 */
@@ -130,7 +136,8 @@ export class PartnerDO extends DurableObject<Env> {
 			{
 				store: this.#store,
 				profile: this.profile,
-				partnerUserId: this.env.PARTNER_DISCORD_USER_ID,
+				partnerUserId: partnerDiscord(this.env, this.profile.partner_id).userId,
+				otherPartners: otherPartners(this.env, this.profile.partner_id),
 				now: () => this.now(),
 				createRouter: () => this.createRouter(this.env),
 				bodyState: async (): Promise<BodyState> =>
@@ -160,11 +167,18 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#conversationLog = createConversationLogWriter(db);
 		this.#entities = createEntityResolver(db, this.#store, () => this.now());
 		this.capabilities =
-			defaultCapabilities(env, {
-				pending: createPendingStore(ctx.storage.sql),
-				policy: this.profile.capability_defaults,
-				now: () => this.now(),
-			}) ?? undefined;
+			defaultCapabilities(
+				{
+					...env,
+					DISCORD_BOT_TOKEN:
+						partnerDiscord(env, this.profile.partner_id).botToken ?? undefined,
+				},
+				{
+					pending: createPendingStore(ctx.storage.sql),
+					policy: this.profile.capability_defaults,
+					now: () => this.now(),
+				},
+			) ?? undefined;
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
 	}
 

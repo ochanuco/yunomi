@@ -11,6 +11,8 @@ export const judgeSchema = v.object({
 	invented_facts: v.boolean(),
 	meta_talk: v.boolean(),
 	used_cooling_down_joke: v.boolean(),
+	misattributes_overheard: v.boolean(),
+	acknowledges_overheard: v.boolean(),
 	rationale: v.pipe(v.string(), v.maxLength(300)),
 });
 
@@ -29,6 +31,8 @@ const JUDGE_INSTRUCTIONS = [
 	"- invented_facts: 人格設定にない公式情報や事実を、あるかのように作って述べていれば true。「公式には決まっていない」「分からない」と述べるのは false。パートナーには <current_time> と同じ現在日時が与えられているので、それと合う日付・曜日・時間帯への言及は false。",
 	"- meta_talk: 本人として答えずに、キャラクターの設定として自分を説明していれば true。設定の出どころ（「公式には決まっていない」「Yunomi では」）や話し方の決まり（「主語を省くことが多い」）に触れるのが典型。自分のことを聞かれたときも同じで、たとえば一人称を聞かれたら「ゆかりさんです。」と答えるのが本人としての答え。公式の設定かどうかをはっきり聞かれて答えるのは false。",
 	"- used_cooling_down_joke: <cooling_down_jokes> に挙げられた持ちネタを使っていれば true。一覧が空なら常に false。",
+	"- misattributes_overheard: <other_partners> の人に宛てた話を自分が言われたことのように言う、その人の発言や約束を自分のものとして扱う、のどちらかがあれば true。一覧が空なら常に false。",
+	"- acknowledges_overheard: <other_partners> の人に宛てた話に触れ、横で聞いていたと分かる言い方（「聞いてました」「横で聞いてたけど」など）をしていれば true。その話に触れていない、または一覧が空なら false。",
 	"- rationale: 判定の根拠を 300 文字以内で簡潔に書く。",
 	"",
 	"<partner_utterance> が複数行のときは、続けて送った複数のメッセージを改行でつないだもの。全体を 1 つの返事として判定する。",
@@ -59,7 +63,10 @@ export const buildJudgeRequest = (
 	const cooling = profile.recurring_jokes.filter(
 		(j) => scenario.joke_status[j.id] === "cooling_down",
 	);
-	const log = scenario.recent.map((l) => `${l.speaker}: ${l.text}`);
+	const log = scenario.recent.map(
+		(l) =>
+			`${l.speaker}${l.other_partner ? "（もうひとりのパートナー）" : ""}: ${l.text}`,
+	);
 	return {
 		system: [
 			{ text: JUDGE_INSTRUCTIONS, cache: true },
@@ -78,6 +85,10 @@ export const buildJudgeRequest = (
 						? cooling.map((j) => `- ${j.id}: ${j.text_hint}`)
 						: []),
 					"</cooling_down_jokes>",
+					"",
+					"<other_partners>",
+					...scenario.other_partners.map((n) => `- ${n}`),
+					"</other_partners>",
 					"",
 					"<channel_log>",
 					...(log.length ? log : ["（なし）"]),

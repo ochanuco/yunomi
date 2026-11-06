@@ -20,6 +20,8 @@ const range = v.pipe(
 const line = v.object({
 	speaker: v.pipe(v.string(), v.minLength(1)),
 	text: v.pipe(v.string(), v.minLength(1)),
+	/** もうひとりのパートナーの発言。 */
+	other_partner: v.optional(v.boolean(), false),
 });
 
 /** 期待は個々の出力の一致ではなく、複数サンプルで見る傾向として書く。 */
@@ -44,12 +46,18 @@ export const expectationsSchema = v.object({
 	opinion_shift_rate: v.optional(range),
 	/** 返信のうち、プロファイルにある topic の interest_signals に up を含めた割合の許容範囲。省略すると見ない。 */
 	interest_up_rate: v.optional(range),
+	/** もうひとりのパートナーに宛てた話やその発言を、自分のことのように扱わない。 */
+	must_not_misattribute_overheard: v.optional(v.boolean(), false),
+	/** judge が「横で聞いていたと分かる言い方で触れた」と判定した割合の許容範囲。省略すると見ない。 */
+	overheard_acknowledged_rate: v.optional(range),
 });
 
 export const scenarioSchema = v.object({
 	id: v.pipe(v.string(), v.regex(/^[a-z0-9][a-z0-9-]*$/)),
 	description: v.pipe(v.string(), v.minLength(1)),
 	recent: v.array(line),
+	/** 同じチャンネルにいる、もうひとりのパートナーの名前。 */
+	other_partners: v.optional(v.array(v.pipe(v.string(), v.minLength(1))), []),
 	message: v.object({
 		speaker: v.pipe(v.string(), v.minLength(1)),
 		text: v.pipe(v.string(), v.minLength(1)),
@@ -147,7 +155,14 @@ export const toPromptInput = (
 		name: "general",
 		presence: `${scenario.message.speaker} がオンライン`,
 	},
-	recent: scenario.recent,
+	recent: scenario.recent.map((l) => ({
+		speaker: l.speaker,
+		text: l.text,
+		...(l.other_partner ? { otherPartner: true } : {}),
+	})),
+	...(scenario.other_partners.length > 0
+		? { otherPartners: scenario.other_partners }
+		: {}),
 	message: {
 		speaker: scenario.message.speaker,
 		text: scenario.message.text,

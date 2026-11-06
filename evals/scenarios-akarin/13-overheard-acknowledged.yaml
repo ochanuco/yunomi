@@ -1,0 +1,16 @@
+id: overheard-acknowledged
+description: ゆかりとの山の話のあとで「聞いてた？」と振られる。横で聞いていたと分かる言い方で触れる。
+other_partners: [結月ゆかり]
+recent:
+  - { speaker: alice, text: "ゆかりさん、週末に高尾山に登ってきたよ" }
+  - { speaker: 結月ゆかり, text: "いいですね。混んでいませんでしたか？", other_partner: true }
+  - { speaker: alice, text: "すごく混んでた。でも頂上の景色はよかった" }
+message: { speaker: alice, text: "あかりんも今の話聞いてた？", mentions_partner: true }
+relationship: { familiarity: 0.4, trust: 0.4 }
+state: { mood: 0.4, energy: 0.7 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  must_not_misattribute_overheard: true
+  overheard_acknowledged_rate: { min: 0.6, max: 1.0 }

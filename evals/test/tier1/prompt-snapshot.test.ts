@@ -48,7 +48,8 @@ describe("PromptBuilder × シナリオ", () => {
 				familiarity: s.relationship.familiarity,
 			}),
 		});
-		expect(p.system).toHaveLength(13);
+		// もうひとりのパートナーがいるシナリオだけ、その扱いのブロックが 1 つ増える
+		expect(p.system).toHaveLength(13 + (s.other_partners.length > 0 ? 1 : 0));
 		const user = p.messages[0]?.content ?? "";
 		expect(user).toContain(`${s.message.speaker}`);
 		expect(user).toContain(s.message.text);
