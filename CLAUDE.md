@@ -2,6 +2,8 @@
 
 計画の一次情報は `docs/plan/`。実装前に該当する Epic / Issue を確認する。
 
+yunomi の範囲は記憶と人格、Talking（会話・VC・声）。Working（仕事）は `ochanuco/mizuya` にあり、yunomi の記憶を記憶の口（`docs/working-memory-api.md`）で共有する。記憶の口の形を変えるときは mizuya も合わせる。`partners/` の人格は mizuya の Working が image に取り込むので、ファイル名や置き場所を変えるときも mizuya を合わせる。
+
 ## コマンド
 
 - `pnpm install`
@@ -19,7 +21,7 @@
 - `apps/cli`: `@yunomi/cli`（bin `ykm`）。Admin API を読む CLI。ビルドせず Node 24 の type stripping で `src/bin.ts` を実行する
 - `apps/admin`: `@yunomi/admin`。Admin Web（Vite + plain DOM）。ビルド成果物は `apps/worker/scripts/embed-admin.ts` で Worker に埋め込み、`/admin/` で配信する
 - `apps/gateway`: Home の Discord Gateway（discord.js、`tsx` で直接実行）
-- `partners/yukarin`: `@yunomi/partner-yukarin`。Yukarin の人格本文とプロファイル
+- `partners/yukarin`: `@yunomi/partner-yukarin`。Yukarin の人格本文とプロファイル。`identity/`・`profile.yaml`・`examples.yaml` は mizuya の Working も読む
 - `evals`: `@yunomi/evals`。persona eval（Tier 1 は `pnpm turbo test`、Tier 2 は `pnpm turbo eval`）
 
 ## コーディング規約
