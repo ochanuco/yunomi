@@ -365,7 +365,7 @@ describe("finishStandup", () => {
 		);
 		expect(t.discord.posts[0]?.content).toContain("本文1");
 		expect(t.discord.posts[0]?.content).toContain("2026-11-05 の朝会");
-		expect(t.discord.posts[0]?.buttons).toBeUndefined();
+		expect(t.discord.posts[0]?.buttons).toEqual(["thread:dismiss"]);
 	});
 
 	it("読めない返事なら投稿しない", async () => {
@@ -385,6 +385,7 @@ describe("finishStandup", () => {
 		expect(t.discord.posts[0]?.buttons).toEqual([
 			"approval:grant",
 			"approval:deny",
+			"thread:dismiss",
 		]);
 		expect(t.approvals.get("thread1")?.operations).toEqual([op]);
 	});

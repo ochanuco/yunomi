@@ -34,10 +34,10 @@ export type Attachment = {
 export type Button = {
 	customId: string;
 	label: string;
-	style: "success" | "danger";
+	style: "secondary" | "success" | "danger";
 };
 
-const BUTTON_STYLE = { success: 3, danger: 4 } as const;
+const BUTTON_STYLE = { secondary: 2, success: 3, danger: 4 } as const;
 
 /** ボタンを 1 行に並べる。Discord の components の形。 */
 const toComponents = (buttons: readonly Button[]) =>

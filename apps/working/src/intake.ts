@@ -24,6 +24,7 @@ import {
 } from "./attachments.ts";
 import type { Summarizer } from "./claude-cli.ts";
 import type { Attachment, DiscordApi } from "./discord-rest.ts";
+import { DISMISS_BUTTON, dismissedText, isDismissButton } from "./dismiss.ts";
 import { seatNameOf } from "./guard/env.ts";
 import type { Ledger, Pending } from "./guard/ledger.ts";
 import type { Operation } from "./guard/operation.ts";
@@ -544,16 +545,27 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			);
 	};
 
-	/** hook が止めた操作を投稿に書き、許可を待つ。lead は同じメッセージの頭に置く文。 */
+	/**
+	 * hook が止めた操作を投稿に書き、許可を待つ。lead は同じメッセージの頭に置く文。
+	 * waiting なら持ち主の判断を待つ投稿なので、席を通さずに閉じるボタンも付ける。
+	 */
 	const postWithApproval = async (
 		threadId: string,
 		lead: string,
 		blocked: readonly Pending[],
 		files: readonly Attachment[] = [],
+		waiting = false,
 	) => {
+		const closeButtons = waiting ? [DISMISS_BUTTON] : [];
 		if (blocked.length === 0) {
 			if (lead.trim() === "" && files.length === 0) return;
-			const sent = await botOf(threadId).send(threadId, lead, undefined, files);
+			const sent = await botOf(threadId).send(
+				threadId,
+				lead,
+				undefined,
+				files,
+				closeButtons,
+			);
 			if (!sent.ok) {
 				log.error("post failed", {
 					thread_id: threadId,
@@ -568,7 +580,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			lead.trim() === "" ? request : `${lead}\n\n${request}`,
 			undefined,
 			files,
-			APPROVAL_BUTTONS,
+			[...APPROVAL_BUTTONS, ...closeButtons],
 		);
 		if (!sent.ok) {
 			log.error("approval request failed", {
@@ -896,7 +908,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		expireGrant(threadId);
 		const blocked = uniquePending(deps.ledger.takePending(threadId));
 		const reply = await seatReply(seat, msg.body);
-		await postWithApproval(threadId, reply.body, blocked, reply.files);
+		await postWithApproval(threadId, reply.body, blocked, reply.files, true);
 		await seats.set(toWaiting(seat, { id: msg.id, text: reply.body }));
 		await setStatus(threadId, "決めてほしい");
 		log.info("seat asked", { thread_id: threadId, blocked: blocked.length });
@@ -922,7 +934,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			msg.outcome === "failed" ||
 			taken.status === "決めてほしい"
 		) {
-			await postWithApproval(threadId, reply.body, blocked, reply.files);
+			await postWithApproval(threadId, reply.body, blocked, reply.files, true);
 			await seats.set({ ...toWaiting(seat, null), expectStop: false });
 			await setStatus(threadId, "決めてほしい");
 			log.info("seat waiting", {
@@ -1040,6 +1052,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			threadId,
 			msg.stopReason !== null ? STOPPED_TEXT : msg.body,
 			blocked,
+			[],
+			true,
 		);
 		await seats.set(toWaiting(seat, null));
 		await setStatus(threadId, "決めてほしい");
@@ -1247,6 +1261,53 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		);
 	};
 
+	/**
+	 * 持ち主が要らないと決めた投稿を、席の Claude を通さずに閉じる。
+	 * 待っていた許可は却下として片付け、席があれば止めて worktree ごと消す。
+	 */
+	const dismissThread = async (threadId: string) => {
+		const request = deps.approvals.get(threadId);
+		if (request !== null) {
+			await deps.approvals.delete(threadId);
+			await settle(threadId, request, "deny");
+			dismiss(threadId, request);
+		}
+		const seat = seats.get(threadId);
+		await setStatus(threadId, "完了");
+		if (seat !== null) {
+			expireGrant(threadId);
+			await record(threadId, "done", []);
+			await closeSeat(seat);
+		}
+		log.info("thread dismissed", {
+			thread_id: threadId,
+			had_seat: seat !== null,
+		});
+	};
+
+	/** 不要のボタン。押されたメッセージからボタンを外し、閉じたことを書き足す。 */
+	const dismissPressed = async (
+		threadId: string,
+		p: DiscordButtonPressedEnvelope["payload"],
+	) => {
+		await dismissThread(threadId);
+		const bot = botOf(threadId);
+		const current = await bot.getMessage(threadId, p.message_id);
+		const edited = current.ok
+			? await bot.editMessage(
+					threadId,
+					p.message_id,
+					dismissedText(current.value.content),
+				)
+			: current;
+		if (!edited.ok) {
+			log.warn("dismiss button removal failed", {
+				thread_id: threadId,
+				error: edited.error.type,
+			});
+		}
+	};
+
 	/** 投稿内の返事。許可を待っている操作があれば、許可かどうかを先に見る。 */
 	const answer = async (threadId: string, p: Payload) => {
 		const reply = replyPrompt({
@@ -1350,7 +1411,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		press: async (envelope) => {
 			const p = envelope.payload;
 			const answer = approvalAnswerOf(p.custom_id);
-			if (answer === null) return;
+			const dismissing = isDismissButton(p.custom_id);
+			if (answer === null && !dismissing) return;
 			// 持ち主以外が押しても何も起きない
 			if (p.user.is_bot || !deps.ownerUserIds.has(p.user.id)) {
 				log.debug("button from non-owner ignored", {
@@ -1360,6 +1422,10 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				return;
 			}
 			const threadId = p.channel_id;
+			if (answer === null) {
+				await queue.run(threadId, () => dismissPressed(threadId, p));
+				return;
+			}
 			await queue.run(threadId, () => pressed(threadId, p, answer));
 		},
 		onSeatMessage: async (msg) => {

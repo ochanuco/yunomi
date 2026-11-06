@@ -3,7 +3,8 @@ import * as v from "valibot";
 import type { ActivityEntry } from "./activity-log.ts";
 import { APPROVAL_BUTTONS, approvalRequestText } from "./approval.ts";
 import type { ApprovalStore } from "./approval-store.ts";
-import type { DiscordApi } from "./discord-rest.ts";
+import type { Button, DiscordApi } from "./discord-rest.ts";
+import { DISMISS_BUTTON } from "./dismiss.ts";
 import type { Ledger, Pending } from "./guard/ledger.ts";
 import type { Logger } from "./logger.ts";
 import { diffPatrol, type PatrolStore, patrolSources } from "./patrol.ts";
@@ -146,14 +147,14 @@ export const postDecisions = async (
 	if (!tagId) log.warn("forum tag missing", { tag: DECIDE_TAG });
 	const from = runLabel(kind, now);
 
-	const post = async (d: Decision, buttons?: typeof APPROVAL_BUTTONS) => {
+	const post = async (d: Decision, buttons: readonly Button[] = []) => {
 		const created = await deps.discord.createForumPost(
 			deps.workForumChannelId,
 			{
 				name: d.title,
 				content: `${d.body}${standupPostFooter(from)}`,
 				tagIds: tagId ? [tagId] : [],
-				buttons,
+				buttons: [...buttons, DISMISS_BUTTON],
 			},
 		);
 		if (!created.ok) {
