@@ -158,7 +158,7 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 
 ### 席のビルドとテスト
 
-席の `PATH` の先頭には mise の shims（`~/work/.mise/shims`）がある。clone したリポジトリで `mise install` を実行すると、そのリポジトリの `mise.toml`（または `.tool-versions`）の道具と、`/etc/mise/config.toml` の既定の道具（node 24、pnpm 10、uv、jq）が入る。`mise.toml` を持たないリポジトリでも既定の道具で `pnpm install` や `uv sync` を回せる。
+席の `PATH` の先頭には mise の shims（`~/work/.mise/shims`）がある。clone したリポジトリで `mise install` を実行すると、そのリポジトリの `mise.toml`（または `.tool-versions`）の道具と、`/etc/mise/config.toml` の既定の道具（node 24、pnpm 10、uv、jq、takt）が入る。`mise.toml` を持たないリポジトリでも既定の道具で `pnpm install` や `uv sync` を回せる。
 
 - 道具とダウンロードのキャッシュは work の volume に置くので、コンテナを作り直しても入れ直さない。
 - `~/work` の下の `mise.toml` は信頼済みとして扱う（`MISE_TRUSTED_CONFIG_PATHS`）。`mise trust` は要らない。
