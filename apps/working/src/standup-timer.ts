@@ -6,20 +6,14 @@ export type TimeOfDay = { hour: number; minute: number };
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** `now` より後で、いちばん近い平日（月〜金、JST）の `at`（JST）。祝日は見ない。 */
+/** `now` より後で、いちばん近い `at`（JST）。曜日は見ない（個人開発なので毎日開く）。 */
 export const nextStandupAt = (now: Date, at: TimeOfDay): Date => {
 	const jst = toJstDate(now);
 	const midnightUtc =
 		Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate()) -
 		JST_OFFSET_MS;
-	for (let d = 0; d < 8; d++) {
-		const candidate = new Date(
-			midnightUtc + d * DAY_MS + (at.hour * 60 + at.minute) * 60_000,
-		);
-		const weekday = toJstDate(candidate).getUTCDay();
-		if (candidate > now && weekday !== 0 && weekday !== 6) return candidate;
-	}
-	throw new Error("unreachable: 8 日以内に平日がある");
+	const today = new Date(midnightUtc + (at.hour * 60 + at.minute) * 60_000);
+	return today > now ? today : new Date(today.getTime() + DAY_MS);
 };
 
 export type TimerDeps = {
@@ -35,7 +29,7 @@ const defaultSetTimer = (fn: () => void, ms: number) => {
 	return { cancel: () => clearTimeout(t) };
 };
 
-/** 平日の朝会を回す。1 回が終わってから次を予約するので、長引いても重ならない。 */
+/** 毎日の朝会を回す。1 回が終わってから次を予約するので、長引いても重ならない。 */
 export const startStandupTimer = (deps: TimerDeps): { stop: () => void } => {
 	const now = deps.now ?? (() => new Date());
 	const setTimer = deps.setTimer ?? defaultSetTimer;

@@ -158,13 +158,15 @@ Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は 
 
 ### 朝会
 
-受付は平日（月〜金、祝日は見ない）の `STANDUP_TIME`（既定は `09:00`、Asia/Tokyo）に朝会をする。`STANDUP_ENABLED=false` で止める。
+受付は毎日（曜日も祝日も見ない）の `STANDUP_TIME`（既定は `09:00`、Asia/Tokyo）に朝会をする。`STANDUP_ENABLED=false` で止める。
 
-1. 材料を集める。記憶（`yunomi-memory read`）、最後に届いた席の状態と届いた時刻、GitHub（`STANDUP_GITHUB_OWNER` の open な PR、CI が落ちている PR、label `working-handoff` の申し送り、`GH_TOKEN` の人が `dev/` ブランチから出した PR）、Claude CLI のログインの期限（`claude auth status` の `loginExpiresAt`）。取れなかったものは、取れなかったと書いて渡す。
+1. 材料を集める。記憶（`yunomi-memory read`）、最後に届いた席の状態と届いた時刻、GitHub（`STANDUP_GITHUB_OWNER` の open な PR、CI が落ちている PR、label `working-handoff` の申し送り、`GH_TOKEN` の人が `dev/` ブランチから出した PR、Renovate の PR と、その CI・コンフリクトの状態）、Claude CLI のログインの期限（`claude auth status` の `loginExpiresAt`）。取れなかったものは、取れなかったと書いて渡す。
 2. ログインの期限が 7 日以内なら、席の返事を待たずに 1 件投稿する。
 3. 朝会の席（`seat-standup-<ID>`）を作って材料を渡す。席の Claude は取り消せること（調べる、コメントする、`dev/` ブランチで直す、記憶に残す）をその場で済ませ、決めてほしいことだけを `worker_done` の本文に JSON で返す。朝会の席は持ち主に聞かない（`ask` には受付が「聞けない」と答える）。上限の数には入れず、決めてほしいままでも止めない。
 4. 決めてほしいこと 1 件ごとに、仕事フォーラムへ投稿を立ててタグ `決めてほしい` を付ける。hook が止めた操作があれば 1 件の投稿にまとめ、その投稿で許可を待つ。朝会の席は報告を受けたら閉じる。
 5. 決めてほしいことが無ければ何も投稿しない。
+
+Renovate の PR は持ち主の許しで、朝会の席が片付ける。CI が通っていてマージできる（`mergeStateStatus` が `CLEAN`）ものはマージし、コンフリクトしているものは rebase のチェックボックスで Renovate に作り直させ、それでも直らなければ同じブランチでコンフリクトを解いて push する（次の朝会でマージする）。Renovate を入れる最初の PR（`renovate/configure`）と draft は触らない。マージが auto モードに止められたら、ほかの止めた操作と同じく許可を求める投稿になる。
 
 朝会の投稿に返事をすると、その投稿に新しい席を作り、投稿の本文と返事を渡して続ける。
 

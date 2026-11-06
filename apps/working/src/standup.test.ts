@@ -4,6 +4,7 @@ import { silentLogger } from "./logger.ts";
 import { openMacStateStore } from "./mac-state.ts";
 import { finishStandup, parseDecisions, startStandup } from "./standup.ts";
 import {
+	ciOf,
 	gatherStandupMaterials,
 	type StandupMaterials,
 } from "./standup-materials.ts";
@@ -27,6 +28,7 @@ const materials = (
 		failing_prs: [],
 		handoffs: [],
 		working_prs: [],
+		renovate_prs: [],
 	},
 	claude_login: {
 		expires_at: new Date("2026-12-01T00:00:00Z"),
@@ -70,7 +72,7 @@ describe("startStandup", () => {
 		});
 		const spec = start.mock.calls[0]?.[0] ?? "";
 		expect(spec.startsWith("【前置き】")).toBe(true);
-		expect(spec).toContain("平日の朝会をする");
+		expect(spec).toContain("朝会をする");
 		expect(spec).toContain("2026-12-01 09:00 JST");
 		expect(spec).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:/);
 		expect(t.discord.posts).toEqual([]);
@@ -217,5 +219,102 @@ describe("gatherStandupMaterials", () => {
 			expires_at: new Date("2026-11-10T00:00:00.000Z"),
 			expires_soon: true,
 		});
+	});
+
+	it("Renovate の PR は repo ごとに CI とコンフリクトの状態を引く", async () => {
+		const run = vi.fn(async (bin: string, args: readonly string[]) => {
+			const line = `${bin} ${args.join(" ")}`;
+			if (line.startsWith("gh search prs"))
+				return {
+					code: 0,
+					stderr: "",
+					stdout: JSON.stringify([
+						{
+							repository: { nameWithOwner: "o/a" },
+							number: 5,
+							title: "Update tooling",
+							url: "u5",
+							author: { login: "renovate[bot]" },
+						},
+					]),
+				};
+			if (line.includes("--author app/renovate"))
+				return {
+					code: 0,
+					stderr: "",
+					stdout: JSON.stringify([
+						{
+							number: 5,
+							title: "Update tooling",
+							url: "u5",
+							headRefName: "renovate/tooling-non-major",
+							mergeable: "CONFLICTING",
+							mergeStateStatus: "DIRTY",
+							statusCheckRollup: [
+								{ status: "COMPLETED", conclusion: "SUCCESS" },
+								{ state: "SUCCESS" },
+							],
+						},
+						{
+							number: 1,
+							title: "Configure Renovate",
+							url: "u1",
+							headRefName: "renovate/configure",
+						},
+					]),
+				};
+			return { code: 0, stdout: "[]", stderr: "" };
+		});
+		const m = await gatherStandupMaterials({
+			exec: run,
+			env: {},
+			cwd: "/w",
+			claudeBin: "claude",
+			memoryBin: "yunomi-memory",
+			githubOwner: "o",
+			macState: openMacStateStore(tempDir()),
+			now: () => NOW,
+			logger: silentLogger,
+		});
+		expect(m.github.renovate_prs).toEqual([
+			expect.objectContaining({
+				repo: "o/a",
+				number: 5,
+				ci: "success",
+				mergeable: "CONFLICTING",
+				merge_state: "DIRTY",
+				onboarding: false,
+			}),
+			expect.objectContaining({ number: 1, onboarding: true }),
+		]);
+	});
+});
+
+describe("ciOf", () => {
+	it.each([
+		[
+			"全部通れば success",
+			[
+				{ status: "COMPLETED", conclusion: "SUCCESS" },
+				{ status: "COMPLETED", conclusion: "SKIPPED" },
+			],
+			"success",
+		],
+		[
+			"1 つでも落ちれば failure",
+			[
+				{ status: "IN_PROGRESS", conclusion: null },
+				{ status: "COMPLETED", conclusion: "FAILURE" },
+			],
+			"failure",
+		],
+		[
+			"走っているものがあれば pending",
+			[{ status: "IN_PROGRESS", conclusion: null }, { state: "SUCCESS" }],
+			"pending",
+		],
+		["StatusContext の失敗も見る", [{ state: "ERROR" }], "failure"],
+	])("%s", (_name, rollup, want) => {
+		expect(ciOf(rollup)).toBe(want);
 	});
 });

@@ -204,11 +204,17 @@ export const STANDUP_TITLE_LIMIT = 60;
 /** 朝会の席に渡す指示。材料は toModelJson で渡すので、時刻はすべて JST の書式になっている。 */
 export const standupPrompt = (input: { now: Date; materials: string }) =>
 	`${clock(input.now)}
-平日の朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
+朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
 
-- 材料: 記憶（memory）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR）。
+- 材料: 記憶（memory）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR、Renovate の PR）。
 - 取り消せること（調べる、issue や PR にコメントする、dev/ ブランチで直して push する、yunomi-memory に残す）は、ここで済ませてよい。済ませたことは決めてほしいことに入れない。
-- 取り消せない操作は実行しない。要るなら決めてほしいことに入れ、何をしたいかを書く。
+- 取り消せない操作は実行しない。要るなら決めてほしいことに入れ、何をしたいかを書く。ただし Renovate の PR のマージは持ち主が許している（下）。
+- Renovate の PR（renovate_prs）は次のように片付ける。onboarding が true のもの（Renovate を入れる最初の PR）と draft は触らない。
+  - ci が success で merge_state が CLEAN なら、\`gh pr merge <url>\` でマージする（repo で使えるなら --squash）。持ち主は「CI が通っているならマージしてよい」と言っている。
+  - mergeable が CONFLICTING なら、PR 本文の rebase のチェックボックス（\`<!-- rebase-check -->\` の付いた \`- [ ]\`）を \`- [x]\` にして Renovate に作り直させる。もう付いていて直っていなければ、ブランチを clone して base を merge し、コンフリクトを解いて同じブランチに push する（force push はしない）。CI が通れば次の朝会でマージする。
+  - ci が failure なら、原因を調べ、直せるなら同じブランチに直しを push する。直せなければ、何が落ちていて何を決めてほしいかを決めてほしいことに入れる。
+  - ci が pending のもの、merge_state が BLOCKED などで理由がわからないものは、様子を見る。
+  - マージしたものは決めてほしいことに入れず、yunomi-memory に done で残す。
 - 決めてほしいことは、持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。無い日は 0 件でよい。
 - Claude CLI のログインの期限は受付が見るので入れない。
 - 1 件は 1 つの投稿になる。title は ${STANDUP_TITLE_LIMIT} 字以内の件名、body は投稿の本文（Discord で読める長さ。何を決めてほしいか、選択肢、関係する PR や issue の URL）。

@@ -6,6 +6,7 @@ import type { MacStateStore } from "./mac-state.ts";
 /** 7 日以内に切れるなら、持ち主にログインし直してもらう。 */
 export const LOGIN_EXPIRY_WARN_MS = 7 * 24 * 60 * 60 * 1000;
 const REPO_LIMIT = 20;
+const RENOVATE_REPO_LIMIT = 40;
 
 type Unavailable = { unavailable: string };
 
@@ -22,6 +23,7 @@ export type StandupMaterials = {
 		failing_prs: unknown[] | Unavailable;
 		handoffs: unknown[] | Unavailable;
 		working_prs: unknown[] | Unavailable;
+		renovate_prs: unknown[] | Unavailable;
 	};
 	claude_login: { expires_at: Date | null; expires_soon: boolean };
 };
@@ -67,6 +69,59 @@ const repoPrSchema = v.array(
 		isDraft: v.optional(v.boolean()),
 	}),
 );
+const renovatePrSchema = v.array(
+	v.object({
+		number: v.number(),
+		title: v.string(),
+		url: v.string(),
+		headRefName: v.string(),
+		isDraft: v.optional(v.boolean()),
+		mergeable: v.optional(v.string()),
+		mergeStateStatus: v.optional(v.string()),
+		statusCheckRollup: v.optional(
+			v.array(
+				v.object({
+					status: v.nullish(v.string()),
+					conclusion: v.nullish(v.string()),
+					state: v.nullish(v.string()),
+				}),
+			),
+		),
+	}),
+);
+type Rollup = NonNullable<
+	v.InferOutput<typeof renovatePrSchema>[number]["statusCheckRollup"]
+>;
+
+const RENOVATE_LOGIN = "renovate[bot]";
+const CHECK_FAILED = new Set([
+	"FAILURE",
+	"ERROR",
+	"CANCELLED",
+	"TIMED_OUT",
+	"ACTION_REQUIRED",
+	"STARTUP_FAILURE",
+]);
+
+/** CheckRun は status と conclusion、StatusContext は state だけを持つ。 */
+export const ciOf = (rollup: Rollup): "success" | "failure" | "pending" => {
+	let pending = false;
+	for (const c of rollup) {
+		const result = c.conclusion ?? c.state ?? null;
+		if (result !== null && CHECK_FAILED.has(result)) return "failure";
+		if (
+			(c.status !== null &&
+				c.status !== undefined &&
+				c.status !== "COMPLETED") ||
+			result === "PENDING" ||
+			result === "EXPECTED" ||
+			result === null
+		)
+			pending = true;
+	}
+	return pending ? "pending" : "success";
+};
+
 const authSchema = v.object({
 	loggedIn: v.optional(v.boolean()),
 	loginExpiresAt: v.nullish(v.string()),
@@ -249,6 +304,59 @@ export const gatherStandupMaterials = async (
 		workingPrs = perRepo.flat();
 	}
 
+	// Renovate の PR は CI とコンフリクトの状態が要る。search はそれを返さないので、repo ごとに引く
+	let renovatePrs: unknown[] | Unavailable;
+	if (failed(openPrs)) {
+		renovatePrs = openPrs;
+	} else {
+		const repos = [
+			...new Set(
+				openPrs
+					.filter((p) => p.author?.login === RENOVATE_LOGIN)
+					.map((p) => p.repository.nameWithOwner),
+			),
+		].slice(0, RENOVATE_REPO_LIMIT);
+		const perRepo = await Promise.all(
+			repos.map(async (repo) => {
+				const r = await run(
+					`${repo} の Renovate の PR`,
+					"gh",
+					[
+						"pr",
+						"list",
+						"--repo",
+						repo,
+						"--state",
+						"open",
+						"--author",
+						"app/renovate",
+						"--json",
+						"number,title,url,headRefName,isDraft,mergeable,mergeStateStatus,statusCheckRollup",
+						"--limit",
+						"50",
+					],
+					renovatePrSchema,
+				);
+				return failed(r)
+					? [{ repo, ...r }]
+					: r.map((p) => ({
+							repo,
+							number: p.number,
+							title: p.title,
+							url: p.url,
+							branch: p.headRefName,
+							draft: p.isDraft ?? false,
+							// Renovate を入れる最初の PR。入れるかどうかは持ち主が決める
+							onboarding: p.headRefName === "renovate/configure",
+							ci: ciOf(p.statusCheckRollup ?? []),
+							mergeable: p.mergeable ?? "UNKNOWN",
+							merge_state: p.mergeStateStatus ?? "UNKNOWN",
+						}));
+			}),
+		);
+		renovatePrs = perRepo.flat();
+	}
+
 	const expiresAt = failed(auth) ? null : toDate(auth.loginExpiresAt);
 	return {
 		memory,
@@ -281,6 +389,7 @@ export const gatherStandupMaterials = async (
 						),
 					})),
 			working_prs: workingPrs,
+			renovate_prs: renovatePrs,
 		},
 		claude_login: {
 			expires_at: expiresAt,
