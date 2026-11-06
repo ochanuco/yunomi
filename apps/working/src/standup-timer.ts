@@ -3,8 +3,8 @@ import type { Logger } from "./logger.ts";
 
 export type TimeOfDay = { hour: number; minute: number };
 
-/** 朝会は決めてほしいことの一覧、見回りは前の回から変わったことだけを見る軽い回。 */
-export type RunKind = "standup" | "patrol";
+/** 朝会は決めてほしいことの一覧、見回りは前の回から変わったことだけを見る軽い回。event は GitHub の出来事 1 件を見る回で、timer は回さない。 */
+export type RunKind = "standup" | "patrol" | "event";
 
 /** JST の時刻を 0:00 からの分で持つ。start > end なら日をまたぐ。 */
 export type QuietHours = { startMinute: number; endMinute: number };

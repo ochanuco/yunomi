@@ -75,6 +75,7 @@ export default defineConfig(async () => {
 						ALLOW_DEV_CALLER_BY_MODE: await allowDevCallerByMode(),
 						OWNER_EMAILS: ["owner@example.com"],
 						AKARIN_DISCORD_USER_ID: "akarin-bot",
+						GITHUB_WEBHOOK_SECRET: "test-webhook-secret",
 					},
 				},
 			}),
