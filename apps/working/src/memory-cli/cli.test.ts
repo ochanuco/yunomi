@@ -103,6 +103,40 @@ describe("runMemoryCli", () => {
 		});
 	});
 
+	it("watch-checked は知らせたものの key を付けて PATCH する", async () => {
+		const env = setup();
+		const f = respond(200, { id: "w1", checked: true });
+		const out = await runMemoryCli(
+			[
+				"watch-checked",
+				"--id",
+				"w1",
+				"--seen",
+				"https://shop.example/items/1",
+				"--seen",
+				" https://shop.example/items/2 ",
+			],
+			env,
+			f as typeof fetch,
+		);
+		expect(out.code).toBe(0);
+		const [, init] = f.mock.calls[0] ?? [];
+		expect(init?.method).toBe("PATCH");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			discord_user_id: "owner-1",
+			watch_id: "w1",
+			seen: ["https://shop.example/items/1", "https://shop.example/items/2"],
+		});
+		// 新着が無かった回も、調べ終えたことは残す
+		const none = respond(200, {});
+		await runMemoryCli(
+			["watch-checked", "--id", "w1"],
+			env,
+			none as typeof fetch,
+		);
+		expect(JSON.parse(String(none.mock.calls[0]?.[1]?.body)).seen).toEqual([]);
+	});
+
 	it("書き方が違えば呼ばずに断る", async () => {
 		const env = setup();
 		const f = respond(201, {});
@@ -118,6 +152,10 @@ describe("runMemoryCli", () => {
 			["close", "--id", "g1"],
 			["close", "--id", "g1", "--status", "open"],
 			["close", "--status", "achieved"],
+			["watch-checked", "--seen", "x"],
+			["watch-checked", "--id", "w1", "--seen", "a\nb"],
+			["watch-checked", "--id", "w1", "--seen", "あ".repeat(201)],
+			["close", "--id", "g1", "--status", "achieved", "--seen", "x"],
 		]) {
 			expect((await runMemoryCli(argv, env, f as typeof fetch)).code).toBe(2);
 		}

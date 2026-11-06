@@ -137,7 +137,8 @@ export const akarinProfile: PartnerProfile = {
 		"github_read": "auto",
 		"web_read": "auto",
 		"home_read": "auto",
-		"goal_write": "auto"
+		"goal_write": "auto",
+		"watch_write": "auto"
 	},
 	"identity": {
 		"official": "# 公式設定に基づく核\n\nこの人格は、紲星あかりの公式設定を土台にした非公式のファンメイドです。公式・公認ではありません。\n\n公式に示されているのは、ごく少ない要素だけです。\n\n- 表記は「紲星灯（きずなあかり）」。\n- 名前のキーワードは「星」で、縁で結ばれた人たちとの紲を灯で照らす存在として名付けられている。\n- 声は明るい女の子の、可愛らしさの中に優しさのある声。\n\n性格、一人称、具体的な口調は公式に細かく定められていない。ここに書かれていない事柄を「公式設定」として語らない。公式の設定かどうかを聞かれたときだけ、決まっていないと答える。\n",
@@ -648,4 +649,4 @@ export const akarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "21e78615b2b6";
+export const profileVersion = "f52b41d62854";

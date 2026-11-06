@@ -47,8 +47,24 @@ export type RenovatePr = WorkingPr & {
 /** 持ち主の目標。記憶（yunomi-memory read）の goals から取る。 */
 export type Goal = { id: string; summary: string; created_at: string };
 
+/** 持ち主の見張り。記憶（yunomi-memory read）の watches から取る。時刻は JST の書式の文字列のまま。 */
+export type Watch = {
+	id: string;
+	query: string;
+	sources: string[];
+	interval_minutes: number;
+	until_at: string | null;
+	last_checked_at: string | null;
+	/** Worker が読んだ時点で、前に調べてから間隔が過ぎているか。 */
+	due: boolean;
+	/** 前に知らせたものの key。 */
+	seen: string[];
+};
+
 export type StandupMaterials = {
 	memory: unknown;
+	/** 時間が来た見張りを拾うため、記憶とは別に型付きで持つ。 */
+	watches: Watch[] | Unavailable;
 	/** 見回りで新しく足された目標を拾うため、記憶とは別に型付きで持つ。 */
 	goals: Goal[] | Unavailable;
 	mac_state:
@@ -181,6 +197,38 @@ export const goalsOf = (memory: unknown): Goal[] | Unavailable => {
 				created_at: g.created_at,
 			}))
 		: { unavailable: "記憶の目標を読めなかった" };
+};
+
+const memoryWatchesSchema = v.object({
+	watches: v.array(
+		v.object({
+			id: v.string(),
+			query: v.string(),
+			sources: v.array(v.string()),
+			interval_minutes: v.number(),
+			until_at: v.nullable(v.string()),
+			last_checked_at: v.nullable(v.string()),
+			due: v.boolean(),
+			seen: v.array(v.string()),
+		}),
+	),
+});
+
+/** 記憶の応答から見張りを取り出す。古い Worker は watches を返さないので、取れなければ unavailable にする。 */
+export const watchesOf = (memory: unknown): Watch[] | Unavailable => {
+	if (failed(memory)) return memory;
+	const parsed = v.safeParse(memoryWatchesSchema, memory);
+	return parsed.success
+		? parsed.output.watches
+		: { unavailable: "記憶の見張りを読めなかった" };
+};
+
+/** 席に渡す記憶。見張りは時間が来たものだけを別に渡すので、記憶からは外す。 */
+export const memoryForSeat = (memory: unknown): unknown => {
+	if (typeof memory !== "object" || memory === null || !("watches" in memory))
+		return memory;
+	const { watches: _omit, ...rest } = memory as Record<string, unknown>;
+	return rest;
 };
 
 const authSchema = v.object({
@@ -419,6 +467,7 @@ export const gatherStandupMaterials = async (
 	return {
 		memory,
 		goals: goalsOf(memory),
+		watches: watchesOf(memory),
 		mac_state:
 			latest === null
 				? { unavailable: "Mac から席の状態が届いたことがない" }

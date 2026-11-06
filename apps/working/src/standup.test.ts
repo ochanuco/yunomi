@@ -9,11 +9,13 @@ import {
 	gatherStandupMaterials,
 	goalsOf,
 	type StandupMaterials,
+	watchesOf,
 } from "./standup-materials.ts";
 import {
 	FORUM,
 	fakeDiscord,
 	memoryApprovals,
+	TEXT,
 	tempDir,
 	tempLedger,
 } from "./test-support.ts";
@@ -26,6 +28,7 @@ const materials = (
 ): StandupMaterials => ({
 	memory: { facts: [] },
 	goals: [],
+	watches: [],
 	mac_state: { unavailable: "x" },
 	github: {
 		open_prs: [],
@@ -80,6 +83,7 @@ const setup = () => {
 		approvals,
 		ledger,
 		workForumChannelId: FORUM,
+		workTextChannelId: TEXT,
 		now: () => NOW,
 		logger: silentLogger,
 	};
@@ -232,6 +236,60 @@ describe("startStandup の見回り", () => {
 		expect(spec).toContain("根拠があるときだけ");
 	});
 
+	const watch = (id: string, due: boolean) => ({
+		id,
+		query: "RTX3090 の中古、24GB",
+		sources: ["https://shop.example/gpu"],
+		interval_minutes: 360,
+		until_at: null,
+		last_checked_at: due ? "2026-11-04 12:00 JST" : "2026-11-05 08:00 JST",
+		due,
+		seen: ["https://shop.example/gpu/1"],
+	});
+
+	it("GitHub に変わりが無くても、時間が来た見張りがあれば、その見張りだけを渡して席を立てる", async () => {
+		for (const first of [true, false]) {
+			const store = memoryStore();
+			if (!first) await patrol(store, {});
+			const start = vi.fn(async (_spec: string, _kind: string) => "patrol-1");
+			await startStandup({
+				deps: setup().deps,
+				kind: "patrol",
+				store,
+				gather: async () => ({
+					...materials(),
+					memory: { facts: [], watches: [watch("w1", true)] },
+					watches: [watch("w1", true), watch("w2", false)],
+				}),
+				preamble: "",
+				start,
+			});
+			const [spec] = start.mock.calls[0] ?? [];
+			expect(spec).toContain('"due_watches":[{"id":"w1"');
+			expect(spec).not.toContain('"id":"w2"');
+			// 見張りは記憶からは外し、時間が来たものだけを渡す
+			expect(spec).toContain('"memory":{"facts":[]}');
+			expect(spec).toContain("yunomi-memory watch-checked --id");
+			expect(spec).toContain('"changes":{}');
+		}
+	});
+
+	it("時間が来た見張りが無く、変わりも無ければ席を立てない", async () => {
+		const store = memoryStore();
+		await patrol(store, {});
+		const start = vi.fn(async (_spec: string, _kind: string) => "patrol-1");
+		const id = await startStandup({
+			deps: setup().deps,
+			kind: "patrol",
+			store,
+			gather: async () => ({ ...materials(), watches: [watch("w2", false)] }),
+			preamble: "",
+			start,
+		});
+		expect(id).toBeNull();
+		expect(start).not.toHaveBeenCalled();
+	});
+
 	it("席を立てられなければ覚えず、次の回で拾い直す", async () => {
 		const store = memoryStore();
 		await patrol(store, {});
@@ -289,6 +347,31 @@ describe("finishStandup", () => {
 			"approval:deny",
 		]);
 		expect(t.approvals.get("thread1")?.operations).toEqual([op]);
+	});
+
+	it("見張りの新着は仕事チャンネルに 1 件 1 行で書き、投稿は立てない", async () => {
+		const t = setup();
+		await finishStandup(
+			t.deps,
+			'```json\n{"decisions": [], "notices": ["RTX3090 の中古が A 店に 89,800 円で出ていました https://shop.example/gpu/2", "B 店にも 92,000 円で https://b.example/3"]}\n```',
+			[],
+			"patrol",
+		);
+		expect(t.discord.posts).toEqual([]);
+		expect(t.discord.sentTo(TEXT)).toEqual([
+			"RTX3090 の中古が A 店に 89,800 円で出ていました https://shop.example/gpu/2\nB 店にも 92,000 円で https://b.example/3",
+		]);
+	});
+
+	it("新着が無ければ仕事チャンネルにも書かない", async () => {
+		const t = setup();
+		await finishStandup(
+			t.deps,
+			'```json\n{"decisions": []}\n```',
+			[],
+			"patrol",
+		);
+		expect(t.discord.sentTo(TEXT)).toEqual([]);
 	});
 
 	it("見回りの投稿は時刻で、止めた操作の件名も見回りにする", async () => {
@@ -460,6 +543,25 @@ describe("gatherStandupMaterials", () => {
 			}),
 			expect.objectContaining({ number: 1, onboarding: true }),
 		]);
+	});
+});
+
+describe("watchesOf", () => {
+	it("記憶の watches を取り出し、無ければ読めなかったことにする", () => {
+		const w = {
+			id: "w1",
+			query: "q",
+			sources: [],
+			interval_minutes: 1440,
+			until_at: null,
+			last_checked_at: null,
+			due: true,
+			seen: [],
+		};
+		expect(watchesOf({ watches: [w] })).toEqual([w]);
+		expect(watchesOf({ facts: [] })).toEqual({
+			unavailable: "記憶の見張りを読めなかった",
+		});
 	});
 });
 

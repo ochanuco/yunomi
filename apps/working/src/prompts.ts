@@ -22,7 +22,7 @@ export const workingInstructions = (name: string) => `
 - 答えが「許可された」なら、止められた操作を一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
 - 決まったこと（持ち主が決めたこと、方針）と終わったこと（片付いた作業）は、そのつど \`yunomi-memory write --kind decided --summary "<1行>"\` か \`--kind done\` で 1 件 1 行ずつ残す。会話のときの ${name} も同じ記憶を読む。1 行は 200 字以内で、改行を入れない。秘密情報やトークンは書かない。
 - 持ち主が目標（目指していること）を話したら \`yunomi-memory write --kind goal --summary "<1行>"\` で残す。返ってきた id で、達成したら \`yunomi-memory close --id <id> --status achieved\`、やめたら \`--status dropped\` で閉じる。目標は会話のときの ${name} も読み、朝会と見回りの材料になる。
-- 前に決まったことや持ち主のこと、持ち主の目標を確かめたいときは \`yunomi-memory read\` で読む。目標は goals に、id 付きで並ぶ。
+- 前に決まったことや持ち主のこと、持ち主の目標を確かめたいときは \`yunomi-memory read\` で読む。目標は goals に、id 付きで並ぶ。持ち主に頼まれた見張り（watches）も並ぶが、見張りを調べるのは朝会と見回りの席だけで、登録と停止は会話のときの ${name} が受ける。
 - 完了にする前に、変更はすべて commit して push しておく。席を閉じると作業場所は消える。
 - worker_done の本文の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
   - \`状態: 決めてほしい\`: 相手の判断や情報を待っている
@@ -217,16 +217,21 @@ const SEAT_RULES = `- 取り消せること（調べる、issue や PR にコメ
 
 const GOAL_RULE = `- 持ち主の目標（goals）に効く提案があれば、決めてほしいことに入れる。材料や調べた結果に、その目標に近づく根拠があるときだけにし、毎回は出さない。body には、どの目標に効くか、何をするか、その根拠を書く。`;
 
+const WATCH_RULES = `- 時間が来た見張り（due_watches）は 1 件ずつ調べる。query が探すもの（条件ごと）、sources が見る場所（店やサイトの名前か URL。空なら普通の検索）。持ち主に確認せず WebSearch と WebFetch で調べてよい。URL の source は検索よりそのページを直接読む（中古の在庫は検索への反映が遅い）。
+- 条件に合う出品や記事のうち、seen に無いものだけが新着。新着は notices に 1 件 1 行で書く。何がどこにいくらで出ていたかと URL を入れる（例「RTX3090 の中古（24GB）がじゃんぱらに 89,800 円で出ていました <URL>」）。条件に合うかあやしいものは入れない。新着が無い見張りは何も書かない。
+- 1 件調べ終えるたびに \`yunomi-memory watch-checked --id <見張りの id>\` を呼ぶ。新着があれば、その出品を指す key（URL があれば URL、無ければ店と品名と値段）を \`--seen "<key>"\` で 1 件ずつ付ける。調べられなかった見張りは呼ばずに残す（次の回で調べ直す）。
+- 見張りの新着は決めてほしいことに入れない。`;
+
 const decisionsContract = (
 	materials: string,
 ) => `- Claude CLI のログインの期限は受付が見るので入れない。
 - 1 件は 1 つの投稿になる。title は ${STANDUP_TITLE_LIMIT} 字以内の件名、body は投稿の本文（Discord で読める長さ。何を決めてほしいか、選択肢、関係する PR や issue の URL）。
 
 持ち主はまだ投稿を見ていないので、\`orca orchestration ask\` では聞かない。止められた操作も聞かずに、決めてほしいことに入れる。
-終わったら、\`orca orchestration send --type worker_done\` の \`--body\` に、次の形の JSON を \`\`\`json のコードブロック 1 つで書く。ほかの文章と状態の行は投稿されない。
+終わったら、\`orca orchestration send --type worker_done\` の \`--body\` に、次の形の JSON を \`\`\`json のコードブロック 1 つで書く。ほかの文章と状態の行は投稿されない。notices は仕事チャンネルにそのまま書かれる。無ければ空配列にする。
 
 \`\`\`json
-{"decisions": [{"title": "件名", "body": "本文"}]}
+{"decisions": [{"title": "件名", "body": "本文"}], "notices": ["見張りの新着 1 行"]}
 \`\`\`
 
 --- 材料 ---
@@ -238,22 +243,24 @@ export const standupPrompt = (input: { now: Date; materials: string }) =>
 	`${clock(input.now)}
 朝会をする。持ち主はまだ投稿を見ていない。下の材料を読み、持ち主に決めてほしいことだけを選ぶ。
 
-- 材料: 記憶（memory）、持ち主の目標（goals）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR、Renovate の PR）。
+- 材料: 記憶（memory）、持ち主の目標（goals）、時間が来た見張り（due_watches）、Mac の Orca の席の状態（mac_state。received_at は最後に届いた時刻で、Mac が寝ていると古い）、GitHub（open な PR、CI が落ちている PR、working-handoff の申し送り、Working が dev/ ブランチから出した PR、Renovate の PR）。
 ${SEAT_RULES}
 - 決めてほしいことは、持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。無い日は 0 件でよい。
 ${GOAL_RULE}
+${WATCH_RULES}
 ${decisionsContract(input.materials)}`;
 
 /** 見回りの席に渡す指示。前の回から変わった件だけを渡す。 */
 export const patrolPrompt = (input: { now: Date; materials: string }) =>
 	`${clock(input.now)}
-見回りをする。朝会や前の見回りのあとに変わったことだけを見る。持ち主はまだ投稿を見ていない。
+見回りをする。朝会や前の見回りのあとに変わったことと、時間が来た見張りだけを見る。持ち主はまだ投稿を見ていない。
 
-- 材料: 前の回から新しく出た件と状態が変わった件（changes。種類は goals（新しく足された目標）、open_prs、failing_prs、handoffs、working_prs、renovate_prs）、記憶（memory。目標の一覧は memory.goals）、Mac の Orca の席の状態（mac_state）。
+- 材料: 前の回から新しく出た件と状態が変わった件（changes。種類は goals（新しく足された目標）、open_prs、failing_prs、handoffs、working_prs、renovate_prs）、時間が来た見張り（due_watches）、記憶（memory。目標の一覧は memory.goals）、Mac の Orca の席の状態（mac_state）。
 - changes に無い件は前の回で見てあるので、触らず、決めてほしいことにも入れない。
 ${SEAT_RULES}
 - 決めてほしいことは、changes の件のうち持ち主の判断がないと進まないものだけにする。ただの報告や、様子を見ればよいものは入れない。たいていの回は 0 件になる。
 ${GOAL_RULE} 新しく足された目標は、すぐ始められる一歩が材料から見えるときに提案する。
+${WATCH_RULES}
 ${decisionsContract(input.materials)}`;
 
 /** GitHub の出来事（webhook）で立てる席に渡す指示。その件の出来事だけを渡す。 */

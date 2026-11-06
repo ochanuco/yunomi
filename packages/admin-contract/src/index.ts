@@ -523,7 +523,7 @@ export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
  * 会話本文（recent_messages）、audit、KPI、履歴テーブル、secret は含めない。
  * 行は partner_id を持たない（Snapshot 全体の partner_id に従う）。
  */
-export const SNAPSHOT_SCHEMA_VERSION = 3;
+export const SNAPSHOT_SCHEMA_VERSION = 4;
 
 /** R2 の customMetadata。一覧はこの値から組み立てる。 */
 export type SnapshotSummary = {
@@ -545,6 +545,7 @@ export type SnapshotRestoreCounts = {
 	interest_states: number;
 	opinion_states: number;
 	work_notes: number;
+	watches: number;
 	relationships: number;
 };
 
@@ -677,9 +678,19 @@ const workNoteV2 = {
 	created_at: str,
 };
 
+const workNotesV3 = v.array(
+	v.strictObject({
+		...workNoteV2,
+		kind: v.picklist(["decided", "done", "goal"]),
+		status: nullable(v.picklist(["open", "achieved", "dropped"])),
+		closed_at: nullable(str),
+	}),
+);
+
 /**
  * 古い schema_version も復元できるよう、版ごとの形を受け付ける。
  * v1 は work_notes を持たない。v2 の work_notes は目標（goal と status、closed_at）を持たない。
+ * v3 は watches を持たない。
  */
 export const SnapshotSchema = v.variant("schema_version", [
 	v.strictObject({
@@ -696,16 +707,29 @@ export const SnapshotSchema = v.variant("schema_version", [
 		}),
 	}),
 	v.strictObject({
+		schema_version: v.literal(3),
+		...snapshotHeader,
+		d1: v.strictObject({ ...snapshotD1V1, work_notes: workNotesV3 }),
+	}),
+	v.strictObject({
 		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
 		...snapshotHeader,
 		d1: v.strictObject({
 			...snapshotD1V1,
-			work_notes: v.array(
+			work_notes: workNotesV3,
+			watches: v.array(
 				v.strictObject({
-					...workNoteV2,
-					kind: v.picklist(["decided", "done", "goal"]),
-					status: nullable(v.picklist(["open", "achieved", "dropped"])),
-					closed_at: nullable(str),
+					id: str,
+					entity_id: str,
+					query: str,
+					sources: str,
+					interval_minutes: int,
+					until_at: nullable(str),
+					status: v.picklist(["active", "stopped"]),
+					seen: str,
+					last_checked_at: nullable(str),
+					created_at: str,
+					stopped_at: nullable(str),
 				}),
 			),
 		}),
@@ -739,6 +763,7 @@ export const SnapshotRestoreResponseSchema: v.GenericSchema<SnapshotRestoreRespo
 			interest_states: num,
 			opinion_states: num,
 			work_notes: num,
+			watches: num,
 			relationships: num,
 		}),
 	});

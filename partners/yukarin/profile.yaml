@@ -149,3 +149,4 @@ capability_defaults:
   web_read: auto
   home_read: auto
   goal_write: auto
+  watch_write: auto
