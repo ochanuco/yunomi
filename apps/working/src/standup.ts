@@ -1,6 +1,6 @@
 import { formatJstForPrompt, toModelJson } from "@yunomi/core";
 import * as v from "valibot";
-import { approvalRequestText } from "./approval.ts";
+import { APPROVAL_BUTTONS, approvalRequestText } from "./approval.ts";
 import type { ApprovalStore } from "./approval-store.ts";
 import type { DiscordApi } from "./discord-rest.ts";
 import type { Ledger, Pending } from "./guard/ledger.ts";
@@ -90,13 +90,14 @@ export const postDecisions = async (
 	if (!tagId) log.warn("forum tag missing", { tag: DECIDE_TAG });
 	const from = runLabel(kind, now);
 
-	const post = async (d: Decision) => {
+	const post = async (d: Decision, buttons?: typeof APPROVAL_BUTTONS) => {
 		const created = await deps.discord.createForumPost(
 			deps.workForumChannelId,
 			{
 				name: d.title,
 				content: `${d.body}${standupPostFooter(from)}`,
 				tagIds: tagId ? [tagId] : [],
+				buttons,
 			},
 		);
 		if (!created.ok) {
@@ -111,10 +112,13 @@ export const postDecisions = async (
 	for (const d of decisions) await post(d);
 
 	if (blocked.length > 0) {
-		const threadId = await post({
-			title: `${RUN_NAME[kind]}で止めた操作`,
-			body: approvalRequestText(blocked),
-		});
+		const threadId = await post(
+			{
+				title: `${RUN_NAME[kind]}で止めた操作`,
+				body: approvalRequestText(blocked),
+			},
+			APPROVAL_BUTTONS,
+		);
 		if (threadId !== null) {
 			const operations = blocked.map((b) => b.operation);
 			// フォーラム投稿の最初のメッセージは投稿と同じ ID を持つ

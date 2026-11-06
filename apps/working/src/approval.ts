@@ -1,5 +1,6 @@
 import { formatJstForPrompt } from "@yunomi/core";
 import type { ApprovalRequest } from "./approval-store.ts";
+import type { Button } from "./discord-rest.ts";
 import type { Pending } from "./guard/ledger.ts";
 import { type Operation, sameOperation } from "./guard/operation.ts";
 
@@ -46,6 +47,9 @@ const fence = (text: string) => {
 const describe = (op: Operation) =>
 	op.tool === "Bash" ? fence(op.target) : fence(`${op.tool}: ${op.target}`);
 
+const APPROVAL_ASK =
+	"実行してよければ「許可」を押すか、この投稿に「OK」か「許可」とだけ返事してください。書いてある操作を 1 回だけ実行します。「却下」を押すか、ほかの返事をすると取りやめます。";
+
 /** 止めた操作を持ち主に見せ、許可を求めるメッセージ。 */
 export const approvalRequestText = (items: readonly Pending[]) => {
 	const list = items
@@ -55,7 +59,38 @@ export const approvalRequestText = (items: readonly Pending[]) => {
 
 ${list}
 
-実行してよければ、この投稿に「OK」か「許可」とだけ返事してください。書いてある操作を 1 回だけ実行します。ほかの返事をすると取りやめます。`;
+${APPROVAL_ASK}`;
+};
+
+export type ApprovalAnswer = "grant" | "deny";
+
+const BUTTON_PREFIX = "approval:";
+
+/** 許可を求めるメッセージに付けるボタン。どの操作かはボタンが付いたメッセージの ID で引く。 */
+export const APPROVAL_BUTTONS: readonly Button[] = [
+	{ customId: `${BUTTON_PREFIX}grant`, label: "許可", style: "success" },
+	{ customId: `${BUTTON_PREFIX}deny`, label: "却下", style: "danger" },
+];
+
+/** 押されたボタンの custom_id を読む。許可のボタンでなければ null。 */
+export const approvalAnswerOf = (customId: string): ApprovalAnswer | null => {
+	if (customId === `${BUTTON_PREFIX}grant`) return "grant";
+	if (customId === `${BUTTON_PREFIX}deny`) return "deny";
+	return null;
+};
+
+/** 片付いた許可の依頼の本文。ボタンを外し、頼みの文を結果に置き換える。 */
+export const settledApprovalText = (
+	content: string,
+	answer: ApprovalAnswer,
+) => {
+	const result =
+		answer === "grant"
+			? "許可済み: 書いてある操作を 1 回だけ実行します。"
+			: "却下済み: 書いてある操作は実行しません。";
+	return content.includes(APPROVAL_ASK)
+		? content.replace(APPROVAL_ASK, result)
+		: `${content}\n\n${result}`;
 };
 
 /** 許可したあと、Claude CLI に続きをさせる指示。 */

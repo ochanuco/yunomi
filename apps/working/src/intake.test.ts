@@ -32,6 +32,7 @@ import {
 	fakeDiscord,
 	fakeOrca,
 	OWNER,
+	press,
 	say,
 	seatMessage,
 	TEXT,
@@ -380,6 +381,73 @@ describe("取り消せない操作で止まったとき", () => {
 		const [reply] = s.o.opsOf("reply") as { body: string }[];
 		expect(reply?.body).toContain("いや、dev/ にして");
 		expect(reply?.body).not.toContain("許可した");
+	});
+
+	/** 止めた操作で質問させ、ボタンの付いた依頼のメッセージの ID を返す。 */
+	const askApproval = async (s: Awaited<ReturnType<typeof setup>>) => {
+		const seat = await openPost(s);
+		s.ledger.addPending("p1", {
+			operation: { tool: "Bash", target: "git push origin main" },
+			reason: "main への push",
+		});
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "push してよい？",
+			}),
+		);
+		const at = s.d.sent.findIndex((m) => m.buttons !== undefined);
+		expect(s.d.sent[at]?.buttons).toEqual(["approval:grant", "approval:deny"]);
+		return `sent${at + 1}`;
+	};
+	const events = (s: Awaited<ReturnType<typeof setup>>) =>
+		readFileSync(join(guardDirOf(s.stateDir), "log.jsonl"), "utf8")
+			.trim()
+			.split("\n")
+			.map((l) => JSON.parse(l).event);
+
+	it("許可のボタンは持ち主が押したときだけ効き、投稿を許可済みに書き換え、二度押しや後の OK では重ねて許可しない", async () => {
+		const s = await setup();
+		const asked = await askApproval(s);
+		const grantPath = grantPathOf(guardDirOf(s.stateDir), "p1");
+
+		await s.intake.press(press("p1", asked, "approval:grant", "someone"));
+		expect(existsSync(grantPath)).toBe(false);
+		expect(s.d.edited.has(asked)).toBe(false);
+
+		await s.intake.press(press("p1", asked, "approval:grant"));
+		expect(JSON.parse(readFileSync(grantPath, "utf8")).grant_id).toBe("g1");
+		expect(s.d.edited.get(asked)?.content).toContain("許可済み");
+		expect(s.d.edited.get(asked)?.content).toContain("git push origin main");
+		const [reply] = s.o.opsOf("reply") as { body: string }[];
+		expect(reply?.body).toContain("1 回だけ許可した");
+
+		await s.intake.press(press("p1", asked, "approval:grant"));
+		await s.intake.handle(say("p1", "OK"));
+		expect(events(s)).toEqual(["requested", "granted"]);
+		expect(s.o.opsOf("reply")).toHaveLength(1);
+	});
+
+	it("却下のボタンは投稿を却下済みに書き換え、許可も席への返事もしない", async () => {
+		const s = await setup();
+		const asked = await askApproval(s);
+		await s.intake.press(press("p1", asked, "approval:deny"));
+		expect(s.d.edited.get(asked)?.content).toContain("却下済み");
+		expect(existsSync(grantPathOf(guardDirOf(s.stateDir), "p1"))).toBe(false);
+		expect(s.o.opsOf("reply")).toEqual([]);
+		expect(s.o.opsOf("send")).toEqual([]);
+		expect(events(s)).toEqual(["requested", "dismissed"]);
+	});
+
+	it("文章で返事しても依頼のボタンは外れ、後からボタンを押しても許可しない", async () => {
+		const s = await setup();
+		const asked = await askApproval(s);
+		await s.intake.handle(say("p1", "いや、dev/ にして"));
+		expect(s.d.edited.get(asked)?.content).toContain("却下済み");
+		await s.intake.press(press("p1", asked, "approval:grant"));
+		expect(existsSync(grantPathOf(guardDirOf(s.stateDir), "p1"))).toBe(false);
+		expect(events(s)).toEqual(["requested", "dismissed"]);
 	});
 
 	it("止めた操作を残したまま報告してきたら、完了にせず許可を待つ", async () => {
