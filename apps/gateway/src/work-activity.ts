@@ -19,14 +19,13 @@ const clock = (at: Date): string => {
 };
 
 /**
- * リセット時刻。今日なら時刻だけ、別の日なら日付と曜日を付ける。
+ * リセット時刻。今日なら時刻だけ、別の日なら曜日を付ける。どちらの枠も 7 日以内に戻るので、日付は書かなくても読める。
  * API は 18:59:59 や 19:00:00.6 のように前後にぶれた値を返すので、近いほうの分に丸めて 19:00 と書く。
  */
 const resetLabel = (resetsAt: number, now: Date): string => {
 	const at = new Date(Math.round(resetsAt / MINUTE_MS) * MINUTE_MS);
 	if (jstDayNumber(at) === jstDayNumber(now)) return clock(at);
-	const d = toJstDate(at);
-	return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS[d.getUTCDay()]}) ${clock(at)}`;
+	return `${WEEKDAYS[toJstDate(at).getUTCDay()]} ${clock(at)}`;
 };
 
 const percent = (w: UsageWindow) => `${Math.round(w.usedPercent)}%`;
@@ -44,29 +43,31 @@ export const workActivityText = (summary: SeatSummary): string | null => {
 	return parts.length > 0 ? parts.join(" · ") : null;
 };
 
-const GAUGE_STEPS = 10;
+const GAUGE_CELLS = 5;
 
+// 全部埋まるのは 100% のときだけにしたいので切り捨てる。表示の % と食い違わないよう、丸めた値から数える
 const gauge = (w: UsageWindow): string => {
 	const filled = Math.min(
-		GAUGE_STEPS,
-		Math.max(0, Math.round(w.usedPercent / GAUGE_STEPS)),
+		GAUGE_CELLS,
+		Math.max(0, Math.floor((Math.round(w.usedPercent) * GAUGE_CELLS) / 100)),
 	);
-	return "▰".repeat(filled) + "▱".repeat(GAUGE_STEPS - filled);
+	return "▰".repeat(filled) + "▱".repeat(GAUGE_CELLS - filled);
 };
 
-// ゲージの記号は幅が広く、同じ行に文字を続けると欄の幅で切れる。ゲージは行を分ける
-const usageLines = (label: string, w: UsageWindow, now: Date): string[] => {
-	const reset =
-		w.resetsAt == null ? "" : `・${resetLabel(w.resetsAt, now)} に戻る`;
-	return [`${label} ${percent(w)}${reset}`, gauge(w)];
+const usageLine = (label: string, w: UsageWindow, now: Date): string => {
+	const reset = w.resetsAt == null ? "" : `・${resetLabel(w.resetsAt, now)}`;
+	return `${label} ${gauge(w)} ${percent(w)}${reset}`;
 };
 
-/** 自己紹介欄に出す使用率の本文。読めていなければ空にする。 */
+/**
+ * 自己紹介欄に出す使用率の本文。読めていなければ空にする。
+ * プロフィールの小窓は頭の 3 行しか出さず、長い行は欄の幅で切れるので、1 枠 1 行に短く収める。
+ */
 export const usageBioBody = (usage: Usage | null, now: Date): string =>
 	usage
 		? [
-				...usageLines("5時間", usage.fiveHour, now),
-				...usageLines("週間", usage.weekly, now),
+				usageLine("5h", usage.fiveHour, now),
+				usageLine("W", usage.weekly, now),
 			].join("\n")
 		: "";
 
@@ -102,8 +103,8 @@ export const startWorkActivity = (opts: WorkActivityOptions): (() => void) => {
 		if (body === bioShown || at.getTime() - bioWrittenAt < bioIntervalMs) {
 			return;
 		}
-		// 何分前の値かが分かるよう、書いた時刻を添える。プロフィールの小窓は頭の数行しか出さないので、時刻は最後に置く
-		const text = body === "" ? "" : `${body}\n（${clock(at)} 時点）`;
+		// 何分前の値かが分かるよう、書いた時刻を添える
+		const text = body === "" ? "" : `${body}\n${clock(at)} 時点`;
 		bioWriting = true;
 		const written = await opts.setBio(text);
 		bioWriting = false;

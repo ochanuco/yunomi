@@ -36,15 +36,13 @@ describe("workActivityText", () => {
 });
 
 describe("usageBioBody", () => {
-	it("使用率とリセット時刻の下にゲージを置き、時刻は近いほうの分に丸める。今日のリセットは時刻だけ", () => {
+	it("1 枠 1 行に、ゲージと使用率とリセット時刻を書く。今日のリセットは時刻だけ、別の日は曜日を付ける", () => {
 		expect(usageBioBody(usage, now)).toBe(
-			[
-				"5時間 50%・19:00 に戻る",
-				"▰▰▰▰▰▱▱▱▱▱",
-				"週間 22%・11/12(木) 1:00 に戻る",
-				"▰▰▱▱▱▱▱▱▱▱",
-			].join("\n"),
+			"5h ▰▰▱▱▱ 50%・19:00\nW ▰▱▱▱▱ 22%・木 1:00",
 		);
+	});
+
+	it("リセット時刻は近いほうの分に丸める", () => {
 		const late: Usage = {
 			...usage,
 			fiveHour: {
@@ -52,9 +50,26 @@ describe("usageBioBody", () => {
 				resetsAt: Date.parse("2026-11-06T10:00:00.6Z"),
 			},
 		};
-		expect(usageBioBody(late, now).split("\n")[0]).toBe(
-			"5時間 50%・19:00 に戻る",
-		);
+		expect(usageBioBody(late, now).split("\n")[0]).toBe("5h ▰▰▱▱▱ 50%・19:00");
+	});
+
+	it("ゲージは 20% ごとに 1 マスで、全部埋まるのは 100% のときだけ", () => {
+		const cells = (p: number) =>
+			usageBioBody(
+				{
+					fiveHour: { usedPercent: p, resetsAt: null },
+					weekly: { usedPercent: 0, resetsAt: null },
+				},
+				now,
+			)
+				.split("\n")[0]
+				?.split(" ")[1];
+		expect(cells(0)).toBe("▱▱▱▱▱");
+		expect(cells(19.4)).toBe("▱▱▱▱▱");
+		expect(cells(19.6)).toBe("▰▱▱▱▱");
+		expect(cells(99)).toBe("▰▰▰▰▱");
+		expect(cells(99.6)).toBe("▰▰▰▰▰");
+		expect(cells(100)).toBe("▰▰▰▰▰");
 	});
 
 	it("使い始めていない枠はリセット時刻を書かず、使用率がなければ空", () => {
@@ -66,7 +81,7 @@ describe("usageBioBody", () => {
 				},
 				now,
 			),
-		).toBe("5時間 0%\n▱▱▱▱▱▱▱▱▱▱\n週間 100%\n▰▰▰▰▰▰▰▰▰▰");
+		).toBe("5h ▱▱▱▱▱ 0%\nW ▰▰▰▰▰ 100%");
 		expect(usageBioBody(null, now)).toBe("");
 	});
 });
@@ -138,8 +153,8 @@ describe("startWorkActivity", () => {
 		stop();
 
 		expect(setBio.mock.calls.map(([t]) => t)).toEqual([
-			`${usageBioBody(usage, now)}\n（12:41 時点）`,
-			`${usageBioBody(more, now)}\n（12:44 時点）`,
+			`${usageBioBody(usage, now)}\n12:41 時点`,
+			`${usageBioBody(more, now)}\n12:44 時点`,
 			"",
 		]);
 	});
