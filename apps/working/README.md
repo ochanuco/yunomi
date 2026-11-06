@@ -164,6 +164,7 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 - `~/work` の下の `mise.toml` は信頼済みとして扱う（`MISE_TRUSTED_CONFIG_PATHS`）。`mise trust` は要らない。
 - C 拡張や node-gyp のビルドに使う `build-essential`・`python3`・`pkg-config` と、opencv-python が読む `libgl1`・`libglib2.0-0` を入れてある。
 - 受付（start.sh が起動する node）の `PATH` には shims を足さない。受付はイメージの node 24 で動く。
+- TAKT のグローバル設定（`apps/working/takt/` → `~/.takt/`）は provider を `claude-headless` にしてあり、席の claude のログインで動く。workflow は、リポジトリの `.takt/workflows/`、`~/.takt/workflows/`、組み込みの順に探される。
 
 ### 記憶の道具
 

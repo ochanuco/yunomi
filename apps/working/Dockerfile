@@ -127,6 +127,8 @@ COPY --chown=worker:worker partners/akarin/identity/ /home/worker/persona/akarin
 COPY --chown=worker:worker apps/working/persona.sh /home/worker/bin/persona.sh
 # Mac への引き継ぎの手順と申し送りの雛形。受付が席の Claude に渡す前置きに足す。
 COPY apps/working/handoff/prompt.md apps/working/handoff/issue-template.md /home/worker/handoff/
+# TAKT のグローバル設定。~/.takt は volume に入れていないので、イメージに焼き込む。
+COPY --chown=worker:worker apps/working/takt/ /home/worker/.takt/
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build --chown=worker:worker /out /home/worker/app
