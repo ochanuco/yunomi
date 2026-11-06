@@ -20,10 +20,10 @@ const clock = (at: Date): string => {
 
 /**
  * リセット時刻。今日なら時刻だけ、別の日なら日付と曜日を付ける。
- * API は 18:59:59 のような値を返すので、分を切り上げて 19:00 と書く。
+ * API は 18:59:59 や 19:00:00.6 のように前後にぶれた値を返すので、近いほうの分に丸めて 19:00 と書く。
  */
 const resetLabel = (resetsAt: number, now: Date): string => {
-	const at = new Date(Math.ceil(resetsAt / MINUTE_MS) * MINUTE_MS);
+	const at = new Date(Math.round(resetsAt / MINUTE_MS) * MINUTE_MS);
 	if (jstDayNumber(at) === jstDayNumber(now)) return clock(at);
 	const d = toJstDate(at);
 	return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS[d.getUTCDay()]}) ${clock(at)}`;
@@ -54,18 +54,19 @@ const gauge = (w: UsageWindow): string => {
 	return "▰".repeat(filled) + "▱".repeat(GAUGE_STEPS - filled);
 };
 
-const usageLine = (label: string, w: UsageWindow, now: Date): string => {
+// ゲージの記号は幅が広く、同じ行に文字を続けると欄の幅で切れる。ゲージは行を分ける
+const usageLines = (label: string, w: UsageWindow, now: Date): string[] => {
 	const reset =
 		w.resetsAt == null ? "" : `・${resetLabel(w.resetsAt, now)} に戻る`;
-	return `${label} ${gauge(w)} ${percent(w)}${reset}`;
+	return [`${label} ${percent(w)}${reset}`, gauge(w)];
 };
 
 /** 自己紹介欄に出す使用率の本文。読めていなければ空にする。 */
 export const usageBioBody = (usage: Usage | null, now: Date): string =>
 	usage
 		? [
-				usageLine("5時間", usage.fiveHour, now),
-				usageLine("週間", usage.weekly, now),
+				...usageLines("5時間", usage.fiveHour, now),
+				...usageLines("週間", usage.weekly, now),
 			].join("\n")
 		: "";
 
@@ -101,8 +102,8 @@ export const startWorkActivity = (opts: WorkActivityOptions): (() => void) => {
 		if (body === bioShown || at.getTime() - bioWrittenAt < bioIntervalMs) {
 			return;
 		}
-		// 何分前の値かが分かるよう、書いた時刻を添える
-		const text = body === "" ? "" : `使用状況（${clock(at)} 時点）\n${body}`;
+		// 何分前の値かが分かるよう、書いた時刻を添える。プロフィールの小窓は頭の数行しか出さないので、時刻は最後に置く
+		const text = body === "" ? "" : `${body}\n（${clock(at)} 時点）`;
 		bioWriting = true;
 		const written = await opts.setBio(text);
 		bioWriting = false;
