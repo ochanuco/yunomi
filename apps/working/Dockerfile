@@ -19,8 +19,8 @@ ARG MISE_VERSION=2026.11.2
 ARG MISE_SHA256_AMD64=62cad463c1413f05398ca339168a8f655120b6f0b0b8adce3bc6758bafaf0602
 ARG MISE_SHA256_ARM64=18bf3ac02033c2a50b772b411e35528cd1888386b4316895fcae626db6ad96f3
 ARG CODEX_VERSION=0.167.0
-ARG CODEX_SHA256_AMD64=9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a
-ARG CODEX_SHA256_ARM64=843489acb4d4b1079745c36b03c5963b887b83155af208fd53584e33ee8eb281
+ARG CODEX_SHA256_AMD64=3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e
+ARG CODEX_SHA256_ARM64=0de261ecf1e7f3028a7952f03fca2093f749277d38590b78bb32f8567756bbb7
 # build-essential・python3・pkg-config は席で clone したリポジトリの依存のビルド（node-gyp、Python の C 拡張）に使う。
 # libgl1・libglib2.0-0 は opencv-python を import するのに要る。
 RUN apt-get update \
@@ -59,7 +59,8 @@ RUN arch="$(dpkg --print-architecture)" \
 	&& apt-get install -y --no-install-recommends /tmp/orca.deb \
 	&& rm -rf /var/lib/apt/lists/* /tmp/orca.deb
 
-# Akarin の席で動かす Codex CLI。sandbox は使わない（danger-full-access）ので bwrap は入れない。
+# Akarin の席で動かす Codex CLI。codex はコマンドを横に置いた codex-code-mode-host と codex-exec-server で動かすので、
+# 本体だけでなく配布の一式（codex-package）を /opt/codex に展開する。codex は自分の実体の場所から一式を探すので、PATH には symlink で出す。
 RUN arch="$(dpkg --print-architecture)" \
 	&& case "$arch" in \
 		amd64) triple=x86_64-unknown-linux-musl; sha="$CODEX_SHA256_AMD64" ;; \
@@ -67,11 +68,12 @@ RUN arch="$(dpkg --print-architecture)" \
 		*) echo "unsupported arch: $arch" >&2; exit 1 ;; \
 	esac \
 	&& curl -fsSL -o /tmp/codex.tar.gz \
-		"https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${triple}.tar.gz" \
+		"https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-package-${triple}.tar.gz" \
 	&& echo "$sha  /tmp/codex.tar.gz" | sha256sum -c - \
-	&& tar -xzf /tmp/codex.tar.gz -C /tmp \
-	&& install -m 755 "/tmp/codex-${triple}" /usr/local/bin/codex \
-	&& rm -f /tmp/codex.tar.gz "/tmp/codex-${triple}"
+	&& mkdir -p /opt/codex \
+	&& tar -xzf /tmp/codex.tar.gz -C /opt/codex \
+	&& ln -s /opt/codex/bin/codex /usr/local/bin/codex \
+	&& rm -f /tmp/codex.tar.gz
 
 # 席の Claude の手順書（orchestration の preamble）はコマンドを orca と書く。
 RUN ln -s /usr/bin/orca-ide /usr/local/bin/orca
