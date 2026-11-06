@@ -98,6 +98,7 @@ export const guardRunFromEnv = (
 				"/opt/yunomi-guard",
 				"/proc",
 			],
+			claudeProjectsDir: `${claudeDir}/projects`,
 		},
 		threadId: seat?.threadId ?? "_",
 		grants: grant?.operations ?? [],

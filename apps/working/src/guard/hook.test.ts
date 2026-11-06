@@ -28,6 +28,15 @@ const bash = (command: string) => ({
 	cwd: "/home/worker/work",
 });
 
+describe("classify: Claude CLI が書き出した道具の応答", () => {
+	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
+	const file = "/home/worker/.claude/projects/p/s/tool-results/a.txt";
+	it("Read は通し、書き換えは止める", () => {
+		expect(classify({ tool: "Read", target: file }, ctx)).toBeNull();
+		expect(classify({ tool: "Write", target: file }, ctx)).not.toBeNull();
+	});
+});
+
 describe("classify: Codex の席", () => {
 	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
 	const patch = (path: string) =>

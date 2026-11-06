@@ -1,5 +1,10 @@
 // hook として node で直接動かすため、node の組み込み以外を import しない。
-import { classifyBash, type GuardContext, PROTECTED_TOUCH } from "./bash.ts";
+import {
+	classifyBash,
+	type GuardContext,
+	isProtected,
+	PROTECTED_TOUCH,
+} from "./bash.ts";
 import type { Ledger } from "./ledger.ts";
 import {
 	absPath,
@@ -39,9 +44,7 @@ export const classify = (op: Operation, ctx: GuardContext): string | null => {
 		const touched = patchPaths(op.target).map((p) =>
 			absPath(p, ctx.workDir, ctx.home),
 		);
-		return touched.some((path) =>
-			ctx.protectedDirs.some((d) => isUnder(path, d)),
-		)
+		return touched.some((path) => isProtected(path, ctx, "write"))
 			? PROTECTED_TOUCH
 			: null;
 	}
@@ -50,7 +53,12 @@ export const classify = (op: Operation, ctx: GuardContext): string | null => {
 			op.tool === "Glob" || op.tool === "Grep"
 				? (op.target.split(" ")[0] ?? "")
 				: op.target;
-		return ctx.protectedDirs.some((d) => isUnder(path, d) || isUnder(d, path))
+		const access =
+			op.tool === "Read" || op.tool === "Glob" || op.tool === "Grep"
+				? "read"
+				: "write";
+		return isProtected(path, ctx, access) ||
+			ctx.protectedDirs.some((d) => isUnder(d, path))
 			? PROTECTED_TOUCH
 			: null;
 	}

@@ -1,5 +1,5 @@
 // hook として node で直接動かすため、node の組み込み以外を import しない。
-import { basename } from "node:path";
+import { basename, relative } from "node:path";
 import { absPath, isUnder } from "./operation.ts";
 import { type SimpleCommand, splitCommands } from "./shell.ts";
 
@@ -9,6 +9,46 @@ export type GuardContext = {
 	home: string;
 	/** 読むのも書くのも止める場所（秘密情報、Claude CLI の設定、許可の記録）。 */
 	protectedDirs: readonly string[];
+	/** Claude CLI のセッションの置き場所（`<CLAUDE_CONFIG_DIR>/projects`）。 */
+	claudeProjectsDir: string;
+};
+
+/**
+ * Claude CLI は大きな道具の応答を `projects/<場所>/<セッション>/tool-results/` に書き出し、それを読ませる。
+ * 中身は道具の応答そのもので秘密情報も許可の記録もないので、保護する場所の中でも触ってよい。
+ */
+const isToolResult = (abs: string, ctx: GuardContext) => {
+	const parts = relative(ctx.claudeProjectsDir, abs).split("/");
+	return (
+		parts.length >= 3 &&
+		parts[2] === "tool-results" &&
+		!parts.includes("..") &&
+		!parts.includes("")
+	);
+};
+
+/**
+ * 秘密情報や許可の記録がある場所か。`abs` は解決済みの絶対パス。
+ * tool-results を通すのは読むときだけ。書けると symlink を置いて保護する場所へ書き込める。
+ */
+export const isProtected = (
+	abs: string,
+	ctx: GuardContext,
+	access: "read" | "write",
+) =>
+	ctx.protectedDirs.some((d) => isUnder(abs, d)) &&
+	!(access === "read" && isToolResult(abs, ctx));
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 生の文字列から tool-results の中を指すパスを除く。`..` を含むものは残して、外へ抜けるのを通さない。 */
+const withoutToolResults = (text: string, ctx: GuardContext) => {
+	const seg = "[^/\\s'\"`$;|&<>()]+";
+	const re = new RegExp(
+		`${escapeRegExp(ctx.claudeProjectsDir)}/${seg}/${seg}/tool-results(?:/[^\\s'"\`$;|&<>()]*)?(?![^\\s'"\`;|&<>()])`,
+		"g",
+	);
+	return text.replace(re, (m) => (m.split("/").includes("..") ? m : ""));
 };
 
 /** 止める理由。null は hook では止めない（Claude CLI の auto モードが決める）。 */
@@ -111,7 +151,8 @@ const touchesProtected = (
 	const expanded = raw
 		.replace(/\$\{HOME\}|\$HOME/g, ctx.home)
 		.replace(/(^|[\s=:'"])~(?=\/|$|[\s'"])/g, `$1${ctx.home}`);
-	if (ctx.protectedDirs.some((d) => expanded.includes(d))) return true;
+	const rest = withoutToolResults(expanded, ctx);
+	if (ctx.protectedDirs.some((d) => rest.includes(d))) return true;
 	if (SECRET_FILES.some((f) => raw.includes(f))) return true;
 	const cwd: CwdRef = { cwd: ctx.workDir };
 	for (const c of cmds) {
@@ -120,11 +161,14 @@ const touchesProtected = (
 			followCd(c.args.slice(start + 1), ctx, cwd);
 			continue;
 		}
-		const words = [...c.args, ...c.redirects.map((r) => r.target)];
-		for (const w of words) {
+		const words = [
+			...c.args.map((w) => ({ w, access: "read" as const })),
+			...c.redirects.map((r) => ({ w: r.target, access: r.mode })),
+		];
+		for (const { w, access } of words) {
 			if (cwd.cwd === null || !/[/.~]/.test(w) || /[$`]/.test(w)) continue;
 			const abs = absPath(w.replace(/^[^=]*=/, ""), cwd.cwd, ctx.home);
-			if (ctx.protectedDirs.some((d) => isUnder(abs, d))) return true;
+			if (isProtected(abs, ctx, access)) return true;
 		}
 	}
 	return false;
