@@ -1,0 +1,10 @@
+# 席の TAKT が実装の step の後に CI と同じ検査を実行し、落ちれば実装に差し戻す。
+workflow_overrides:
+  steps:
+    implement:
+      quality_gates:
+        - type: command
+          name: ci
+          command: "pnpm install --frozen-lockfile && pnpm turbo typecheck lint test"
+          cwd: "."
+          timeout_ms: 900000

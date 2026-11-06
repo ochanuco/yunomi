@@ -12,6 +12,11 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 FROM node:24.22.1-slim AS node
 
+# TAKT の claude-sdk provider の SDK。~/.takt の下に入り、イメージに焼き込む。版は mise/config.toml の takt と揃える。
+FROM node:24.22.1-slim AS takt
+ENV TAKT_CONFIG_DIR=/home/worker/.takt
+RUN npx -y takt@0.74.0 install claude-sdk
+
 FROM debian:bookworm-slim
 
 ARG ORCA_VERSION=1.4.248
@@ -128,6 +133,7 @@ COPY --chown=worker:worker apps/working/persona.sh /home/worker/bin/persona.sh
 # Mac への引き継ぎの手順と申し送りの雛形。受付が席の Claude に渡す前置きに足す。
 COPY apps/working/handoff/prompt.md apps/working/handoff/issue-template.md /home/worker/handoff/
 # TAKT のグローバル設定。~/.takt は volume に入れていないので、イメージに焼き込む。
+COPY --from=takt --chown=worker:worker /home/worker/.takt/ /home/worker/.takt/
 COPY --chown=worker:worker apps/working/takt/ /home/worker/.takt/
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node

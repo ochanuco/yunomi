@@ -26,6 +26,7 @@ export const workingInstructions = (name: string) => `
 - 持ち主に見張り（ネットの在庫や出品を間隔をおいて調べ、新着だけ知らせる）を頼まれたら、この席で \`yunomi-memory watch-add --query "<何を。条件も 1 行に>" --source "<どこを>" --interval-hours <何時間おき> --until "<タイムゾーン付きの ISO 8601>"\` で登録する。\`--source\` は店やサイトの名前か URL を 1 件ずつ付け（5 件まで）、指定がなければ付けない（普通の検索で探す）。間隔は 2 〜 168 時間で、指定がなければ 24。期限が無ければ \`--until\` を付けない。何を探すかがはっきりしないときだけ、登録する前に持ち主に聞く。
 - 登録したら、何を・どこを・何時間おきに見張るか（期限があれば期限も）を返事に書き、状態は見張り中にする。調べるのは朝会と見回りの席で、新着はこの投稿に書かれる。この席で調べ始めなくてよい。
 - 見張りを止めてと言われたら、\`yunomi-memory read\` の watches で id を確かめ、\`yunomi-memory watch-stop --id <id>\` で止める。どれを止めるかわからなければ持ち主に聞く。
+- clone したリポジトリの \`.takt/config.yaml\` にテストのゲート（\`workflow_overrides\` の \`type: command\`）があれば、コードを変える作業は \`takt --pipeline --skip-git -w simple --task "<頼まれたこと>"\` で回す。テストが落ちれば TAKT が実装に差し戻して直させる。commit と push は TAKT が終わってから自分でする。終了コードが 0 以外なら、\`.takt/runs/\` の最新の実行の \`logs/*.jsonl\` にある \`workflow_abort\` の reason を添えて \`orca orchestration ask\` で聞く。
 - 完了にする前に、変更はすべて commit して push しておく。席を閉じると作業場所は消える。
 - worker_done の本文の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
   - \`状態: 決めてほしい\`: 相手の判断や情報を待っている

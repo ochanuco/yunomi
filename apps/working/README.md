@@ -164,7 +164,8 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 - `~/work` の下の `mise.toml` は信頼済みとして扱う（`MISE_TRUSTED_CONFIG_PATHS`）。`mise trust` は要らない。
 - C 拡張や node-gyp のビルドに使う `build-essential`・`python3`・`pkg-config` と、opencv-python が読む `libgl1`・`libglib2.0-0` を入れてある。
 - 受付（start.sh が起動する node）の `PATH` には shims を足さない。受付はイメージの node 24 で動く。
-- TAKT のグローバル設定（`apps/working/takt/` → `~/.takt/`）は provider を `claude-headless` にしてあり、席の claude のログインで動く。workflow は、リポジトリの `.takt/workflows/`、`~/.takt/workflows/`、組み込みの順に探される。
+- TAKT のグローバル設定（`apps/working/takt/` → `~/.takt/`）は provider を `claude-sdk`、model を `sonnet` にしてあり、席の claude のログインで動く。`claude-sdk` の SDK はビルド時に `~/.takt` へ入れる。workflow は、リポジトリの `.takt/workflows/`、`~/.takt/workflows/`、組み込みの順に探される。
+- TAKT が起動する claude は Bash の承認に答えられず、テストを実行できない。テストはリポジトリの `.takt/config.yaml` の command gate（`workflow_overrides` の `type: command`）で TAKT に実行させ、落ちれば実装の step に差し戻させる。席の Claude は、ゲートのあるリポジトリでだけ TAKT を使う（`WORKING_INSTRUCTIONS`）。
 
 ### 記憶の道具
 
