@@ -56,7 +56,7 @@ Working は yunomi の記憶を記憶の口（[docs/working-memory-api.md](docs/
 | パス | 役割 |
 |---|---|
 | `apps/worker` | Cloudflare Worker。パートナーごとの Durable Object、記憶、夜間バッチ、Admin API |
-| `apps/gateway` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る。仕事カテゴリの発言とボタンは mizuya の Working へ渡す |
+| `apps/gateway` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る。仕事カテゴリの発言は送らない（mizuya の Working が受け持つ） |
 | `apps/admin` | Admin Web（Vite + plain DOM）。Worker に埋め込んで `/admin/` で配信する |
 | `apps/cli` | `ykm`。Admin API を読む CLI（状態、記憶、KPI、監査ログ、スナップショット） |
 | `packages/core` | ID、`Result` とドメインエラー、Envelope、EventBus、ドメイン型 |

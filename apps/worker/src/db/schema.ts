@@ -359,23 +359,6 @@ export const workNotes = sqliteTable(
 	(t) => [index("work_notes_entity").on(t.partnerId, t.entityId, t.createdAt)],
 );
 
-// GitHub の webhook で受けた出来事を、Working が取りに来るまで置いておく。
-// Working は公開していないので Worker から押せない。取り出した行は消す。
-export const githubEvents = sqliteTable(
-	"github_events",
-	{
-		id: text("id").primaryKey(),
-		// GitHub の X-GitHub-Delivery。再送で同じ出来事を二度置かないため。
-		deliveryId: text("delivery_id").notNull(),
-		event: text("event").notNull(),
-		receivedAt: text("received_at").notNull(),
-	},
-	(t) => [
-		uniqueIndex("github_events_delivery").on(t.deliveryId),
-		index("github_events_received").on(t.receivedAt),
-	],
-);
-
 /** 見張り。Working の見回りが、時間が来たものだけを調べて新着を知らせる。 */
 export const watches = sqliteTable(
 	"watches",

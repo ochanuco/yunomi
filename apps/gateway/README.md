@@ -24,10 +24,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
-| `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。未設定ならすべての発言を Worker に送る |
-| `WORKING_URL` | いいえ | Working 受付（ochanuco/mizuya の `apps/working`）の URL。仕事カテゴリの発言を POST する。未設定なら仕事カテゴリの発言は捨てる（起動時に警告ログを 1 回） |
-| `WORKING_TOKEN` | `WORKING_URL` と組 | Working 受付と共有するトークン。`Authorization: Bearer` で送る |
-| `WORKING_FORWARD` | いいえ | `false` で仕事カテゴリの発言を Working へ渡さずに捨てる（席の数は読む）。押されたボタンはこの値によらず渡す。既定は `true` |
+| `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。この中の発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。未設定ならすべての発言を Worker に送る |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
@@ -41,14 +38,10 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `DISCORD_TOKEN` | Akarin の bot の token（Yukarin とは別の bot） |
 | `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の gateway と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
 | `WORK_CATEGORY_IDS` | Yukarin の gateway と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
-| `WORKING_URL` / `WORKING_TOKEN` | Yukarin の gateway と同じ値。bot のステータスに Akarin の作業中の席の数を出す |
-| `WORKING_FORWARD` | `false`。仕事カテゴリの発言を Working へ渡すのは Yukarin の gateway だけで（Akarin 宛ての依頼も含む）、Akarin の gateway はその発言を捨てる。二重に届けないため |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` / `KUKICHA_URL` / `KUKICHA_TOKEN` / `OWNER_DISCORD_USER_ID` | Akarin はまだ声を持たないので渡さない |
 | `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
 
 Worker 側では、Akarin の bot の user id（`AKARIN_DISCORD_USER_ID`）と token（`AKARIN_DISCORD_BOT_TOKEN`）が要る（`apps/worker/README.md` の「もうひとりのパートナー」）。user id が無いと、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を第三者の発言として見分けない。
-
-仕事カテゴリで bot のメッセージのボタンが押されると、Discord はメッセージを書いた bot の gateway にだけ知らせる。gateway はすぐに受け取ったことだけを Discord に返し、押した人とボタンを Working へ渡す。Akarin の gateway も、Akarin が書いた許可の依頼のボタンを渡す。
 
 どちらの gateway も、もうひとりの bot の発言を `is_bot=true` で自分のパートナーに中継する。どちらが返事をするかは Worker が決める。
 
@@ -66,11 +59,8 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 ## 挙動
 
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。VC のテキストチャット（GuildVoice）は通常のチャンネルと同じに中継し、作者が入っている VC を `author_voice_channel_id` に載せる（guild の voice state キャッシュから読む）。
-- 発言のチャンネルの親カテゴリ（スレッドなら親チャンネルのカテゴリ）が `WORK_CATEGORY_IDS` に含まれるときは、Worker に送らず、Worker へ送るのと同じ envelope を `WORKING_URL` に `Authorization: Bearer <WORKING_TOKEN>` 付きで POST する。Talking は返事をしない。転送は 1 回だけ試し（タイムアウト 10 秒）、失敗は warn ログを残して捨てる。それ以外のカテゴリとカテゴリ外の発言は今までどおり Worker に送る。
+- 発言のチャンネルの親カテゴリ（スレッドなら親チャンネルのカテゴリ）が `WORK_CATEGORY_IDS` に含まれるときは、Worker に送らない。Talking は返事をしない。それ以外のカテゴリとカテゴリ外の発言は Worker に送る。
 - typing は出さない。Worker が REST で出す。
-- `WORKING_URL` があれば、同じ受付の `/seats/summary` を 1 分おきに読み、自分のパートナー（`PARTNER_ID`）の分を bot に出す。受付がパートナーごとの数を返さなければ、全体の数を出す。
-  - ステータスは `作業中 1件 · 5h 50% · 週 22%`。作業中の席が 0 件なら `作業中` を、使用率が届かなければ使用率を省き、どちらもなければ、または受付が読めなければ消す。
-  - 自己紹介欄（アプリの description）に、使用率のゲージとリセット時刻を書く。プロフィールの小窓は頭の 3 行しか出さないので、`5h ▰▰▱▱▱ 55%・19:00` と `W ▰▱▱▱▱ 22%・木 1:00` の 1 枠 1 行に、書いた時刻を 3 行目に置く。ゲージは 20% ごとに 1 マスを切り捨てで埋める。リセット時刻は近いほうの分に丸め、今日なら時刻だけ、別の日なら曜日を付ける。書き換えの頻度の制限が公開されていないので、本文が変わったときだけ 15 分に一度まで書く。受付が一時的に読めないだけでは消さない。
 - `ignore` は何もしない。`ack`（Worker が送信まで済ませた）は、`voice` があるときだけ VC を操作する。
 - `reply` と `ack` に `avatar: { emotion }` があれば、返事のテキストを送り終えたあとに、その感情の表情画像からランダムに 1 枚を同じチャンネルへ添付で貼る。分割された返事でも 1 回だけ。`reply` を途中までしか送れなかったときは貼らない。画像の無い感情は何もしない。
 - Worker が `DISCORD_SEND_FROM_WORKER=1` と `DISCORD_BOT_TOKEN` の両方を持つまで、Worker は `reply` を返す。互換のため、`reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。
