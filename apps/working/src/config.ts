@@ -10,6 +10,8 @@ const positiveInt = v.pipe(
 	v.minValue(1),
 );
 
+const timeOfDay = v.pipe(v.string(), v.regex(/^([01]\d|2[0-3]):[0-5]\d$/));
+
 const envSchema = v.object({
 	DISCORD_TOKEN: nonEmpty,
 	AKARIN_DISCORD_TOKEN: v.optional(nonEmpty),
@@ -40,12 +42,12 @@ const envSchema = v.object({
 	MAC_STATE_TOKEN: v.optional(nonEmpty),
 	MAC_STATE_PORT: v.optional(positiveInt),
 	STANDUP_ENABLED: v.optional(v.picklist(["true", "false"])),
-	STANDUP_TIME: v.optional(
-		v.pipe(v.string(), v.regex(/^([01]\d|2[0-3]):[0-5]\d$/)),
-	),
+	STANDUP_TIME: v.optional(timeOfDay),
 	STANDUP_GITHUB_OWNER: v.optional(nonEmpty),
 	HEARTBEAT_ENABLED: v.optional(v.picklist(["true", "false"])),
 	HEARTBEAT_INTERVAL_MINUTES: v.optional(v.pipe(positiveInt, v.minValue(30))),
+	ACTIVITY_LOG_THREAD_ID: v.optional(nonEmpty),
+	ACTIVITY_LOG_TIME: v.optional(timeOfDay),
 });
 
 export type WorkingConfig = {
@@ -95,6 +97,11 @@ export type WorkingConfig = {
 		/** 朝会の合間の見回りの間隔。null なら見回らず、朝会だけを回す。 */
 		heartbeatIntervalMs: number | null;
 	};
+	/** 席がしたことを 1 日 1 回まとめて投稿するスレッドと時刻。スレッドが無ければまとめない。 */
+	activityLog: {
+		threadId: string;
+		at: { hour: number; minute: number };
+	} | null;
 };
 
 export const loadConfig = (
@@ -122,9 +129,10 @@ export const loadConfig = (
 	if (owner === undefined) {
 		return err(["WORKING_OWNER_DISCORD_USER_IDS: ID が 1 つもない"]);
 	}
-	const [hour = 9, minute = 0] = (e.STANDUP_TIME ?? "09:00")
-		.split(":")
-		.map(Number);
+	const timeOf = (hhmm: string) => {
+		const [hour = 0, minute = 0] = hhmm.split(":").map(Number);
+		return { hour, minute };
+	};
 	return ok({
 		discordToken: e.DISCORD_TOKEN,
 		akarinDiscordToken: e.AKARIN_DISCORD_TOKEN ?? null,
@@ -171,12 +179,18 @@ export const loadConfig = (
 			: null,
 		standup: {
 			enabled: (e.STANDUP_ENABLED ?? "true") === "true",
-			at: { hour, minute },
+			at: timeOf(e.STANDUP_TIME ?? "09:00"),
 			githubOwner: e.STANDUP_GITHUB_OWNER ?? "ochanuco",
 			heartbeatIntervalMs:
 				(e.HEARTBEAT_ENABLED ?? "true") === "true"
 					? (e.HEARTBEAT_INTERVAL_MINUTES ?? 120) * 60_000
 					: null,
 		},
+		activityLog: e.ACTIVITY_LOG_THREAD_ID
+			? {
+					threadId: e.ACTIVITY_LOG_THREAD_ID,
+					at: timeOf(e.ACTIVITY_LOG_TIME ?? "23:30"),
+				}
+			: null,
 	});
 };
