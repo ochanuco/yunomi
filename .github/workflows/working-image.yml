@@ -52,6 +52,8 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.tags.outputs.sha }}
     permissions:
       contents: read
       packages: write
@@ -76,3 +78,31 @@ jobs:
           tags: |
             ghcr.io/ochanuco/yunomi-working:${{ steps.tags.outputs.sha }}
             ghcr.io/ochanuco/yunomi-working:main
+
+  # docker01 に出す前に、Environment production-approval で持ち主の承認を待つ。作り直すと作業中の席が切れるので、作業の切れ目を選ぶ
+  approve:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-approval
+    steps:
+      - run: echo approved
+
+  deploy:
+    needs: [publish, approve]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    concurrency:
+      group: docker01-yunomi-working
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/docker01-app
+        with:
+          service: yunomi-working
+          tag: ${{ needs.publish.outputs.tag }}
+          op-service-account-token: ${{ secrets.OP_SA_DEPLOY }}

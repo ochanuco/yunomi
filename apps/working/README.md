@@ -308,7 +308,7 @@ bot には仕事フォーラムでの投稿の作成・メッセージ送信・�
 
 ## 配備
 
-main への push で `.github/workflows/working-image.yml` が `ghcr.io/ochanuco/yunomi-working:main` と `:sha-<short>` を公開する。PR ではビルドだけ確かめる。
+main への push で `.github/workflows/working-image.yml` が `ghcr.io/ochanuco/yunomi-working:main` と `:sha-<short>` を公開する。PR ではビルドだけ確かめる。公開の後、Environment `production-approval` で持ち主が承認すると、`deploy` job が chabatake の `docker01-app` を dispatch して `:sha-<short>` を docker01 に配置する（`.github/actions/docker01-app`）。作り直すと作業中の席が切れるので、承認は作業の切れ目に出す。
 
 gateway と同じホストに、gateway とは別の compose project で置く（`compose.example.yaml`）。gateway を更新しても Working の作業は止まらない。
 

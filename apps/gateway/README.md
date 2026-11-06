@@ -133,7 +133,7 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 
 ## Docker
 
-イメージは `.github/workflows/gateway-image.yml` が main への push で `ghcr.io/ochanuco/yunomi-gateway` に `sha-<short>` と `main` の tag で公開する。PR では build の成否だけを確認する。
+イメージは `.github/workflows/gateway-image.yml` が main への push で `ghcr.io/ochanuco/yunomi-gateway` に `sha-<short>` と `main` の tag で公開する。PR では build の成否だけを確認する。公開の後、`deploy-dev` job が chabatake の `docker01-app` を dispatch して dev に配置する。prod とあかりは、dev で確かめて Environment `production-approval` で承認すると `deploy` job が配置する（`.github/actions/docker01-app`）。
 
 ```sh
 docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # ビルドコンテキストはリポジトリルート
