@@ -167,9 +167,11 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 席の Claude は `yunomi-memory` で、Talking と共有する長い記憶を読み書きする。受付も、席が完了したときと Mac に引き継いだときに 1 行残す。決まったことと終わったことは、そのつど 1 件 1 行ずつ残すよう `WORKING_INSTRUCTIONS` に書いてある。
 
 ```sh
-yunomi-memory read                                         # 事実・出来事・open loop を JSON で出す
+yunomi-memory read                                         # 事実・出来事・open loop・目標を JSON で出す
 yunomi-memory write --kind decided --summary "<1行の要約>"  # 決まったこと
 yunomi-memory write --kind done --summary "<1行の要約>"     # 終わったこと
+yunomi-memory write --kind goal --summary "<1行の目標>"     # 持ち主の目標。id を返す
+yunomi-memory close --id <目標の id> --status achieved      # 目標を閉じる（やめたら dropped）
 ```
 
 - 呼ぶ先は Worker の `/v1/partners/<パートナー>/working/memory`。パートナーは環境変数 `YUNOMI_PARTNER`（Akarin の席の Codex がコマンドに渡す）、無ければ `yukarin`。受付が完了のときに残す 1 行も、担当のパートナーの記憶に書く。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
@@ -188,13 +190,15 @@ Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は 
 
 受付は毎日（曜日も祝日も見ない）の `STANDUP_TIME`（既定は `09:00`、Asia/Tokyo）に朝会をする。`STANDUP_ENABLED=false` で止める。
 
-1. 材料を集める。記憶（`yunomi-memory read`）、最後に届いた席の状態と届いた時刻、GitHub（`STANDUP_GITHUB_OWNER` の open な PR、CI が落ちている PR、label `working-handoff` の申し送り、`GH_TOKEN` の人が `dev/` ブランチから出した PR、Renovate の PR と、その CI・コンフリクトの状態）、Claude CLI のログインの期限（`claude auth status` の `loginExpiresAt`）。取れなかったものは、取れなかったと書いて渡す。
+1. 材料を集める。記憶（`yunomi-memory read`）とその中の持ち主の目標、最後に届いた席の状態と届いた時刻、GitHub（`STANDUP_GITHUB_OWNER` の open な PR、CI が落ちている PR、label `working-handoff` の申し送り、`GH_TOKEN` の人が `dev/` ブランチから出した PR、Renovate の PR と、その CI・コンフリクトの状態）、Claude CLI のログインの期限（`claude auth status` の `loginExpiresAt`）。取れなかったものは、取れなかったと書いて渡す。
 2. ログインの期限が 7 日以内なら、席の返事を待たずに 1 件投稿する。
 3. 朝会の席（`seat-standup-<ID>`）を作って材料を渡す。席の Claude は取り消せること（調べる、コメントする、`dev/` ブランチで直す、記憶に残す）をその場で済ませ、決めてほしいことだけを `worker_done` の本文に JSON で返す。朝会の席は持ち主に聞かない（`ask` には受付が「聞けない」と答える）。上限の数には入れず、決めてほしいままでも止めない。
 4. 決めてほしいこと 1 件ごとに、仕事フォーラムへ投稿を立ててタグ `決めてほしい` を付ける。hook が止めた操作があれば 1 件の投稿にまとめ、その投稿で許可を待つ。朝会の席は報告を受けたら閉じる。
 5. 決めてほしいことが無ければ何も投稿しない。
 
 Renovate の PR は持ち主の許しで、朝会と見回りの席が片付ける。CI が通っていてマージできる（`mergeStateStatus` が `CLEAN`）ものはマージし、コンフリクトしているものは rebase のチェックボックスで Renovate に作り直させ、それでも直らなければ同じブランチでコンフリクトを解いて push する（次の回でマージする）。Renovate を入れる最初の PR（`renovate/configure`）と draft は触らない。マージが auto モードに止められたら、ほかの止めた操作と同じく許可を求める投稿になる。
+
+朝会と見回りの席には、目標に効く提案があれば決めてほしいこととして出すよう頼んである。材料に根拠があるときだけで、無い回は出さない。
 
 朝会と見回りの投稿に返事をすると、その投稿に新しい席を作り、投稿の本文と返事を渡して続ける。
 
@@ -205,7 +209,7 @@ Renovate の PR は持ち主の許しで、朝会と見回りの席が片付け�
 朝会の合間に、受付は `HEARTBEAT_INTERVAL_MINUTES`（既定は 120 分）ごとに見回る。`HEARTBEAT_ENABLED=false` で止め、朝会だけにする。
 
 - 1 回が終わってから次を予約する。Yukarin の profile の `living_rhythm.typical_sleep`（寝ている時間帯）に入る回は、起きる時刻まで飛ばす。朝会の前の間隔の半分以内に入る回は、朝会にまとめる。
-- 材料は朝会と同じものを集める。GitHub の件（open な PR、CI が落ちている PR、申し送り、`dev/` ブランチの PR、Renovate の PR）を前の回と比べ、新しく出た件と状態が変わった件だけを拾う。前の回に見たものは `STATE_DIR/patrol-state.json` に残す。朝会も同じものを残すので、朝会で見た件は見回りで拾い直さない。
+- 材料は朝会と同じものを集める。持ち主の目標と GitHub の件（open な PR、CI が落ちている PR、申し送り、`dev/` ブランチの PR、Renovate の PR）を前の回と比べ、新しく出た件と状態が変わった件だけを拾う。目標は新しく足されたものだけを拾い、閉じて消えたものは拾わない。前の回に見たものは `STATE_DIR/patrol-state.json` に残す。朝会も同じものを残すので、朝会で見た件は見回りで拾い直さない。
 - 状態として比べるのは draft かどうか、申し送りが拾われたかどうか、Renovate の PR の CI・コンフリクト・マージの状態だけ。コメントで動く更新時刻は比べないので、席が PR にコメントしても次の回で拾い直さない。
 - 変わった件が無い回は席を作らず、何も投稿しない。初めての回は前の回が無いので、覚えるだけにする。
 - 変わった件があれば、見回りの席（`seat-patrol-<ID>`）に変わった件と記憶、席の状態を渡す。席の扱いと投稿のしかたは朝会と同じで、投稿の最後には見回りの時刻が付く。ログインの期限は朝会だけが投稿する。

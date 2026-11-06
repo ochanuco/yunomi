@@ -19,7 +19,8 @@ export const credentialsPathOf = (stateDir: string) =>
 
 const PARTNER = /^[a-z]+$/;
 
-export const MEMORY_KINDS = ["decided", "done"] as const;
+export const MEMORY_KINDS = ["decided", "done", "goal"] as const;
+export const GOAL_CLOSINGS = ["achieved", "dropped"] as const;
 /** Worker の WORK_NOTE_SUMMARY_MAX_LENGTH と揃える。 */
 export const SUMMARY_MAX_LENGTH = 200;
 
@@ -27,7 +28,8 @@ export type CliOutput = { code: number; stdout: string; stderr: string };
 
 const USAGE = `使い方:
   yunomi-memory read
-  yunomi-memory write --kind decided|done --summary "<1行の要約>"
+  yunomi-memory write --kind decided|done|goal --summary "<1行の要約>"
+  yunomi-memory close --id <目標の id> --status achieved|dropped
 `;
 
 const fail = (code: number, message: string): CliOutput => ({
@@ -70,24 +72,37 @@ export const runMemoryCli = async (
 	doFetch: typeof fetch = fetch,
 ): Promise<CliOutput> => {
 	const [command, ...rest] = argv;
-	if (command !== "read" && command !== "write") return fail(2, USAGE);
-	let values: { kind?: string; summary?: string };
+	if (command !== "read" && command !== "write" && command !== "close") {
+		return fail(2, USAGE);
+	}
+	let values: { kind?: string; summary?: string; id?: string; status?: string };
 	try {
 		values = parseArgs({
 			args: [...rest],
-			options: { kind: { type: "string" }, summary: { type: "string" } },
+			options: {
+				kind: { type: "string" },
+				summary: { type: "string" },
+				id: { type: "string" },
+				status: { type: "string" },
+			},
 			strict: true,
 			allowPositionals: false,
 		}).values;
 	} catch {
 		return fail(2, USAGE);
 	}
-	if (command === "read" && (values.kind || values.summary)) {
-		return fail(2, USAGE);
-	}
+	const given = (Object.keys(values) as (keyof typeof values)[]).filter(
+		(k) => values[k] !== undefined,
+	);
+	const allowed: Record<typeof command, readonly string[]> = {
+		read: [],
+		write: ["kind", "summary"],
+		close: ["id", "status"],
+	};
+	if (given.some((k) => !allowed[command].includes(k))) return fail(2, USAGE);
 	if (command === "write") {
 		if (!MEMORY_KINDS.includes(values.kind as (typeof MEMORY_KINDS)[number])) {
-			return fail(2, `--kind は decided か done\n${USAGE}`);
+			return fail(2, `--kind は decided か done か goal\n${USAGE}`);
 		}
 		const summary = (values.summary ?? "").trim();
 		if (summary === "" || /[\r\n]/.test(summary)) {
@@ -97,6 +112,15 @@ export const runMemoryCli = async (
 			return fail(2, `--summary は ${SUMMARY_MAX_LENGTH} 字以内`);
 		}
 		values.summary = summary;
+	}
+	if (command === "close") {
+		if ((values.id ?? "").trim() === "") return fail(2, USAGE);
+		if (
+			!GOAL_CLOSINGS.includes(values.status as (typeof GOAL_CLOSINGS)[number])
+		) {
+			return fail(2, `--status は achieved か dropped\n${USAGE}`);
+		}
+		values.id = (values.id ?? "").trim();
 	}
 
 	const creds = readCredentials(env);
@@ -119,13 +143,21 @@ export const runMemoryCli = async (
 						{ headers, signal: AbortSignal.timeout(15_000) },
 					)
 				: await doFetch(base, {
-						method: "POST",
+						method: command === "write" ? "POST" : "PATCH",
 						headers: { ...headers, "content-type": "application/json" },
-						body: JSON.stringify({
-							discord_user_id: creds.discord_user_id,
-							kind: values.kind,
-							summary: values.summary,
-						}),
+						body: JSON.stringify(
+							command === "write"
+								? {
+										discord_user_id: creds.discord_user_id,
+										kind: values.kind,
+										summary: values.summary,
+									}
+								: {
+										discord_user_id: creds.discord_user_id,
+										id: values.id,
+										status: values.status,
+									},
+						),
 						signal: AbortSignal.timeout(15_000),
 					});
 	} catch {
@@ -141,9 +173,21 @@ export const runMemoryCli = async (
 		return fail(1, `記憶の口が ${res.status} を返した${code}`);
 	}
 	if (command === "read") return { code: 0, stdout: `${text}\n`, stderr: "" };
+	if (command === "close") {
+		return {
+			code: 0,
+			stdout: `閉じた: ${values.status} ${values.id}\n`,
+			stderr: "",
+		};
+	}
+	let id = "";
+	try {
+		const r = JSON.parse(text) as { id?: unknown };
+		if (typeof r.id === "string") id = ` (id: ${r.id})`;
+	} catch {}
 	return {
 		code: 0,
-		stdout: `残した: ${values.kind} ${values.summary}\n`,
+		stdout: `残した: ${values.kind} ${values.summary}${id}\n`,
 		stderr: "",
 	};
 };

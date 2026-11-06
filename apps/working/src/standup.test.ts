@@ -8,6 +8,7 @@ import { finishStandup, parseDecisions, startStandup } from "./standup.ts";
 import {
 	ciOf,
 	gatherStandupMaterials,
+	goalsOf,
 	type StandupMaterials,
 } from "./standup-materials.ts";
 import {
@@ -25,6 +26,7 @@ const materials = (
 	github: Partial<StandupMaterials["github"]> = {},
 ): StandupMaterials => ({
 	memory: { facts: [] },
+	goals: [],
 	mac_state: { unavailable: "x" },
 	github: {
 		open_prs: [],
@@ -109,6 +111,26 @@ describe("startStandup", () => {
 		expect(t.discord.posts).toEqual([]);
 	});
 
+	it("朝会の材料に目標を入れ、目標に効く提案を頼む", async () => {
+		const start = vi.fn(async (_spec: string, _kind: string) => "standup-1");
+		const goal = {
+			id: "g1",
+			summary: "本を書く",
+			created_at: "2026-11-05 21:00 JST",
+		};
+		await startStandup({
+			deps: setup().deps,
+			kind: "standup",
+			store: memoryStore(),
+			gather: async () => ({ ...materials(), goals: [goal] }),
+			preamble: "",
+			start,
+		});
+		const [spec] = start.mock.calls[0] ?? [];
+		expect(spec).toContain('"goals":[{"id":"g1","summary":"本を書く"');
+		expect(spec).toContain("目標（goals）に効く提案があれば");
+	});
+
 	it("ログインの期限が近ければ、席の返事を待たずに 1 件立てる", async () => {
 		const t = setup();
 		await startStandup({
@@ -190,6 +212,29 @@ describe("startStandup の見回り", () => {
 			failing_prs: [failingPr(1), failingPr(2)],
 		});
 		expect(again.start).not.toHaveBeenCalled();
+	});
+
+	it("会話で足された目標があれば、それを材料にして席を立て、目標に効く提案を頼む", async () => {
+		const store = memoryStore();
+		await patrol(store, {});
+		const goal = {
+			id: "g1",
+			summary: "家の電気代を下げる",
+			created_at: "2026-11-05 21:00 JST",
+		};
+		const start = vi.fn(async (_spec: string, _kind: string) => "patrol-1");
+		await startStandup({
+			deps: setup().deps,
+			kind: "patrol",
+			store,
+			gather: async () => ({ ...materials(), goals: [goal] }),
+			preamble: "",
+			start,
+		});
+		const [spec] = start.mock.calls[0] ?? [];
+		expect(spec).toContain('"goals":[{"id":"g1"');
+		expect(spec).toContain("目標（goals）に効く提案があれば");
+		expect(spec).toContain("根拠があるときだけ");
 	});
 
 	it("席を立てられなければ覚えず、次の回で拾い直す", async () => {
@@ -357,6 +402,8 @@ describe("gatherStandupMaterials", () => {
 			logger: silentLogger,
 		});
 		expect(m.memory).toEqual({ facts: [] });
+		// goals を返さない記憶は、目標を読めなかったことにする
+		expect(m.goals).toEqual({ unavailable: "記憶の目標を読めなかった" });
 		expect(m.mac_state).toMatchObject({
 			received_at: new Date("2026-11-04T13:00:00Z"),
 		});
@@ -438,6 +485,20 @@ describe("gatherStandupMaterials", () => {
 			}),
 			expect.objectContaining({ number: 1, onboarding: true }),
 		]);
+	});
+});
+
+describe("goalsOf", () => {
+	it("記憶の goals を取り出し、記憶が取れなければその印を引き継ぐ", () => {
+		const g = {
+			id: "g1",
+			summary: "本を書く",
+			created_at: "2026-11-06 12:00 JST",
+		};
+		expect(goalsOf({ facts: [], goals: [g] })).toEqual([g]);
+		expect(goalsOf({ unavailable: "記憶 を取れなかった" })).toEqual({
+			unavailable: "記憶 を取れなかった",
+		});
 	});
 });
 

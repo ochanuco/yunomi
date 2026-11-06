@@ -8,10 +8,15 @@ import {
 	normalizeObject,
 	normalizePredicate,
 } from "@yunomi/core";
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
-import { WORK_NOTE_PREDICATE, WORK_NOTE_PROMPT_LIMIT } from "./work-notes.ts";
+import {
+	WORK_NOTE_PREDICATE,
+	WORK_NOTE_PROMPT_LIMIT,
+	type WorkEpisodeKind,
+	workEpisodeKinds,
+} from "./work-notes.ts";
 
 export const PROMPT_FACT_LIMIT = 30;
 export const PROMPT_EPISODE_LIMIT = 30;
@@ -72,7 +77,7 @@ export type MemoryRepo = {
 	): Promise<CandidateOutcome[]>;
 	/**
 	 * 続く事実（重要度順）のあとに出来事（新しい順）を並べて返す。
-	 * 出来事には Working が残した1行（work_notes）も混ぜ、facts の出来事と合わせて新しい順にする。
+	 * 出来事には Working が残した1行（work_notes の decided と done）も混ぜ、facts の出来事と合わせて新しい順にする。
 	 */
 	topFacts(partnerId: string, entityId: string): Promise<PromptFact[]>;
 };
@@ -265,6 +270,8 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 						and(
 							eq(workNotes.partnerId, partnerId),
 							eq(workNotes.entityId, entityId),
+							// 目標は直近の出来事に押し出されないよう、別の区画で全件を出す。
+							inArray(workNotes.kind, [...workEpisodeKinds]),
 						),
 					)
 					.orderBy(desc(workNotes.createdAt), desc(workNotes.id))
@@ -285,7 +292,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 			const workEpisodes = notes.map(
 				(n): PromptFact => ({
 					kind: "episode",
-					predicate: WORK_NOTE_PREDICATE[n.kind],
+					predicate: WORK_NOTE_PREDICATE[n.kind as WorkEpisodeKind],
 					object: n.summary,
 					observedAt: new Date(n.createdAt),
 				}),

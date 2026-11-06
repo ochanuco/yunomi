@@ -5,10 +5,12 @@ import {
 	createChatsumiAdapter,
 	createDiscordAttachmentAdapter,
 	createGithubAdapter,
+	createGoalAdapter,
 	createGoogleCalendarAdapter,
 	createGooglePlacesAdapter,
 	createHomeAssistantAdapter,
 	createToolRegistry,
+	type GoalStore,
 	type PendingStore,
 	parseHomeEntityIds,
 } from "@yunomi/capabilities";
@@ -44,6 +46,8 @@ export type CapabilityDeps = {
 	pending: PendingStore;
 	policy: CapabilityPolicy;
 	now: () => Date;
+	/** オーナーの目標の置き場所。無ければ goal_add / goal_close を出さない。 */
+	goals?: GoalStore;
 	/** テストが Google への通信を差し替える。既定は Worker の fetch。 */
 	fetch?: typeof fetch;
 };
@@ -125,6 +129,9 @@ export const defaultCapabilities = (
 	// owner がいない環境（dev）では gate がすべて拒否するので、道具の一覧にも出さない。
 	if (botToken && ownerId) {
 		adapters.push(createDiscordAttachmentAdapter({ fetch: doFetch, botToken }));
+	}
+	if (deps.goals && ownerId) {
+		adapters.push(createGoalAdapter({ store: deps.goals }));
 	}
 	if (adapters.length === 0) return null;
 	const registry = createToolRegistry(adapters);

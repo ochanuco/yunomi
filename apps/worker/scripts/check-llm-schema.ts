@@ -1,4 +1,4 @@
-import type { PendingStore } from "@yunomi/capabilities";
+import type { GoalStore, PendingStore } from "@yunomi/capabilities";
 import { turnOutput } from "@yunomi/conversation";
 import { ClaudeProvider, HAIKU, type ModelId, SONNET } from "@yunomi/llm";
 import {
@@ -32,10 +32,16 @@ const unusedPending = new Proxy({} as PendingStore, {
 		throw new Error("check-llm-schema は保留を扱わない");
 	},
 });
+const unusedGoals = new Proxy({} as GoalStore, {
+	get: () => () => {
+		throw new Error("check-llm-schema は目標を扱わない");
+	},
+});
 const capabilities = defaultCapabilities(fullEnv, {
 	pending: unusedPending,
 	policy: defaultPartnerProfile.capability_defaults,
 	now: () => new Date(),
+	goals: unusedGoals,
 });
 if (!capabilities) {
 	console.error("道具が 1 つも登録されなかった");

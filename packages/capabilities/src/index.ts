@@ -1,6 +1,7 @@
 export * from "./adapters/chatsumi.ts";
 export * from "./adapters/discord-attachment.ts";
 export * from "./adapters/github.ts";
+export * from "./adapters/goals.ts";
 export * from "./adapters/google-calendar.ts";
 export * from "./adapters/google-places.ts";
 export * from "./adapters/home-assistant.ts";
@@ -8,6 +9,7 @@ export * from "./contract.ts";
 export * from "./definitions/attachment.ts";
 export * from "./definitions/calendar.ts";
 export * from "./definitions/github.ts";
+export * from "./definitions/goal.ts";
 export * from "./definitions/home.ts";
 export * from "./definitions/place.ts";
 export * from "./definitions/web.ts";

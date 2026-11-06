@@ -75,6 +75,34 @@ describe("runMemoryCli", () => {
 		});
 	});
 
+	it("goal を足すと id を返し、close で達成か取り下げにする", async () => {
+		const env = setup();
+		const added = await runMemoryCli(
+			["write", "--kind", "goal", "--summary", "本を 1 冊書く"],
+			env,
+			respond(201, { id: "g1" }) as typeof fetch,
+		);
+		expect(added.stdout).toBe("残した: goal 本を 1 冊書く (id: g1)\n");
+
+		const f = respond(200, { id: "g1" });
+		const closed = await runMemoryCli(
+			["close", "--id", "g1", "--status", "achieved"],
+			env,
+			f as typeof fetch,
+		);
+		expect(closed.code).toBe(0);
+		const [url, init] = f.mock.calls[0] ?? [];
+		expect(String(url)).toBe(
+			"https://worker.example/v1/partners/yukarin/working/memory",
+		);
+		expect(init?.method).toBe("PATCH");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			discord_user_id: "owner-1",
+			id: "g1",
+			status: "achieved",
+		});
+	});
+
 	it("書き方が違えば呼ばずに断る", async () => {
 		const env = setup();
 		const f = respond(201, {});
@@ -85,6 +113,11 @@ describe("runMemoryCli", () => {
 			["write", "--kind", "done"],
 			["delete"],
 			["read", "extra"],
+			["read", "--kind", "done"],
+			["write", "--kind", "done", "--summary", "x", "--id", "g1"],
+			["close", "--id", "g1"],
+			["close", "--id", "g1", "--status", "open"],
+			["close", "--status", "achieved"],
 		]) {
 			expect((await runMemoryCli(argv, env, f as typeof fetch)).code).toBe(2);
 		}

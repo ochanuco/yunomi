@@ -44,8 +44,13 @@ export type RenovatePr = WorkingPr & {
 	merge_state: string;
 };
 
+/** 持ち主の目標。記憶（yunomi-memory read）の goals から取る。 */
+export type Goal = { id: string; summary: string; created_at: string };
+
 export type StandupMaterials = {
 	memory: unknown;
+	/** 見回りで新しく足された目標を拾うため、記憶とは別に型付きで持つ。 */
+	goals: Goal[] | Unavailable;
 	mac_state:
 		| {
 				received_at: Date;
@@ -157,6 +162,25 @@ export const ciOf = (rollup: Rollup): "success" | "failure" | "pending" => {
 			pending = true;
 	}
 	return pending ? "pending" : "success";
+};
+
+const memoryGoalsSchema = v.object({
+	goals: v.array(
+		v.object({ id: v.string(), summary: v.string(), created_at: v.string() }),
+	),
+});
+
+/** 記憶の応答から目標を取り出す。古い Worker は goals を返さないので、取れなければ unavailable にする。 */
+export const goalsOf = (memory: unknown): Goal[] | Unavailable => {
+	if (failed(memory)) return memory;
+	const parsed = v.safeParse(memoryGoalsSchema, memory);
+	return parsed.success
+		? parsed.output.goals.map((g) => ({
+				id: g.id,
+				summary: g.summary,
+				created_at: g.created_at,
+			}))
+		: { unavailable: "記憶の目標を読めなかった" };
 };
 
 const authSchema = v.object({
@@ -394,6 +418,7 @@ export const gatherStandupMaterials = async (
 	const expiresAt = failed(auth) ? null : toDate(auth.loginExpiresAt);
 	return {
 		memory,
+		goals: goalsOf(memory),
 		mac_state:
 			latest === null
 				? { unavailable: "Mac から席の状態が届いたことがない" }

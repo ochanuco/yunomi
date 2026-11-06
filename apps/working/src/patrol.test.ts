@@ -18,8 +18,10 @@ const renovate = (number: number, ci: RenovatePr["ci"]): RenovatePr => ({
 
 const materials = (
 	github: Partial<StandupMaterials["github"]>,
+	goals: StandupMaterials["goals"] = [],
 ): StandupMaterials => ({
 	memory: null,
+	goals,
 	mac_state: { unavailable: "x" },
 	github: {
 		open_prs: [],
@@ -105,6 +107,41 @@ describe("diffPatrol", () => {
 			patrolSources(materials({ failing_prs: [pr] })),
 		);
 		expect(c.changes).toEqual({ failing_prs: [pr] });
+	});
+});
+
+describe("目標の見張り", () => {
+	const goal = (id: string) => ({
+		id,
+		summary: `目標 ${id}`,
+		created_at: "2026-11-06 12:00 JST",
+	});
+
+	it("足された目標だけを拾い、閉じて消えた目標は拾わない", () => {
+		const first = diffPatrol({}, patrolSources(materials({}, [goal("g1")])));
+		const added = diffPatrol(
+			first.next,
+			patrolSources(materials({}, [goal("g1"), goal("g2")])),
+		);
+		expect(added.changes).toEqual({ goals: [goal("g2")] });
+		const closed = diffPatrol(
+			added.next,
+			patrolSources(materials({}, [goal("g2")])),
+		);
+		expect(closed.changes).toEqual({});
+	});
+
+	it("記憶を読めなかった回は前の回の目標を残す", () => {
+		const first = diffPatrol({}, patrolSources(materials({}, [goal("g1")])));
+		const down = diffPatrol(
+			first.next,
+			patrolSources(materials({}, { unavailable: "x" })),
+		);
+		const back = diffPatrol(
+			down.next,
+			patrolSources(materials({}, [goal("g1")])),
+		);
+		expect(back.changes).toEqual({});
 	});
 });
 

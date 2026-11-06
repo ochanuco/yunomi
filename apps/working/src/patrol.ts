@@ -22,11 +22,25 @@ export type PatrolSnapshot = Record<string, Record<string, string>>;
 
 const prKey = (p: { repo: string; number: number }) => `${p.repo}#${p.number}`;
 
-/** 朝会と見回りが見る GitHub の件。記憶や Mac の席は変わり続けるので、見張りには入れず材料として渡す。 */
+/**
+ * 朝会と見回りが見る件。GitHub の件と持ち主の目標。
+ * 記憶のほかの部分や Mac の席は変わり続けるので、見張りには入れず材料として渡す。
+ */
 export const patrolSources = (m: StandupMaterials): PatrolSource[] => {
 	const g = m.github;
 	const renovate = failed(g.renovate_prs) ? null : g.renovate_prs;
 	return [
+		{
+			// 足された目標だけを拾う。閉じた目標は消えるだけで、見回りを立てる理由にならない
+			name: "goals",
+			items: failed(m.goals)
+				? null
+				: m.goals.map((goal) => ({
+						key: goal.id,
+						fingerprint: "",
+						item: goal,
+					})),
+		},
 		{
 			name: "open_prs",
 			items: failed(g.open_prs)

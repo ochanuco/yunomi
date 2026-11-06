@@ -120,7 +120,15 @@ export const D1_SNAPSHOT_TABLES = {
 		key: [],
 	},
 	work_notes: {
-		columns: ["id", "entity_id", "kind", "summary", "created_at"],
+		columns: [
+			"id",
+			"entity_id",
+			"kind",
+			"summary",
+			"created_at",
+			"status",
+			"closed_at",
+		],
 		scoped: true,
 		key: [],
 	},
@@ -239,9 +247,10 @@ const insertStatement = (
 	const columns: string[] = def.scoped
 		? ["partner_id", ...def.columns]
 		: [...def.columns];
+	// 古い版の Snapshot に無い列は null で入れる（D1 は undefined を bind できない）。
 	const values = def.scoped
-		? [partnerId, ...def.columns.map((c) => row[c])]
-		: def.columns.map((c) => row[c]);
+		? [partnerId, ...def.columns.map((c) => row[c] ?? null)]
+		: def.columns.map((c) => row[c] ?? null);
 	const insert = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`;
 	const key: string[] = def.key;
 	const updates = def.columns.filter((c) => !key.includes(c));
