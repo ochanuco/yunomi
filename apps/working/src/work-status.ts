@@ -4,6 +4,7 @@ export const WORK_STATUSES = [
 	"作業中",
 	"引き継ぎ",
 	"完了",
+	"見張り中",
 ] as const;
 export type WorkStatus = (typeof WORK_STATUSES)[number];
 

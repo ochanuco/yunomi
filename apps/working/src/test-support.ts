@@ -46,6 +46,7 @@ export const TAGS = [
 	{ id: "tag-decide", name: "決めてほしい" },
 	{ id: "tag-working", name: "作業中" },
 	{ id: "tag-handoff", name: "引き継ぎ" },
+	{ id: "tag-watching", name: "見張り中" },
 	{ id: "tag-done", name: "完了" },
 	{ id: "tag-other", name: "その他" },
 ];

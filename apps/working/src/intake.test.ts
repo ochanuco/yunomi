@@ -539,6 +539,22 @@ describe("席の完了報告", () => {
 		expect(s.seats.get("p1")).toBeNull();
 	});
 
+	it("見張りを登録したら、タグを見張り中にして席を閉じる", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				body: "24 時間おきに見張ります\n状態: 見張り中",
+			}),
+		);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-watching"]);
+		expect(s.remembered[0]).toContain("見張りを始めた");
+		expect(s.activity.map((e) => e.kind)).toEqual(["done"]);
+		expect(s.seats.get("p1")).toBeNull();
+	});
+
 	it("決めてほしいで終えたら席を残し、次の返事を続きとして渡す", async () => {
 		const s = await setup();
 		const seat = await openPost(s);
