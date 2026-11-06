@@ -129,6 +129,42 @@ describe("createDiscordRest", () => {
 		expect(bodies[1].message_reference).toBeUndefined();
 	});
 
+	it("ボタンは分けた本文の最後の 1 件と、フォーラム投稿の最初のメッセージに 1 行で付ける", async () => {
+		let n = 0;
+		const fetch = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				json({ id: `sent${++n}` }),
+		);
+		const api = createDiscordRest({ token: "t", fetch });
+		const buttons = [
+			{ customId: "approval:grant", label: "許可", style: "success" },
+			{ customId: "approval:deny", label: "却下", style: "danger" },
+		] as const;
+		const long = `${"a".repeat(1990)}\n${"b".repeat(100)}`;
+		await api.send("c", long, undefined, [], buttons);
+		await api.createForumPost("f1", {
+			name: "件名",
+			content: "本文",
+			tagIds: [],
+			buttons,
+		});
+		const bodies = fetch.mock.calls.map(([, init]) =>
+			JSON.parse(String(init?.body)),
+		);
+		const row = [
+			{
+				type: 1,
+				components: [
+					{ type: 2, style: 3, label: "許可", custom_id: "approval:grant" },
+					{ type: 2, style: 4, label: "却下", custom_id: "approval:deny" },
+				],
+			},
+		];
+		expect(bodies[0].components).toBeUndefined();
+		expect(bodies[1].components).toEqual(row);
+		expect(bodies[2].message.components).toEqual(row);
+	});
+
 	it("429 は短ければ 1 回だけ待ってやり直す。失敗は err で返す", async () => {
 		const fetch = vi
 			.fn()
@@ -221,6 +257,7 @@ describe("createDiscordRest", () => {
 		expect(JSON.parse(String(fetch.mock.calls[3]?.[1]?.body))).toEqual({
 			content: "状態: 作業中",
 			allowed_mentions: { parse: [] },
+			components: [],
 		});
 	});
 

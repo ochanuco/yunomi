@@ -61,6 +61,43 @@ export type DiscordMessageCreatedEnvelope = Envelope<
 	DiscordMessageCreatedPayload
 >;
 
+export const DISCORD_BUTTON_PRESSED = "discord.button.pressed";
+
+/** bot のメッセージに付けたボタンが押された。押されたボタンはメッセージを書いた bot の Gateway にだけ届く。 */
+export const discordButtonPressedPayloadSchema = v.object({
+	guild_id: snowflake,
+	channel_id: snowflake,
+	message_id: snowflake,
+	custom_id: v.pipe(v.string(), v.nonEmpty()),
+	user: v.object({
+		id: snowflake,
+		display_name: v.pipe(v.string(), v.nonEmpty()),
+		is_bot: v.boolean(),
+	}),
+});
+
+export type DiscordButtonPressedPayload = v.InferOutput<
+	typeof discordButtonPressedPayloadSchema
+>;
+
+/** Gateway → Working。仕事カテゴリで押されたボタン。 */
+export const discordButtonPressedEnvelopeSchema = v.pipe(
+	envelopeSchema(discordButtonPressedPayloadSchema),
+	v.check(
+		(e) => e.type === DISCORD_BUTTON_PRESSED,
+		`type は ${DISCORD_BUTTON_PRESSED} でなければならない`,
+	),
+	v.check(
+		(e) => e.source === DISCORD_SOURCE,
+		`source は ${DISCORD_SOURCE} でなければならない`,
+	),
+);
+
+export type DiscordButtonPressedEnvelope = Envelope<
+	typeof DISCORD_BUTTON_PRESSED,
+	DiscordButtonPressedPayload
+>;
+
 const aivoiceValuesSchema = v.object({
 	engine: v.literal("aivoice"),
 	preset: v.string(),

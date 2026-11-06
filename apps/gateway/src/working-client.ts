@@ -5,7 +5,10 @@ import {
 	ok,
 	type Result,
 } from "@yunomi/core";
-import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import type {
+	DiscordButtonPressedEnvelope,
+	DiscordMessageCreatedEnvelope,
+} from "@yunomi/protocol";
 import * as v from "valibot";
 
 export type WorkingClientOptions = {
@@ -21,7 +24,7 @@ export type WorkingClientOptions = {
 
 export type WorkingClient = {
 	forward: (
-		envelope: DiscordMessageCreatedEnvelope,
+		envelope: DiscordMessageCreatedEnvelope | DiscordButtonPressedEnvelope,
 	) => Promise<Result<void, DomainError>>;
 	/** この gateway のパートナーの、作業中の席の数。 */
 	seatSummary: () => Promise<Result<{ working: number }, DomainError>>;
@@ -34,7 +37,7 @@ const summarySchema = v.object({
 });
 
 /**
- * 仕事カテゴリの発言を Working 受付へ渡す。
+ * 仕事カテゴリの発言と押されたボタンを Working 受付へ渡す。
  * 再送しない。受付が落ちている間の発言は捨て、雑談側の処理を待たせない。
  */
 export const createWorkingClient = (

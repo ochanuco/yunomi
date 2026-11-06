@@ -1,4 +1,10 @@
-import type { Message, VoiceState } from "discord.js";
+import type {
+	ButtonInteraction,
+	Channel,
+	Message,
+	VoiceState,
+} from "discord.js";
+import type { ButtonLike } from "./button.ts";
 import type { MessageLike } from "./to-envelope.ts";
 import type { VoiceStateLike } from "./voice-state.ts";
 
@@ -7,8 +13,8 @@ const roleMentionedBotUserIds = (m: Message): string[] =>
 		.map((role) => role.tags?.botId)
 		.filter((id) => id != null);
 
-const categoryIdOf = (m: Message): string | null => {
-	const channel = m.channel;
+const categoryIdOf = (channel: Channel | null): string | null => {
+	if (channel === null) return null;
 	if (channel.isThread()) return channel.parent?.parentId ?? null;
 	return "parentId" in channel ? (channel.parentId ?? null) : null;
 };
@@ -36,13 +42,29 @@ export const toMessageLike = (m: Message): MessageLike => ({
 	mentionedUserIds: [...m.mentions.users.keys()],
 	roleMentionedBotUserIds: roleMentionedBotUserIds(m),
 	replyToMessageId: m.reference?.messageId ?? null,
-	categoryId: categoryIdOf(m),
+	categoryId: categoryIdOf(m.channel),
 	authorVoiceChannelId: m.member?.voice.channelId ?? null,
 	attachments: [...m.attachments.values()].map((a) => ({
 		name: a.name,
 		contentType: a.contentType,
 		size: a.size,
 	})),
+});
+
+export const toButtonLike = (
+	i: ButtonInteraction<"cached" | "raw">,
+): ButtonLike => ({
+	guildId: i.guildId,
+	channelId: i.channelId,
+	messageId: i.message.id,
+	customId: i.customId,
+	createdAt: i.createdAt,
+	user: {
+		id: i.user.id,
+		bot: i.user.bot,
+		displayName: i.inCachedGuild() ? i.member.displayName : i.user.displayName,
+	},
+	categoryId: categoryIdOf(i.channel),
 });
 
 export const toVoiceStateLike = (s: VoiceState): VoiceStateLike => ({

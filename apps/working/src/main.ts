@@ -276,6 +276,14 @@ const server = createWorkingServer({
 			});
 		});
 	},
+	press: (envelope) => {
+		void intake.press(envelope).catch((e: unknown) => {
+			logger.error("intake crashed", {
+				event_id: envelope.event_id,
+				error: String(e),
+			});
+		});
+	},
 	seatSummary: intake.summary,
 	logger,
 });
