@@ -38,6 +38,7 @@ describe("loadConfig", () => {
 				memory: null,
 				memoryBin: "yunomi-memory",
 				chimera: null,
+				playwright: null,
 				macState: null,
 				standup: {
 					enabled: true,
@@ -148,6 +149,25 @@ describe("loadConfig", () => {
 			CHIMERA_ACCESS_CLIENT_ID: "cid",
 		});
 		expect(partial.ok && partial.value.chimera).toBeNull();
+	});
+
+	it("Playwright MCP の口は URL と service token がそろったときだけ使う", () => {
+		const r = loadConfig({
+			...base,
+			PLAYWRIGHT_MCP_URL: "https://playwright.example/mcp",
+			PLAYWRIGHT_ACCESS_CLIENT_ID: "pid",
+			PLAYWRIGHT_ACCESS_CLIENT_SECRET: "psecret",
+		});
+		expect(r.ok && r.value.playwright).toEqual({
+			url: "https://playwright.example/mcp",
+			clientId: "pid",
+			clientSecret: "psecret",
+		});
+		const partial = loadConfig({
+			...base,
+			PLAYWRIGHT_MCP_URL: "https://playwright.example/mcp",
+		});
+		expect(partial.ok && partial.value.playwright).toBeNull();
 	});
 
 	it("トークンとチャンネル ID が欠けていれば理由を返す", () => {

@@ -39,6 +39,9 @@ const envSchema = v.object({
 	CHIMERA_URL: v.optional(v.pipe(v.string(), v.url())),
 	CHIMERA_ACCESS_CLIENT_ID: v.optional(nonEmpty),
 	CHIMERA_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
+	PLAYWRIGHT_MCP_URL: v.optional(v.pipe(v.string(), v.url())),
+	PLAYWRIGHT_ACCESS_CLIENT_ID: v.optional(nonEmpty),
+	PLAYWRIGHT_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
 	MAC_STATE_TOKEN: v.optional(nonEmpty),
 	MAC_STATE_PORT: v.optional(positiveInt),
 	STANDUP_ENABLED: v.optional(v.picklist(["true", "false"])),
@@ -88,6 +91,8 @@ export type WorkingConfig = {
 	memoryBin: string;
 	/** chimera の画像を取る口。3 つそろったときだけ `chimera:` の行の画像を付ける。 */
 	chimera: { url: string; clientId: string; clientSecret: string } | null;
+	/** Akarin の席の Codex に渡す Playwright MCP。3 つそろったときだけ席から使える。 */
+	playwright: { url: string; clientId: string; clientSecret: string } | null;
 	/** Mac から席の状態を受ける口。トークンがなければ待ち受けない。 */
 	macState: { token: string; port: number } | null;
 	standup: {
@@ -172,6 +177,16 @@ export const loadConfig = (
 						url: e.CHIMERA_URL,
 						clientId: e.CHIMERA_ACCESS_CLIENT_ID,
 						clientSecret: e.CHIMERA_ACCESS_CLIENT_SECRET,
+					}
+				: null,
+		playwright:
+			e.PLAYWRIGHT_MCP_URL &&
+			e.PLAYWRIGHT_ACCESS_CLIENT_ID &&
+			e.PLAYWRIGHT_ACCESS_CLIENT_SECRET
+				? {
+						url: e.PLAYWRIGHT_MCP_URL,
+						clientId: e.PLAYWRIGHT_ACCESS_CLIENT_ID,
+						clientSecret: e.PLAYWRIGHT_ACCESS_CLIENT_SECRET,
 					}
 				: null,
 		macState: e.MAC_STATE_TOKEN
