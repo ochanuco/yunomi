@@ -20,6 +20,7 @@ export type Watch = {
 	seen: string[];
 	lastCheckedAt: Date | null;
 	createdAt: Date;
+	notifyThreadId: string | null;
 	/** 前に調べてから間隔が過ぎていて、今調べる番か。 */
 	due: boolean;
 };
@@ -32,6 +33,7 @@ export type WatchRepo = {
 		sources: readonly string[];
 		intervalMinutes: number;
 		untilAt: Date | null;
+		notifyThreadId?: string | null;
 		now: Date;
 	}): Promise<Result<{ id: string }, { type: "duplicate" | "limit" }>>;
 	/** 動いている見張りを止める。対象が無い（別の人の見張り、止め済み）なら null。 */
@@ -99,6 +101,7 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 					seen: parseList(r.seen),
 					lastCheckedAt,
 					createdAt: new Date(r.createdAt),
+					notifyThreadId: r.notifyThreadId,
 					due:
 						lastCheckedAt === null ||
 						now.getTime() - lastCheckedAt.getTime() >=
@@ -116,6 +119,7 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 			sources,
 			intervalMinutes,
 			untilAt,
+			notifyThreadId,
 			now,
 		}) {
 			const current = await active(partnerId, entityId, now);
@@ -135,6 +139,7 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 				status: "active",
 				seen: "[]",
 				createdAt: now.toISOString(),
+				notifyThreadId: notifyThreadId ?? null,
 			});
 			return ok({ id });
 		},

@@ -1,0 +1,1 @@
+ALTER TABLE `watches` ADD `notify_thread_id` text;

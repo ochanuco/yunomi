@@ -165,6 +165,7 @@ const standupDeps = {
 	workForumChannelId: cfg.workForumChannelId,
 	workTextChannelId: cfg.workTextChannelId,
 	recordActivity: activityLog.record,
+	watchThreads: new Map<string, string>(),
 	logger,
 };
 

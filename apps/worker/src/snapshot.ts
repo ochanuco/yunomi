@@ -145,6 +145,7 @@ export const D1_SNAPSHOT_TABLES = {
 			"last_checked_at",
 			"created_at",
 			"stopped_at",
+			"notify_thread_id",
 		],
 		scoped: true,
 		key: [],

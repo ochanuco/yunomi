@@ -59,6 +59,8 @@ export type Watch = {
 	due: boolean;
 	/** 前に知らせたものの key。 */
 	seen: string[];
+	/** 新着を書く仕事フォーラムの投稿。席から登録した見張りだけが持つ。 */
+	notify_thread_id: string | null;
 };
 
 export type StandupMaterials = {
@@ -210,6 +212,7 @@ const memoryWatchesSchema = v.object({
 			last_checked_at: v.nullable(v.string()),
 			due: v.boolean(),
 			seen: v.array(v.string()),
+			notify_thread_id: v.optional(v.nullable(v.string()), null),
 		}),
 	),
 });

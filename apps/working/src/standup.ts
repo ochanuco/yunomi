@@ -25,6 +25,13 @@ import type { RunKind } from "./standup-timer.ts";
 
 export type Decision = { title: string; body: string };
 
+const noticeLine = v.pipe(
+	v.string(),
+	v.trim(),
+	v.nonEmpty(),
+	v.regex(/^[^\r\n]*$/),
+);
+
 const reportSchema = v.object({
 	decisions: v.array(
 		v.object({
@@ -33,12 +40,20 @@ const reportSchema = v.object({
 		}),
 	),
 	notices: v.optional(
-		v.array(v.pipe(v.string(), v.trim(), v.nonEmpty(), v.regex(/^[^\r\n]*$/))),
+		v.array(
+			v.union([
+				noticeLine,
+				v.object({ watch_id: v.optional(v.string()), text: noticeLine }),
+			]),
+		),
 		[],
 	),
 });
 
-export type SeatReport = { decisions: Decision[]; notices: string[] };
+/** 見張りの新着 1 行。watchId はどの見張りの新着か（書く先を決める）。 */
+export type Notice = { watchId: string | null; text: string };
+
+export type SeatReport = { decisions: Decision[]; notices: Notice[] };
 
 /** Claude の返事の最後の ```json ブロックから、決めてほしいことと見張りの知らせを読む。読めなければ null。 */
 export const parseReport = (text: string): SeatReport | null => {
@@ -61,7 +76,11 @@ export const parseReport = (text: string): SeatReport | null => {
 					: d.title,
 			body: d.body,
 		})),
-		notices: parsed.output.notices,
+		notices: parsed.output.notices.map((n) =>
+			typeof n === "string"
+				? { watchId: null, text: n }
+				: { watchId: n.watch_id ?? null, text: n.text },
+		),
 	};
 };
 
@@ -79,6 +98,11 @@ export type StandupDeps = {
 	/** 朝会・見回り・GitHub の知らせの席が止められた操作を、活動ログに 1 行残す。 */
 	recordActivity?: (entry: ActivityEntry) => Promise<void>;
 	now?: () => Date;
+	/**
+	 * 見張りの id → 新着を書く投稿。朝会と見回りを始めるときに覚え、終わったときに引く。
+	 * 再起動で消えたら仕事チャンネルに書く。
+	 */
+	watchThreads?: Map<string, string>;
 	/** 見張りの知らせをやり直すまで待つ。テストで差し替える。 */
 	sleep?: (ms: number) => Promise<void>;
 	logger: Logger;
@@ -204,7 +228,13 @@ export const startStandup = async (input: {
 	const prev = await input.store.load();
 	const { changes, next } = diffPatrol(prev ?? {}, patrolSources(materials));
 
-	const watches = dueWatches(materials);
+	const due = dueWatches(materials);
+	for (const w of due) {
+		if (w.notify_thread_id !== null)
+			deps.watchThreads?.set(w.id, w.notify_thread_id);
+	}
+	// 書く先は受付が決めるので、席には渡さない
+	const watches = due.map(({ notify_thread_id: _omit, ...w }) => w);
 
 	if (kind === "patrol") {
 		// 初めての回は前の回が無く、全部が新着に見える。朝会で見る分を二度投稿しないよう、覚えるだけにする
@@ -270,26 +300,44 @@ export const startStandup = async (input: {
 	return id;
 };
 
-/** 見張りの新着を仕事チャンネルに 1 件 1 行で書く。無ければ何も書かない。 */
+/**
+ * 見張りの新着を 1 件 1 行で書く。席から登録した見張りはその投稿に、ほかは仕事チャンネルに書く。
+ * 無ければ何も書かない。全部書けたら true。
+ */
 export const postNotices = async (
 	deps: StandupDeps,
-	notices: readonly string[],
+	notices: readonly Notice[],
 ): Promise<boolean> => {
-	if (notices.length === 0) return true;
+	const byChannel = new Map<string, string[]>();
+	for (const n of notices) {
+		const to =
+			(n.watchId === null ? undefined : deps.watchThreads?.get(n.watchId)) ??
+			deps.workTextChannelId;
+		byChannel.set(to, [...(byChannel.get(to) ?? []), n.text]);
+	}
+	let ok = true;
+	for (const [channelId, lines] of byChannel) {
+		if (!(await sendNotice(deps, channelId, lines))) ok = false;
+	}
+	return ok;
+};
+
+const sendNotice = async (
+	deps: StandupDeps,
+	channelId: string,
+	lines: readonly string[],
+): Promise<boolean> => {
 	const sleep =
 		deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 	for (let attempt = 0; ; attempt++) {
-		const sent = await deps.discord.send(
-			deps.workTextChannelId,
-			notices.join("\n"),
-		);
+		const sent = await deps.discord.send(channelId, lines.join("\n"));
 		if (sent.ok) return true;
 		const wait = NOTICE_RETRY_MS[attempt];
 		if (wait === undefined || !sent.error.retryable) {
 			deps.logger.error("watch notice failed", {
 				error: sent.error.type,
 				attempts: attempt + 1,
-				notices: notices.length,
+				notices: lines.length,
 			});
 			return false;
 		}

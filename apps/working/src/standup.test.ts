@@ -242,7 +242,7 @@ describe("startStandup の見回り", () => {
 		expect(spec).toContain("根拠があるときだけ");
 	});
 
-	const watch = (id: string, due: boolean) => ({
+	const watch = (id: string, due: boolean, thread: string | null = null) => ({
 		id,
 		query: "RTX3090 の中古、24GB",
 		sources: ["https://shop.example/gpu"],
@@ -251,6 +251,7 @@ describe("startStandup の見回り", () => {
 		last_checked_at: due ? "2026-11-04 12:00 JST" : "2026-11-05 08:00 JST",
 		due,
 		seen: ["https://shop.example/gpu/1"],
+		notify_thread_id: thread,
 	});
 
 	it("GitHub に変わりが無くても、時間が来た見張りがあれば、その見張りだけを渡して席を立てる", async () => {
@@ -278,6 +279,39 @@ describe("startStandup の見回り", () => {
 			expect(spec).toContain("yunomi-memory watch-checked --id");
 			expect(spec).toContain('"changes":{}');
 		}
+	});
+
+	it("見張りの新着は、その見張りを頼まれた投稿に書く", async () => {
+		const t = setup();
+		const deps = { ...t.deps, watchThreads: new Map<string, string>() };
+		const store = memoryStore();
+		await patrol(store, {});
+		const start = vi.fn(async (_spec: string, _kind: string) => "patrol-1");
+		await startStandup({
+			deps,
+			kind: "patrol",
+			store,
+			gather: async () => ({
+				...materials(),
+				watches: [watch("w1", true, "777"), watch("w3", true)],
+			}),
+			preamble: "",
+			start,
+		});
+		const [spec] = start.mock.calls[0] ?? [];
+		expect(spec).not.toContain("notify_thread_id");
+		await finishStandup(
+			deps,
+			'```json\n{"decisions": [], "notices": [{"watch_id": "w1", "text": "A 店に出ていました https://a.example/1"}, {"watch_id": "w3", "text": "B 店に出ていました"}, "C 店に出ていました"]}\n```',
+			[],
+			"patrol",
+		);
+		expect(t.discord.sentTo("777")).toEqual([
+			"A 店に出ていました https://a.example/1",
+		]);
+		expect(t.discord.sentTo(TEXT)).toEqual([
+			"B 店に出ていました\nC 店に出ていました",
+		]);
 	});
 
 	it("時間が来た見張りが無く、変わりも無ければ席を立てない", async () => {
@@ -614,7 +648,9 @@ describe("watchesOf", () => {
 			due: true,
 			seen: [],
 		};
-		expect(watchesOf({ watches: [w] })).toEqual([w]);
+		expect(watchesOf({ watches: [w] })).toEqual([
+			{ ...w, notify_thread_id: null },
+		]);
 		expect(watchesOf({ facts: [] })).toEqual({
 			unavailable: "記憶の見張りを読めなかった",
 		});

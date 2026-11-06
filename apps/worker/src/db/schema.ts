@@ -397,6 +397,8 @@ export const watches = sqliteTable(
 		lastCheckedAt: text("last_checked_at"),
 		createdAt: text("created_at").notNull(),
 		stoppedAt: text("stopped_at"),
+		/** 新着を書く仕事フォーラムの投稿。席が登録した見張りだけが持ち、無ければ仕事チャンネルに書く。 */
+		notifyThreadId: text("notify_thread_id"),
 	},
 	(t) => [index("watches_entity").on(t.partnerId, t.entityId, t.status)],
 );

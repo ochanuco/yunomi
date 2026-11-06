@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { tempDir } from "../test-support.ts";
-import { credentialsPathOf, runMemoryCli } from "./cli.ts";
+import { credentialsPathOf, runMemoryCli, seatThreadOf } from "./cli.ts";
 
 const SECRET = "very-secret-value";
 
@@ -182,6 +182,28 @@ describe("runMemoryCli", () => {
 				"",
 			].join("\n"),
 		);
+	});
+
+	it("watch-add を席の中で呼ぶと、その席の投稿を新着を書く先として送る", async () => {
+		const env = { ...setup(), YUNOMI_SEATS_DIR: "/seats" };
+		const f = respond(201, { id: "w1" });
+		await runMemoryCli(
+			["watch-add", "--query", "中古の万年筆"],
+			env,
+			f as typeof fetch,
+			"/seats/seat-1234567890/repo",
+		);
+		const [, init] = f.mock.calls[0] ?? [];
+		expect(JSON.parse(String(init?.body))).toMatchObject({
+			notify_thread_id: "1234567890",
+		});
+	});
+
+	it("seatThreadOf は席の外や朝会の席では null", () => {
+		expect(seatThreadOf("/seats", "/home/worker/work")).toBeNull();
+		expect(seatThreadOf("/seats", "/seats/standup-abc")).toBeNull();
+		expect(seatThreadOf(undefined, "/seats/seat-1")).toBeNull();
+		expect(seatThreadOf("/seats", "/seats/seat-12/x/y")).toBe("12");
 	});
 
 	it("watch-add は場所・間隔・期限を省くと普通の検索、24 時間おき、期限なし", async () => {
