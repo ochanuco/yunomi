@@ -68,3 +68,25 @@ describe("classifyBash: 秘密情報や許可の記録の場所に触るのを�
 		);
 	});
 });
+
+describe("classifyBash: Claude CLI が書き出した道具の応答", () => {
+	const dir =
+		"/home/worker/.claude/projects/-home-worker-work-seat-1/fd03-uuid/tool-results";
+	it.each([
+		`f=${dir}/mcp-chimera-list_requests-1.txt; jq -c '.items[0]' $f | head -c 4000`,
+		`cat ${dir}/mcp-chimera-list_requests-1.txt`,
+		`jq . < ${dir}/a.txt`,
+		`cd ${dir} && head a.txt`,
+	])("読むのは通す: %s", (cmd) => {
+		expect(classifyBash(cmd, ctx)).toBeNull();
+	});
+	it.each([
+		`echo x > ${dir}/a.txt`,
+		`cat ${dir}/../../../../.credentials.json`,
+		`cat ${dir}/../../../../settings.json`,
+		"cat /home/worker/.claude/projects/p/s/a.jsonl",
+		"cat /home/worker/.claude/settings.json",
+	])("ほかは止める: %s", (cmd) => {
+		expect(classifyBash(cmd, ctx)).not.toBeNull();
+	});
+});
