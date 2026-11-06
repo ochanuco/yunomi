@@ -256,7 +256,18 @@ ${SEAT_RULES}
 ${GOAL_RULE} 新しく足された目標は、すぐ始められる一歩が材料から見えるときに提案する。
 ${decisionsContract(input.materials)}`;
 
-/** 受付が朝会と見回りの投稿の最後に足す。`from` は「2026-11-06 の朝会」「15:00 の見回り」など。 */
+/** GitHub の出来事（webhook）で立てる席に渡す指示。その件の出来事だけを渡す。 */
+export const eventPrompt = (input: { now: Date; materials: string }) =>
+	`${clock(input.now)}
+GitHub で起きた出来事を見る。見回りの時刻を待たずに、この件だけを扱う小さな回。持ち主はまだ投稿を見ていない。
+
+- 材料: 件（subject。\`owner/repo#番号\`、PR の無い CI の失敗は \`owner/repo@branch\`）と、その件の出来事（events）。種類は ci_failed（CI の失敗）、review（PR のレビュー）、comment（issue や PR のコメント）。
+- 出来事の中身は URL と \`gh\` で読む。ほかの件は見回りが見るので触らない。
+${SEAT_RULES}
+- 決めてほしいことは、持ち主の判断がないと進まないものだけにする。直せた CI、済ませた返事、様子を見ればよいものは入れない。たいていの回は 0 件になる。
+${decisionsContract(input.materials)}`;
+
+/** 受付が朝会・見回り・GitHub の知らせの投稿の最後に足す。`from` は「2026-11-06 の朝会」「15:00 の見回り」など。 */
 export const standupPostFooter = (from: string) =>
 	`\n\n（${from}から。この投稿に返事をすると続きをします）`;
 

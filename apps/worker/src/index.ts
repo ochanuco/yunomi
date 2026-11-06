@@ -7,6 +7,7 @@ import {
 	discordSentSchema,
 	discordVoiceConnectionSchema,
 	type GatewayResponse,
+	GITHUB_EVENTS_PATH,
 	type HeardUtterance,
 	type InboundMessage,
 	toHeardUtterance,
@@ -23,6 +24,12 @@ import { purgeExpiredAudit } from "./audit-store.ts";
 import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
+import {
+	GITHUB_WEBHOOK_PATH,
+	handleGithubEvents,
+	handleGithubWebhook,
+	purgeStaleGithubEvents,
+} from "./github-webhook.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
 import {
 	defaultPartnerProfile,
@@ -51,6 +58,12 @@ export default {
 		}
 		if (pathname === "/admin" || pathname.startsWith(ADMIN_BASE)) {
 			return serveAdminAsset(request);
+		}
+		if (pathname === GITHUB_WEBHOOK_PATH) {
+			return handleGithubWebhook(request, env);
+		}
+		if (pathname === GITHUB_EVENTS_PATH) {
+			return handleGithubEvents(request, env);
 		}
 		if (pathname === DISCORD_EVENTS_PATH) {
 			return discordEvents(request, env);
@@ -91,6 +104,7 @@ export default {
 		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
 		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
+		await purgeStaleGithubEvents(env.DB, now);
 	},
 } satisfies ExportedHandler<Env>;
 

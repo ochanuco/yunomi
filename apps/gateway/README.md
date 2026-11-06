@@ -27,7 +27,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。未設定ならすべての発言を Worker に送る |
 | `WORKING_URL` | いいえ | Working 受付の URL。仕事カテゴリの発言を POST する。未設定なら仕事カテゴリの発言は捨てる（起動時に警告ログを 1 回） |
 | `WORKING_TOKEN` | `WORKING_URL` と組 | Working 受付と共有するトークン。`Authorization: Bearer` で送る |
-| `WORKING_FORWARD` | いいえ | `false` で仕事カテゴリの発言を Working へ渡さずに捨てる（席の数は読む）。既定は `true` |
+| `WORKING_FORWARD` | いいえ | `false` で仕事カテゴリの発言を Working へ渡さずに捨てる（席の数は読む）。押されたボタンはこの値によらず渡す。既定は `true` |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
@@ -47,6 +47,8 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
 
 Worker 側では、Akarin の bot の user id（`AKARIN_DISCORD_USER_ID`）と token（`AKARIN_DISCORD_BOT_TOKEN`）が要る（`apps/worker/README.md` の「もうひとりのパートナー」）。user id が無いと、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を第三者の発言として見分けない。
+
+仕事カテゴリで bot のメッセージのボタンが押されると、Discord はメッセージを書いた bot の gateway にだけ知らせる。gateway はすぐに受け取ったことだけを Discord に返し、押した人とボタンを Working へ渡す。Akarin の gateway も、Akarin が書いた許可の依頼のボタンを渡す。
 
 どちらの gateway も、もうひとりの bot の発言を `is_bot=true` で自分のパートナーに中継する。どちらが返事をするかは Worker が決める。
 

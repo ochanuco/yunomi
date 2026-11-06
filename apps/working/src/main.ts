@@ -14,6 +14,11 @@ import { trustCodexProject } from "./codex-trust.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
 import { spawnExec } from "./exec.ts";
+import {
+	createGithubEventsClient,
+	runGithubEvents,
+	startGithubEventPoller,
+} from "./github-events.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import { createIntake, type SeatPartner } from "./intake.ts";
@@ -276,6 +281,14 @@ const server = createWorkingServer({
 			});
 		});
 	},
+	press: (envelope) => {
+		void intake.press(envelope).catch((e: unknown) => {
+			logger.error("intake crashed", {
+				event_id: envelope.event_id,
+				error: String(e),
+			});
+		});
+	},
 	seatSummary: intake.summary,
 	logger,
 });
@@ -297,6 +310,14 @@ if (cfg.macState && macStateServer) {
 	});
 }
 
+// 見回りと GitHub の出来事の席は patrol-state.json を読んで書くので、一つずつ回す。失敗は呼び出し側のログに残す
+let patrolTail: Promise<unknown> = Promise.resolve();
+const inPatrolLane = <T>(task: () => Promise<T>): Promise<T> => {
+	const next = patrolTail.then(task, task);
+	patrolTail = next.catch(() => {});
+	return next;
+};
+
 const standupTimer = cfg.standup.enabled
 	? startStandupTimer({
 			plan: {
@@ -305,30 +326,80 @@ const standupTimer = cfg.standup.enabled
 				// 朝会と見回りは Yukarin の席で回すので、Yukarin が寝ている時間帯は見回らない
 				quiet: parseQuietHours(yukarinProfile.living_rhythm.typical_sleep),
 			},
-			run: async (kind) => {
-				await startStandup({
-					deps: standupDeps,
-					kind,
-					store: patrolStore,
-					gather: () =>
-						gatherStandupMaterials({
-							exec: spawnExec,
-							env,
-							cwd: cfg.workDir,
-							claudeBin: cfg.claudeBin,
-							memoryBin: cfg.memoryBin,
-							githubOwner: cfg.standup.githubOwner,
-							macState,
-							now: () => new Date(),
-							logger,
-						}),
-					preamble,
-					start: intake.startStandup,
-				});
-			},
+			run: (kind) =>
+				inPatrolLane(async () => {
+					await startStandup({
+						deps: standupDeps,
+						kind,
+						store: patrolStore,
+						gather: () =>
+							gatherStandupMaterials({
+								exec: spawnExec,
+								env,
+								cwd: cfg.workDir,
+								claudeBin: cfg.claudeBin,
+								memoryBin: cfg.memoryBin,
+								githubOwner: cfg.standup.githubOwner,
+								macState,
+								now: () => new Date(),
+								logger,
+							}),
+						preamble,
+						start: intake.startStandup,
+					});
+				}),
 			logger,
 		})
 	: null;
+
+// 自分の書いたコメントで席を立てないよう、GH_TOKEN の持ち主を一度だけ引く
+const githubSelfLogin = async (): Promise<string | null> => {
+	const out = await spawnExec("gh", ["api", "user", "--jq", ".login"], {
+		stdin: "",
+		cwd: cfg.workDir,
+		timeoutMs: 30_000,
+		env,
+	});
+	const login = out.stdout.trim();
+	if (out.code !== 0 || login === "") {
+		logger.warn("github self login unknown", {
+			stderr: out.stderr.slice(0, 300),
+		});
+		return null;
+	}
+	return login;
+};
+
+const GITHUB_EVENTS_POLL_MS = 60_000;
+// GitHub の webhook は Worker が受けて溜めている。取りに行くには Worker の working の service token が要る
+const githubEventPoller =
+	cfg.standup.enabled && cfg.memory
+		? await (async (memory) => {
+				const selfLogin = await githubSelfLogin();
+				return startGithubEventPoller({
+					client: createGithubEventsClient({
+						baseUrl: memory.url,
+						clientId: memory.clientId,
+						clientSecret: memory.clientSecret,
+					}),
+					run: (events) =>
+						inPatrolLane(async () => {
+							await runGithubEvents(
+								{
+									store: patrolStore,
+									preamble,
+									selfLogin,
+									start: intake.startStandup,
+									logger,
+								},
+								events,
+							);
+						}),
+					intervalMs: GITHUB_EVENTS_POLL_MS,
+					logger,
+				});
+			})(cfg.memory)
+		: null;
 
 const shutdown = (signal: string) => {
 	logger.info("shutting down", { signal });
@@ -336,6 +407,7 @@ const shutdown = (signal: string) => {
 	clearInterval(sleepTimer);
 	repoMapSync.stop();
 	standupTimer?.stop();
+	githubEventPoller?.stop();
 	macStateServer?.close();
 	server.close();
 	process.exit(0);

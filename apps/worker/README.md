@@ -171,6 +171,18 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 - Audit の `toolCalls` の要約に目標の文面は入れない。
 - Working の席は `yunomi-memory` で同じ目標を読み書きし、朝会と見回りの材料にする（`apps/working/README.md`）。
 
+## GitHub の出来事（webhook）
+
+Working は公開していないので、GitHub の webhook は Worker が受け、D1 の `github_events` に置く。Working が `working` の service token で取りに来る（`src/github-webhook.ts`）。
+
+- `POST /v1/github/webhook`: Access を通らない（chabatake で bypass する）。`X-Hub-Signature-256` を `GITHUB_WEBHOOK_SECRET` で確かめ、署名が無いか違えば 401 で捨てる。secret の無い環境（dev）では 404。
+- 置くのは席を動かす出来事だけ: `workflow_run` と `check_suite`（Actions 以外）の失敗、`pull_request_review` の submitted、`issue_comment` の created。payload は席の材料になる値だけに絞り、`X-GitHub-Delivery` で再送を一つにまとめる。ほかは 204。
+- `POST /v1/working/github-events`: 置いてある出来事を全部取り出して消す。6 時間より古いものは渡さない（見回りが拾う）。取りに来ないまま 1 日たった行は日次の cron が消す。
+
+| 設定 | 種類 | 値 |
+| --- | --- | --- |
+| `GITHUB_WEBHOOK_SECRET` | secret | GitHub の webhook の secret。prod だけが持ち、参照は `.github/deploy/production.env.op` に置く |
+
 ## Open Loop
 
 会話中の未解決の話題・あとで聞き返したい続き（結果待ち、相手自身の予定、困りごとの続き）。タスクやリマインダーではなく、今回は抽出・保存・解決の記録までで、フォローアップ発話や期限の評価はしない（`follow_up_interval_hours` と `last_followed_up_at` は常に null）。

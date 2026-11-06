@@ -7,7 +7,10 @@ import {
 	ok,
 	permissionDenied,
 } from "@yunomi/core";
-import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import type {
+	DiscordButtonPressedEnvelope,
+	DiscordMessageCreatedEnvelope,
+} from "@yunomi/protocol";
 import { vi } from "vitest";
 import type { ApprovalRequest, ApprovalStore } from "./approval-store.ts";
 import type { ChannelInfo, DiscordApi, PostedMessage } from "./discord-rest.ts";
@@ -72,14 +75,22 @@ export const fakeDiscord = () => {
 		],
 	]);
 	const messages = new Map<string, PostedMessage>();
+	/** bot が送ったメッセージの本文。getMessage で読み直せる。 */
+	const botMessages = new Map<string, string>();
 	const refuseSendTo = new Set<string>();
 	const sent: {
 		channelId: string;
 		content: string;
 		replyTo?: string;
 		files?: string[];
+		buttons?: string[];
 	}[] = [];
-	const posts: { name: string; content: string; tagIds: string[] }[] = [];
+	const posts: {
+		name: string;
+		content: string;
+		tagIds: string[];
+		buttons?: string[];
+	}[] = [];
 	const history = new Map<string, PostedMessage[]>();
 	/** `${channelId}/${messageId}` ごとの bot のリアクション。 */
 	const reactions = new Map<string, string[]>();
@@ -98,8 +109,16 @@ export const fakeDiscord = () => {
 		}),
 		getMessage: async (_c, id) => {
 			const m = messages.get(id);
-			return m
-				? ok(m)
+			if (m) return ok(m);
+			const own = botMessages.get(id);
+			return own !== undefined
+				? ok({
+						id,
+						authorId: BOT,
+						authorName: "ゆかり",
+						isBot: true,
+						content: own,
+					})
 				: err(externalServiceUnavailable({ service: "discord" }));
 		},
 		listMessages: vi.fn(async (channelId: string) =>
@@ -108,10 +127,23 @@ export const fakeDiscord = () => {
 		createForumPost: vi.fn(
 			async (
 				forumId: string,
-				post: { name: string; content: string; tagIds: string[] },
+				post: {
+					name: string;
+					content: string;
+					tagIds: string[];
+					buttons?: readonly { customId: string }[];
+				},
 			) => {
 				const id = `thread${nextThread++}`;
-				posts.push(post);
+				const { buttons, ...rest } = post;
+				posts.push({
+					...rest,
+					...(buttons?.length
+						? { buttons: buttons.map((b) => b.customId) }
+						: {}),
+				});
+				// フォーラム投稿の最初のメッセージは投稿と同じ ID を持つ
+				botMessages.set(id, post.content);
 				channels.set(id, {
 					id,
 					name: post.name,
@@ -122,7 +154,7 @@ export const fakeDiscord = () => {
 				return ok({ threadId: id });
 			},
 		),
-		send: async (channelId, content, replyTo, files = []) => {
+		send: async (channelId, content, replyTo, files = [], buttons = []) => {
 			if (refuseSendTo.has(channelId)) {
 				return err(
 					permissionDenied({ actor: "discord bot", action: "POST /channels" }),
@@ -133,8 +165,13 @@ export const fakeDiscord = () => {
 				content,
 				...(replyTo ? { replyTo } : {}),
 				...(files.length > 0 ? { files: files.map((f) => f.name) } : {}),
+				...(buttons.length > 0
+					? { buttons: buttons.map((b) => b.customId) }
+					: {}),
 			});
-			return ok({ messageIds: [`sent${sent.length}`] });
+			const id = `sent${sent.length}`;
+			botMessages.set(id, content);
+			return ok({ messageIds: [id] });
 		},
 		setTags: async (threadId, tagIds) => {
 			const ch = channels.get(threadId);
@@ -197,6 +234,7 @@ export const fakeDiscord = () => {
 		typing,
 		reactionsOn,
 		panelIn,
+		edited,
 		addThread,
 		tagsOf,
 		sentTo,
@@ -311,3 +349,21 @@ export const say = (
 		mentions: [],
 		reply_to_message_id: opts.replyTo ?? null,
 	});
+
+/** 投稿のメッセージに付いたボタンを持ち主が押す。 */
+export const press = (
+	threadId: string,
+	messageId: string,
+	customId: string,
+	userId = OWNER,
+): DiscordButtonPressedEnvelope =>
+	({
+		event_id: `e${++seq}`,
+		payload: {
+			guild_id: "g",
+			channel_id: threadId,
+			message_id: messageId,
+			custom_id: customId,
+			user: { id: userId, display_name: "ちゃぬ", is_bot: false },
+		},
+	}) as DiscordButtonPressedEnvelope;

@@ -30,6 +30,31 @@ export type Attachment = {
 	data: Uint8Array;
 };
 
+/** メッセージに付けるボタン。押されると Gateway が custom_id を Working に渡す。 */
+export type Button = {
+	customId: string;
+	label: string;
+	style: "success" | "danger";
+};
+
+const BUTTON_STYLE = { success: 3, danger: 4 } as const;
+
+/** ボタンを 1 行に並べる。Discord の components の形。 */
+const toComponents = (buttons: readonly Button[]) =>
+	buttons.length === 0
+		? []
+		: [
+				{
+					type: 1,
+					components: buttons.map((b) => ({
+						type: 2,
+						style: BUTTON_STYLE[b.style],
+						label: b.label,
+						custom_id: b.customId,
+					})),
+				},
+			];
+
 const userSchema = v.object({
 	id: v.string(),
 	username: v.string(),
@@ -82,10 +107,15 @@ export type DiscordApi = {
 	) => Promise<Result<PostedMessage[], DomainError>>;
 	createForumPost: (
 		forumId: string,
-		post: { name: string; content: string; tagIds: string[] },
+		post: {
+			name: string;
+			content: string;
+			tagIds: string[];
+			buttons?: readonly Button[];
+		},
 	) => Promise<Result<{ threadId: string }, DomainError>>;
 	/**
-	 * 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに、files は最後の 1 件だけに付ける。
+	 * 上限を超える本文は分けて送る。replyTo は最初の 1 件だけに、files と buttons は最後の 1 件だけに付ける。
 	 * 送ったメッセージの ID を順に返す。
 	 */
 	send: (
@@ -93,6 +123,7 @@ export type DiscordApi = {
 		content: string,
 		replyTo?: string,
 		files?: readonly Attachment[],
+		buttons?: readonly Button[],
 	) => Promise<Result<{ messageIds: string[] }, DomainError>>;
 	setTags: (
 		threadId: string,
@@ -103,6 +134,7 @@ export type DiscordApi = {
 		channelId: string,
 		content: string,
 	) => Promise<Result<{ id: string }, DomainError>>;
+	/** 本文を書き換え、付いていたボタンは外す。 */
 	editMessage: (
 		channelId: string,
 		messageId: string,
@@ -311,19 +343,26 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 					message: {
 						content: post.content.slice(0, MESSAGE_LIMIT),
 						allowed_mentions: noMentions,
+						...(post.buttons?.length
+							? { components: toComponents(post.buttons) }
+							: {}),
 					},
 				},
 			);
 			return r.ok ? ok({ threadId: r.value.id }) : r;
 		},
-		send: async (channelId, content, replyTo, files = []) => {
+		send: async (channelId, content, replyTo, files = [], buttons = []) => {
 			const split = splitMessage(content);
 			const chunks = split.length === 0 && files.length > 0 ? [""] : split;
 			const messageIds: string[] = [];
 			for (const [i, chunk] of chunks.entries()) {
+				const last = i === chunks.length - 1;
 				const payload = {
 					content: chunk,
 					allowed_mentions: noMentions,
+					...(last && buttons.length > 0
+						? { components: toComponents(buttons) }
+						: {}),
 					...(i === 0 && replyTo
 						? {
 								message_reference: {
@@ -333,7 +372,7 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 							}
 						: {}),
 				};
-				const attach = i === chunks.length - 1 ? files : [];
+				const attach = last ? files : [];
 				const r = await callJson(
 					"POST",
 					`/channels/${channelId}/messages`,
@@ -364,6 +403,7 @@ export const createDiscordRest = (opts: DiscordRestOptions): DiscordApi => {
 				{
 					content: content.slice(0, MESSAGE_LIMIT),
 					allowed_mentions: noMentions,
+					components: [],
 				},
 			);
 			return r.ok ? ok(undefined) : r;

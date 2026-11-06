@@ -1,10 +1,12 @@
 import { generateDependencyReport } from "@discordjs/voice";
 import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
+import { createButtonHandler } from "./button.ts";
 import { loadConfig } from "./config.ts";
 import {
 	countHumans,
 	isRelayable,
+	toButtonLike,
 	toMessageLike,
 	toVoiceStateLike,
 } from "./discord-adapter.ts";
@@ -193,6 +195,22 @@ discord.on(Events.MessageCreate, (message) => {
 		send: (options) => channel.send(options),
 	}).catch((e: unknown) => {
 		logger.error("handler crashed", { error: String(e) });
+	});
+});
+
+const handleButton = createButtonHandler({
+	partnerId: cfg.partnerId,
+	workCategoryIds: cfg.workCategoryIds,
+	working,
+	logger,
+});
+
+discord.on(Events.InteractionCreate, (interaction) => {
+	if (!interaction.isButton() || !interaction.inGuild()) return;
+	void handleButton(toButtonLike(interaction), () =>
+		interaction.deferUpdate(),
+	).catch((e: unknown) => {
+		logger.error("button handler crashed", { error: String(e) });
 	});
 });
 
