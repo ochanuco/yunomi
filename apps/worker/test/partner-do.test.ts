@@ -11,9 +11,12 @@ const gate = () => {
 	return { opened, release };
 };
 
-const waitFor = async (cond: () => boolean, timeoutMs = 2000) => {
+const waitFor = async (
+	cond: () => boolean | Promise<boolean>,
+	timeoutMs = 2000,
+) => {
 	const start = Date.now();
-	while (!cond()) {
+	while (!(await cond())) {
 		if (Date.now() - start > timeoutMs) throw new Error("waitFor timeout");
 		await new Promise((r) => setTimeout(r, 5));
 	}
@@ -113,8 +116,19 @@ describe("PartnerDO.handleDiscordMessage", () => {
 		const p2 = stub.handleDiscordMessage(m2);
 		const p3 = stub.handleDiscordMessage(m3);
 		const p4 = stub.handleDiscordMessage(m4);
-		// 後続 3 件の RPC が DO に届いて待ち列に入るまでの猶予。CI の遅い runner では 20ms では足りなかった。
-		await new Promise((r) => setTimeout(r, 300));
+		// recent_messages への記録から待ち列への登録までは同期で進むので、4 件揃えば後続 3 件は待ち列に入っている。
+		await waitFor(async () => {
+			const n = await runInDurableObject(
+				stub,
+				(_o, state) =>
+					state.storage.sql
+						.exec<{ n: number }>(
+							"SELECT count(*) AS n FROM recent_messages WHERE channel_id = 's'",
+						)
+						.one().n,
+			);
+			return n === 4;
+		});
 		g.release();
 		const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4]);
 
