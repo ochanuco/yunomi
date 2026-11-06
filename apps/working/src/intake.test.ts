@@ -36,6 +36,7 @@ import {
 	press,
 	say,
 	seatMessage,
+	TAGS,
 	TEXT,
 	tempDir,
 } from "./test-support.ts";
@@ -553,6 +554,27 @@ describe("席の完了報告", () => {
 		expect(s.remembered[0]).toContain("見張りを始めた");
 		expect(s.activity.map((e) => e.kind)).toEqual(["done"]);
 		expect(s.seats.get("p1")).toBeNull();
+	});
+
+	it("フォーラムに後から足したタグも、次に付け替えるときに使う", async () => {
+		const s = await setup();
+		const forum = s.d.channels.get(FORUM);
+		if (!forum) throw new Error("no forum");
+		s.d.channels.set(FORUM, {
+			...forum,
+			availableTags: TAGS.filter((t) => t.id !== "tag-watching"),
+		});
+		const seat = await openPost(s);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
+		s.d.channels.set(FORUM, forum);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				body: "24 時間おきに見張ります\n状態: 見張り中",
+			}),
+		);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-watching"]);
 	});
 
 	it("決めてほしいで終えたら席を残し、次の返事を続きとして渡す", async () => {

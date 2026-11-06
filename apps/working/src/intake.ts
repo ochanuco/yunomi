@@ -302,7 +302,8 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			if (tag) found.set(name, tag.id);
 			else log.warn("forum tag missing", { tag: name });
 		}
-		tagIds = found;
+		// タグは後からフォーラムに足せるので、欠けている間は覚えずに次も引き直す
+		if (found.size === WORK_STATUSES.length) tagIds = found;
 		return found;
 	};
 
