@@ -1,5 +1,8 @@
 import type { AddressInfo } from "node:net";
-import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import type {
+	DiscordButtonPressedEnvelope,
+	DiscordMessageCreatedEnvelope,
+} from "@yunomi/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { silentLogger } from "./logger.ts";
 import { createWorkingServer } from "./server.ts";
@@ -24,21 +27,36 @@ const envelope = {
 	},
 };
 
+const pressed = {
+	...envelope,
+	event_id: "01890000-0000-7000-8000-000000000001",
+	type: "discord.button.pressed",
+	payload: {
+		guild_id: "g",
+		channel_id: "c",
+		message_id: "m",
+		custom_id: "approval:grant",
+		user: { id: "u", display_name: "U", is_bot: false },
+	},
+};
+
 let close = () => {};
 afterEach(() => close());
 
 const start = async () => {
 	const accept = vi.fn<(e: DiscordMessageCreatedEnvelope) => void>();
+	const press = vi.fn<(e: DiscordButtonPressedEnvelope) => void>();
 	const server = createWorkingServer({
 		sharedToken: "secret",
 		accept,
+		press,
 		seatSummary: () => ({ working: 2, partners: { yukarin: 1, akarin: 1 } }),
 		logger: silentLogger,
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	close = () => server.close();
 	const { port } = server.address() as AddressInfo;
-	return { accept, base: `http://127.0.0.1:${port}` };
+	return { accept, press, base: `http://127.0.0.1:${port}` };
 };
 
 const post = (url: string, body: unknown, token?: string) =>
@@ -59,6 +77,21 @@ describe("createWorkingServer", () => {
 		expect(accept).toHaveBeenCalledWith(
 			expect.objectContaining({ event_id: envelope.event_id }),
 		);
+	});
+
+	it("ボタンの envelope は発言と分けて渡す。形が違えば 400", async () => {
+		const { accept, press, base } = await start();
+		expect((await post(`${base}/events`, pressed, "secret")).status).toBe(202);
+		expect(press).toHaveBeenCalledWith(
+			expect.objectContaining({ event_id: pressed.event_id }),
+		);
+		expect(accept).not.toHaveBeenCalled();
+		const broken = {
+			...pressed,
+			payload: { ...pressed.payload, custom_id: "" },
+		};
+		expect((await post(`${base}/events`, broken, "secret")).status).toBe(400);
+		expect(press).toHaveBeenCalledTimes(1);
 	});
 
 	it("トークンがない・違うときは 401 で、受け取らない", async () => {

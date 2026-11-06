@@ -6,7 +6,10 @@ import {
 	type ServerResponse,
 } from "node:http";
 import {
+	DISCORD_BUTTON_PRESSED,
+	type DiscordButtonPressedEnvelope,
 	type DiscordMessageCreatedEnvelope,
+	discordButtonPressedEnvelopeSchema,
 	discordMessageCreatedEnvelopeSchema,
 } from "@yunomi/protocol";
 import * as v from "valibot";
@@ -20,6 +23,8 @@ const BODY_LIMIT = 1_000_000;
 export type ServerDeps = {
 	sharedToken: string;
 	accept: (envelope: DiscordMessageCreatedEnvelope) => void;
+	/** 仕事カテゴリで押されたボタン。 */
+	press: (envelope: DiscordButtonPressedEnvelope) => void;
 	/** 作業中の席の数。gateway が bot のステータスに出す。 */
 	/** working は全体の数、partners はパートナーごとの数。gateway は自分の分を読む。 */
 	seatSummary: () => SeatSummary;
@@ -58,7 +63,7 @@ export const reply = (res: ServerResponse, status: number) => {
 };
 
 /**
- * gateway から envelope を受け、席の数を返す。仕事は数分かかるので、受け取った時点で 202 を返し、処理は待たない。
+ * gateway から発言とボタンの envelope を受け、席の数を返す。仕事は数分かかるので、受け取った時点で 202 を返し、処理は待たない。
  */
 export const createWorkingServer = (deps: ServerDeps): Server =>
 	createServer(async (req, res) => {
@@ -86,13 +91,25 @@ export const createWorkingServer = (deps: ServerDeps): Server =>
 		} catch {
 			return reply(res, 400);
 		}
-		const parsed = v.safeParse(discordMessageCreatedEnvelopeSchema, json);
-		if (!parsed.success) {
+		const invalid = (issues: readonly v.BaseIssue<unknown>[]) => {
 			deps.logger.warn("invalid envelope", {
-				issues: parsed.issues.map((i) => i.message),
+				issues: issues.map((i) => i.message),
 			});
 			return reply(res, 400);
+		};
+		if (
+			typeof json === "object" &&
+			json !== null &&
+			"type" in json &&
+			json.type === DISCORD_BUTTON_PRESSED
+		) {
+			const parsed = v.safeParse(discordButtonPressedEnvelopeSchema, json);
+			if (!parsed.success) return invalid(parsed.issues);
+			deps.press(parsed.output as DiscordButtonPressedEnvelope);
+			return reply(res, 202);
 		}
+		const parsed = v.safeParse(discordMessageCreatedEnvelopeSchema, json);
+		if (!parsed.success) return invalid(parsed.issues);
 		deps.accept(parsed.output as DiscordMessageCreatedEnvelope);
 		return reply(res, 202);
 	});

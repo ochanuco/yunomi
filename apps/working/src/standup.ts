@@ -1,6 +1,7 @@
 import { formatJstForPrompt, toModelJson } from "@yunomi/core";
 import * as v from "valibot";
-import { approvalRequestText } from "./approval.ts";
+import type { ActivityEntry } from "./activity-log.ts";
+import { APPROVAL_BUTTONS, approvalRequestText } from "./approval.ts";
 import type { ApprovalStore } from "./approval-store.ts";
 import type { DiscordApi } from "./discord-rest.ts";
 import type { Ledger, Pending } from "./guard/ledger.ts";
@@ -55,6 +56,8 @@ export type StandupDeps = {
 	approvals: ApprovalStore;
 	ledger: Ledger;
 	workForumChannelId: string;
+	/** 朝会・見回り・GitHub の知らせの席が止められた操作を、活動ログに 1 行残す。 */
+	recordActivity?: (entry: ActivityEntry) => Promise<void>;
 	now?: () => Date;
 	logger: Logger;
 };
@@ -63,7 +66,11 @@ const DECIDE_TAG = "決めてほしい";
 
 export type StandupReport = { posted: string[]; failed: number };
 
-const RUN_NAME: Record<RunKind, string> = { standup: "朝会", patrol: "見回り" };
+const RUN_NAME: Record<RunKind, string> = {
+	standup: "朝会",
+	patrol: "見回り",
+	event: "GitHub の知らせ",
+};
 
 /** 投稿の最後に足す「どの回から」。朝会は日付、見回りは時刻で見分ける。 */
 const runLabel = (kind: RunKind, now: Date) => {
@@ -90,13 +97,14 @@ export const postDecisions = async (
 	if (!tagId) log.warn("forum tag missing", { tag: DECIDE_TAG });
 	const from = runLabel(kind, now);
 
-	const post = async (d: Decision) => {
+	const post = async (d: Decision, buttons?: typeof APPROVAL_BUTTONS) => {
 		const created = await deps.discord.createForumPost(
 			deps.workForumChannelId,
 			{
 				name: d.title,
 				content: `${d.body}${standupPostFooter(from)}`,
 				tagIds: tagId ? [tagId] : [],
+				buttons,
 			},
 		);
 		if (!created.ok) {
@@ -111,12 +119,25 @@ export const postDecisions = async (
 	for (const d of decisions) await post(d);
 
 	if (blocked.length > 0) {
-		const threadId = await post({
-			title: `${RUN_NAME[kind]}で止めた操作`,
-			body: approvalRequestText(blocked),
-		});
+		const title = `${RUN_NAME[kind]}で止めた操作`;
+		const threadId = await post(
+			{ title, body: approvalRequestText(blocked) },
+			APPROVAL_BUTTONS,
+		);
 		if (threadId !== null) {
 			const operations = blocked.map((b) => b.operation);
+			await deps
+				.recordActivity?.({
+					at: now,
+					kind: "blocked",
+					threadId,
+					title,
+					partner: "yukarin",
+					tools: operations.map((o) => o.tool),
+				})
+				.catch((e: unknown) =>
+					log.warn("activity record failed", { error: String(e) }),
+				);
 			// フォーラム投稿の最初のメッセージは投稿と同じ ID を持つ
 			await deps.approvals.set(threadId, {
 				messageIds: [threadId],

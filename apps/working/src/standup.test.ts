@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ActivityEntry } from "./activity-log.ts";
 import type { ExecResult } from "./exec.ts";
 import { silentLogger } from "./logger.ts";
 import { openMacStateStore } from "./mac-state.ts";
@@ -73,15 +74,19 @@ const setup = () => {
 	const discord = fakeDiscord();
 	const approvals = memoryApprovals();
 	const ledger = tempLedger();
+	const activity: ActivityEntry[] = [];
 	const deps = {
 		discord: discord.api,
 		approvals,
 		ledger,
 		workForumChannelId: FORUM,
+		recordActivity: async (e: ActivityEntry) => {
+			activity.push(e);
+		},
 		now: () => NOW,
 		logger: silentLogger,
 	};
-	return { deps, discord, approvals, ledger };
+	return { deps, discord, approvals, ledger, activity };
 };
 
 describe("startStandup", () => {
@@ -222,6 +227,7 @@ describe("finishStandup", () => {
 		);
 		expect(t.discord.posts[0]?.content).toContain("本文1");
 		expect(t.discord.posts[0]?.content).toContain("2026-11-05 の朝会");
+		expect(t.discord.posts[0]?.buttons).toBeUndefined();
 	});
 
 	it("読めない返事なら投稿しない", async () => {
@@ -238,7 +244,31 @@ describe("finishStandup", () => {
 		]);
 		expect(r.posted).toEqual(["thread1"]);
 		expect(t.discord.posts[0]?.content).toContain("gh pr merge 3");
+		expect(t.discord.posts[0]?.buttons).toEqual([
+			"approval:grant",
+			"approval:deny",
+		]);
 		expect(t.approvals.get("thread1")?.operations).toEqual([op]);
+	});
+
+	it("GitHub の知らせの席が止められた操作も、道具の名前だけを活動ログに残す", async () => {
+		const t = setup();
+		await finishStandup(
+			t.deps,
+			decisionsReply(0),
+			[{ operation: { tool: "Bash", target: "gh pr merge 3" }, reason: "x" }],
+			"event",
+		);
+		expect(t.activity).toEqual([
+			{
+				at: NOW,
+				kind: "blocked",
+				threadId: "thread1",
+				title: "GitHub の知らせで止めた操作",
+				partner: "yukarin",
+				tools: ["Bash"],
+			},
+		]);
 	});
 
 	it("見回りの投稿は時刻で、止めた操作の件名も見回りにする", async () => {

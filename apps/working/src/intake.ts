@@ -1,15 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { PARTNER_IDS, type PartnerId } from "@yunomi/core";
-import type { DiscordMessageCreatedEnvelope } from "@yunomi/protocol";
+import type {
+	DiscordButtonPressedEnvelope,
+	DiscordMessageCreatedEnvelope,
+} from "@yunomi/protocol";
 import type { ActivityEntry, ActivityKind } from "./activity-log.ts";
 import {
+	APPROVAL_BUTTONS,
+	type ApprovalAnswer,
+	approvalAnswerOf,
 	approvalRequestText,
 	approvedNote,
 	approvedPrompt,
 	isApproval,
+	settledApprovalText,
 	uniquePending,
 } from "./approval.ts";
-import type { ApprovalStore } from "./approval-store.ts";
+import type { ApprovalRequest, ApprovalStore } from "./approval-store.ts";
 import {
 	type AttachmentCollector,
 	takeAttachRefs,
@@ -127,7 +134,11 @@ const STANDUP_NO_ASK =
 
 /** 朝会と見回りの席は、席の ID の頭で見分ける。受付が作り直されても分かる。 */
 const runKindOf = (seat: Seat): RunKind =>
-	seat.threadId.startsWith("patrol-") ? "patrol" : "standup";
+	seat.threadId.startsWith("patrol-")
+		? "patrol"
+		: seat.threadId.startsWith("event-")
+			? "event"
+			: "standup";
 
 /**
  * 席を始められなかったときに投稿に書く文。持ち主が次に何をすればよいか分かるよう、止まった所だけを短く書く。
@@ -187,6 +198,8 @@ export const busyText = (lastStatus: string | null) => {
 export type Intake = {
 	/** 受け付けた仕事が終わるまで待つ Promise を返す。HTTP は待たずに 202 を返す。 */
 	handle: (envelope: DiscordMessageCreatedEnvelope) => Promise<void>;
+	/** 投稿のボタンが押された。許可の依頼のボタンだけを扱う。 */
+	press: (envelope: DiscordButtonPressedEnvelope) => Promise<void>;
 	/** 席から届いたメッセージ（質問、完了の報告、止まった知らせ）を投稿に運ぶ。 */
 	onSeatMessage: (msg: SeatMessage) => Promise<void>;
 	/** 朝会か見回りの席を作る。席の名前にする ID を返す。 */
@@ -554,6 +567,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			lead.trim() === "" ? request : `${lead}\n\n${request}`,
 			undefined,
 			files,
+			APPROVAL_BUTTONS,
 		);
 		if (!sent.ok) {
 			log.error("approval request failed", {
@@ -1091,43 +1105,47 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		);
 	};
 
-	/** 投稿内の返事。許可を待っている操作があれば、許可かどうかを先に見る。 */
-	const answer = async (threadId: string, p: Payload) => {
-		const reply = replyPrompt({
-			now: now(),
-			authorName: p.author.display_name,
-			content: p.content,
-		});
-		if (isRestartRequest(p.content) && (await restart(threadId))) return;
-		const request = deps.approvals.get(threadId);
-		const from = { channelId: threadId, messageId: p.message_id };
-		if (request === null) {
-			await deliver(threadId, reply, null, from);
-			return;
-		}
-		// 許可でも取りやめでも、待っていた操作はここで片付け、古い依頼に後から OK を返しても通さない
-		await deps.approvals.delete(threadId);
-		if (
-			!isApproval(
-				{ content: p.content, replyToMessageId: p.reply_to_message_id ?? null },
-				request,
-			)
-		) {
-			deps.ledger.log({
-				event: "dismissed",
+	/**
+	 * 片付いた許可の依頼を書き換え、ボタンを外す。ボタンは分けて送った本文の最後のメッセージに付いている。
+	 * 書き換えに失敗しても、依頼はもう片付いているので、残ったボタンを押されても何もしない。
+	 */
+	const settle = async (
+		threadId: string,
+		request: ApprovalRequest,
+		answer: ApprovalAnswer,
+	) => {
+		const messageId = request.messageIds.at(-1);
+		if (messageId === undefined) return;
+		const bot = botOf(threadId);
+		const current = await bot.getMessage(threadId, messageId);
+		const edited = current.ok
+			? await bot.editMessage(
+					threadId,
+					messageId,
+					settledApprovalText(current.value.content, answer),
+				)
+			: current;
+		if (!edited.ok) {
+			log.warn("approval settle failed", {
 				thread_id: threadId,
-				operations: [...request.operations],
+				error: edited.error.type,
 			});
-			log.info("approval dismissed", { thread_id: threadId });
-			await deliver(threadId, reply, null, from);
-			return;
 		}
+	};
+
+	/** 待っていた操作を 1 回だけ許可し、席に続きをさせる。 */
+	const grant = async (
+		threadId: string,
+		request: ApprovalRequest,
+		by: { messageId: string; authorName: string; content: string },
+		from: MessageRef,
+	) => {
 		const grantId = newGrantId();
 		deps.ledger.log({
 			event: "granted",
 			thread_id: threadId,
 			grant_id: grantId,
-			message_id: p.message_id,
+			message_id: by.messageId,
 			operations: [...request.operations],
 		});
 		deps.ledger.grant(threadId, {
@@ -1143,11 +1161,98 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			threadId,
 			approvedPrompt({
 				now: now(),
-				authorName: p.author.display_name,
-				content: p.content,
+				authorName: by.authorName,
+				content: by.content,
 				operations: request.operations,
 			}),
 			request.operations,
+			from,
+		);
+	};
+
+	const dismiss = (threadId: string, request: ApprovalRequest) => {
+		deps.ledger.log({
+			event: "dismissed",
+			thread_id: threadId,
+			operations: [...request.operations],
+		});
+		log.info("approval dismissed", { thread_id: threadId });
+	};
+
+	/**
+	 * 許可の依頼のボタン。待っている依頼のメッセージに付いたボタンだけを受ける。
+	 * 却下しても席は起こさない。続きは持ち主の返事で頼む。
+	 */
+	const pressed = async (
+		threadId: string,
+		p: DiscordButtonPressedEnvelope["payload"],
+		answer: ApprovalAnswer,
+	) => {
+		const request = deps.approvals.get(threadId);
+		// 返事か先のボタンで片付いた依頼のボタンは通さない。二度押しもここで止まる
+		if (request === null || !request.messageIds.includes(p.message_id)) {
+			log.info("stale approval button ignored", {
+				thread_id: threadId,
+				message_id: p.message_id,
+			});
+			return;
+		}
+		await deps.approvals.delete(threadId);
+		await settle(threadId, request, answer);
+		if (answer === "deny") {
+			dismiss(threadId, request);
+			return;
+		}
+		await grant(
+			threadId,
+			request,
+			{
+				messageId: p.message_id,
+				authorName: p.user.display_name,
+				content: "（許可のボタンを押した）",
+			},
+			// 席の受付のリアクションは持ち主の発言に付けたままにする
+			seats.get(threadId)?.request ?? {
+				channelId: threadId,
+				messageId: p.message_id,
+			},
+		);
+	};
+
+	/** 投稿内の返事。許可を待っている操作があれば、許可かどうかを先に見る。 */
+	const answer = async (threadId: string, p: Payload) => {
+		const reply = replyPrompt({
+			now: now(),
+			authorName: p.author.display_name,
+			content: p.content,
+		});
+		if (isRestartRequest(p.content) && (await restart(threadId))) return;
+		const request = deps.approvals.get(threadId);
+		const from = { channelId: threadId, messageId: p.message_id };
+		if (request === null) {
+			await deliver(threadId, reply, null, from);
+			return;
+		}
+		// 許可でも取りやめでも、待っていた操作はここで片付け、古い依頼に後から OK やボタンを返しても通さない
+		await deps.approvals.delete(threadId);
+		const approved = isApproval(
+			{ content: p.content, replyToMessageId: p.reply_to_message_id ?? null },
+			request,
+		);
+		await settle(threadId, request, approved ? "grant" : "deny");
+		if (!approved) {
+			dismiss(threadId, request);
+			await deliver(threadId, reply, null, from);
+			return;
+		}
+		await grant(
+			threadId,
+			request,
+			{
+				messageId: p.message_id,
+				authorName: p.author.display_name,
+				content: p.content,
+			},
 			from,
 		);
 	};
@@ -1213,6 +1318,21 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				return;
 			}
 			await queue.run(threadId, () => answer(threadId, p));
+		},
+		press: async (envelope) => {
+			const p = envelope.payload;
+			const answer = approvalAnswerOf(p.custom_id);
+			if (answer === null) return;
+			// 持ち主以外が押しても何も起きない
+			if (p.user.is_bot || !deps.ownerUserIds.has(p.user.id)) {
+				log.debug("button from non-owner ignored", {
+					message_id: p.message_id,
+					user_id: p.user.id,
+				});
+				return;
+			}
+			const threadId = p.channel_id;
+			await queue.run(threadId, () => pressed(threadId, p, answer));
 		},
 		onSeatMessage: async (msg) => {
 			const seat = seatOfMessage(msg);

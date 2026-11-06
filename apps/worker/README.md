@@ -161,6 +161,18 @@ Working（仕事）の Yukarin は `/v1/partners/:partnerId/working/memory` で 
 
 Talking の prompt では、`work_notes` の新しい `WORK_NOTE_PROMPT_LIMIT`（10）件を `仕事で決めたこと` / `仕事で終えたこと` の出来事として、facts の出来事と合わせて新しい順に並べる。出来事と同じく 3 日以上たったものは「前に聞いた話」に回る。
 
+## GitHub の出来事（webhook）
+
+Working は公開していないので、GitHub の webhook は Worker が受け、D1 の `github_events` に置く。Working が `working` の service token で取りに来る（`src/github-webhook.ts`）。
+
+- `POST /v1/github/webhook`: Access を通らない（chabatake で bypass する）。`X-Hub-Signature-256` を `GITHUB_WEBHOOK_SECRET` で確かめ、署名が無いか違えば 401 で捨てる。secret の無い環境（dev）では 404。
+- 置くのは席を動かす出来事だけ: `workflow_run` と `check_suite`（Actions 以外）の失敗、`pull_request_review` の submitted、`issue_comment` の created。payload は席の材料になる値だけに絞り、`X-GitHub-Delivery` で再送を一つにまとめる。ほかは 204。
+- `POST /v1/working/github-events`: 置いてある出来事を全部取り出して消す。6 時間より古いものは渡さない（見回りが拾う）。取りに来ないまま 1 日たった行は日次の cron が消す。
+
+| 設定 | 種類 | 値 |
+| --- | --- | --- |
+| `GITHUB_WEBHOOK_SECRET` | secret | GitHub の webhook の secret。prod だけが持ち、参照は `.github/deploy/production.env.op` に置く |
+
 ## Open Loop
 
 会話中の未解決の話題・あとで聞き返したい続き（結果待ち、相手自身の予定、困りごとの続き）。タスクやリマインダーではなく、今回は抽出・保存・解決の記録までで、フォローアップ発話や期限の評価はしない（`follow_up_interval_hours` と `last_followed_up_at` は常に null）。
