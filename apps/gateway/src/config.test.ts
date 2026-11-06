@@ -20,6 +20,7 @@ describe("loadConfig", () => {
 				ownerUserId: null,
 				workCategoryIds: new Set(),
 				working: null,
+				workingForward: true,
 				logLevel: "info",
 			},
 		});
@@ -105,7 +106,15 @@ describe("loadConfig", () => {
 		expect(r.ok && r.value).toMatchObject({
 			workCategoryIds: new Set(["10", "20"]),
 			working: { url: "http://working.lan:8080/inbox", token: "shared" },
+			workingForward: true,
 		});
+		const quiet = loadConfig({
+			...base,
+			WORKING_URL: "http://working.lan:8080/inbox",
+			WORKING_TOKEN: "shared",
+			WORKING_FORWARD: "false",
+		});
+		expect(quiet.ok && quiet.value.workingForward).toBe(false);
 		expect(
 			loadConfig({ ...base, WORKING_URL: "nope", WORKING_TOKEN: "shared" }).ok,
 		).toBe(false);

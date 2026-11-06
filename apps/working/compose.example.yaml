@@ -17,12 +17,14 @@ services:
       - 6768:6768
     volumes:
       - claude:/home/worker/.claude
+      - codex:/home/worker/.codex
       - orca:/home/worker/.config
       - state:/home/worker/state
       - work:/home/worker/work
 
 volumes:
   claude:
+  codex:
   orca:
   state:
   work:

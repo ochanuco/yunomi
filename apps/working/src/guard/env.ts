@@ -73,8 +73,10 @@ export const guardRunFromEnv = (
 	const home = env.HOME ?? "/home/worker";
 	const stateDir = env[GUARD_ENV.stateDir] ?? `${home}/state`;
 	const claudeDir = env.CLAUDE_CONFIG_DIR ?? `${home}/.claude`;
+	const codexDir = env.CODEX_HOME ?? `${home}/.codex`;
 	const seatsDir = env[GUARD_ENV.seatsDir];
 	const guardDir = guardDirOf(stateDir);
+	// Codex は CLAUDE_PROJECT_DIR を持たず、hook の入力の cwd が席の中を指す
 	const dir = env.CLAUDE_PROJECT_DIR ?? projectDir;
 	const seat = seatsDir && dir ? seatOf(seatsDir, dir) : null;
 	const grant = seat ? readGrant(grantPathOf(guardDir, seat.threadId)) : null;
@@ -85,12 +87,14 @@ export const guardRunFromEnv = (
 			protectedDirs: [
 				claudeDir,
 				`${home}/.claude.json`,
+				codexDir,
 				`${home}/.config`,
 				`${home}/.ssh`,
 				`${home}/.gitconfig`,
 				`${home}/.git-credentials`,
 				stateDir,
 				"/etc/claude-code",
+				"/etc/codex",
 				"/opt/yunomi-guard",
 				"/proc",
 			],

@@ -17,6 +17,8 @@ export const CREDENTIALS_FILE = "memory-credentials.json";
 export const credentialsPathOf = (stateDir: string) =>
 	join(stateDir, CREDENTIALS_FILE);
 
+const PARTNER = /^[a-z]+$/;
+
 export const MEMORY_KINDS = ["decided", "done"] as const;
 /** Worker の WORK_NOTE_SUMMARY_MAX_LENGTH と揃える。 */
 export const SUMMARY_MAX_LENGTH = 200;
@@ -99,7 +101,11 @@ export const runMemoryCli = async (
 
 	const creds = readCredentials(env);
 	if (creds === null) return fail(1, "記憶の口の接続情報がない");
-	const base = `${creds.url.replace(/\/$/, "")}/v1/partners/${encodeURIComponent(creds.partner_id)}/working/memory`;
+	// Akarin の席（Codex）は YUNOMI_PARTNER=akarin を付けて呼ぶ。無ければ接続情報の既定（Yukarin）
+	const partner = PARTNER.test(env.YUNOMI_PARTNER ?? "")
+		? (env.YUNOMI_PARTNER as string)
+		: creds.partner_id;
+	const base = `${creds.url.replace(/\/$/, "")}/v1/partners/${encodeURIComponent(partner)}/working/memory`;
 	const headers = {
 		"CF-Access-Client-Id": creds.client_id,
 		"CF-Access-Client-Secret": creds.client_secret,

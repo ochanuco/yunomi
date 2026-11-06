@@ -1,14 +1,14 @@
 # apps/working
 
-Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Working 受付を 1 つの Linux コンテナで動かす。仕事フォーラムの投稿 1 件に Orca の席（worktree と、そこに居続ける Claude CLI）を 1 つ付け、Yukarin の人格で作業させる。受付は Claude を自分で起動せず、Discord と Orca（`orca-ide orchestration`）の間で言葉を運ぶ。
+Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Codex CLI、Working 受付を 1 つの Linux コンテナで動かす。仕事フォーラムの投稿 1 件に Orca の席（worktree と、そこに居続ける CLI agent）を 1 つ付け、Yukarin の人格の Claude CLI か、Akarin の人格の Codex CLI で作業させる（「Akarin の席」の節）。受付は agent を自分で動かさず、Discord と Orca（`orca-ide orchestration`）の間で言葉を運ぶ。
 
 ## 中身
 
 | ファイル | 役割 |
 | --- | --- |
-| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、`gh`、mise と依存のビルドに要る OS のパッケージを入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
+| `Dockerfile` | Debian に Orca の Linux 版（`orca-ide`）、Claude CLI、Codex CLI（`CODEX_VERSION` で固定）、`gh`、mise と依存のビルドに要る OS のパッケージを入れる。人格の元ファイル、引き継ぎの指示、取り消せない操作を止める hook も入れる |
 | `mise/config.toml` | 席の既定の道具（node、pnpm、uv、jq）。`/etc/mise/config.toml` に置く |
-| `persona.sh` | `partners/yukarin` の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、席の Claude に渡す人格として標準出力に出す |
+| `persona.sh` | `partners/<パートナー>`（引数、既定は `yukarin`）の `identity/*.md`・`profile.yaml`・`examples.yaml` を連結し、席の agent に渡す人格として標準出力に出す |
 | `compose.example.yaml` | 常駐させるときの compose の雛形 |
 | `src/` | Working 受付（`@yunomi/working`）。gateway から envelope を受け、Discord REST と Orca の席で作業する |
 | `src/memory-cli/` | 記憶の道具 `yunomi-memory`。Worker の Working の記憶の口を読み書きする。node の組み込みだけで書き、`/opt/yunomi-memory/` に置いて node で直接動かす |
@@ -16,6 +16,7 @@ Working（仕事）を受け持つコンテナ。`orca serve`、Claude CLI、Wor
 | `src/guard/` | Claude CLI の PreToolUse hook。道具を使う前に、聞かずに実行してよいかを決める。node の組み込みだけで書き、`/opt/yunomi-guard/` に置いて node で直接動かす |
 | `src/repo-map/` | 受付が chabatake の `repo-map.yaml` を取って `STATE_DIR` に写しを置く処理と、席の Claude の SessionStart hook。hook は node の組み込みだけで書き、`/opt/yunomi-repo-map/` に置いて node で直接動かす |
 | `guard/managed-settings.json` | hook を登録する Claude CLI の managed settings。`/etc/claude-code/` に置く |
+| `guard/codex-requirements.toml` | 同じ hook を登録する Codex CLI の managed な要件。`/etc/codex/requirements.toml` に置く |
 | `start.sh` | コンテナの entrypoint。受付と、引数で渡したコマンド（`orca-ide serve …`）を並べて動かし、どちらかが終わればコンテナを終わらせる |
 | `seat-env.sh` | start.sh が `orca-ide serve` をこれ越しに起動する。席の Claude は orca serve の環境変数を受け継ぐので、渡してよい変数だけに絞る |
 | `release-orcad-lock.sh` | `orca-ide serve` の前に start.sh が呼ぶ。前のコンテナの orcad が volume に残した `orcad.lock` を消す |
@@ -27,6 +28,7 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | volume | マウント先 | 残るもの |
 | --- | --- | --- |
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
+| `yunomi-working-codex` | `/home/worker/.codex` | Codex CLI のログイン情報（`auth.json`）、設定（`config.toml`）、会話（`sessions/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
 | `yunomi-working-state` | `/home/worker/state` | フォーラム投稿と席の対応、Orca の Run と受付の端末（`seats.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、最後に届いた Mac の席の状態（`mac-state.json`）、記憶の口の接続情報（`memory-credentials.json`） |
 | `yunomi-working-work` | `/home/worker/work` | 席の元にする空の git リポジトリ（`seats/`）と、席の worktree（`orca/workspaces/seats/seat-<投稿の ID>/`）。席の Claude はその中に clone する。mise が入れた道具（`.mise/`）、pnpm の store（`.pnpm-store/`）、uv のキャッシュと Python（`.cache/uv/`・`.uv/`） |
@@ -52,7 +54,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 | 完了のあとにまた書く | 同じ投稿に新しい席を作り、これまでのやりとり（最大 100 件）を渡す |
 | Mac でやる必要がある | 席が申し送り issue を書いて報告する。タグを `引き継ぎ` にし、席を閉じる |
 
-- 仕事テキストチャンネルで Yukarin 宛て（Yukarin か bot ロールへのメンション、Yukarin の発言への返信）の依頼が来たら、仕事フォーラムに投稿を立てる。件名は依頼の要約（Claude CLI の haiku で作る。前置きやメタ発言、複数行、40 字超の出力は使わず、依頼の 1 行目にする）、本文は元の依頼と元メッセージへのリンク。テキストチャンネルには投稿へのリンクを返信で返す。
+- 仕事テキストチャンネルで Yukarin か Akarin 宛て（その bot か bot ロールへのメンション、その bot の発言への返信）の依頼が来たら、仕事フォーラムに投稿を立てる。件名は依頼の要約（Claude CLI の haiku で作る。前置きやメタ発言、複数行、40 字超の出力は使わず、依頼の 1 行目にする）、本文は元の依頼と元メッセージへのリンク。テキストチャンネルには投稿へのリンクを返信で返す。
 - 同じ投稿への発言と席からのメッセージは、1 件ずつ順に処理する。
 - Discord REST が 2xx 以外を返したときは、経路・ステータス・Discord のエラーコードとメッセージを warn で残す。bot の権限不足（403 の Missing Access / Missing Permissions）は `PermissionDenied` として扱う。
 - `WORKING_OWNER_DISCORD_USER_IDS` に入っている人の発言だけを扱う。Yukarin 自身、ほかの人、ほかの bot の発言は、依頼・フォーラムの投稿・投稿内の返事のどれでも無視する。
@@ -71,6 +73,19 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 席を閉じるときは、席の Claude を止め、worktree を消す。席の Claude には、完了にする前に commit と push を済ませるよう指示してある。
 - 起動時に `seats.json` と Orca の席を突き合わせる。対応表に無い席の端末と worktree（前回の残り）は片付け、対応表にある席は残す。Claude がいなくなっていた席は止めた扱いにし、作業中だったなら投稿で知らせて `決めてほしい` にする。
 
+### Akarin の席
+
+`AKARIN_DISCORD_TOKEN` があれば、受付は Akarin の bot でも Discord に書き、Akarin 宛ての依頼に Akarin の席を作る。無いとき（Akarin の bot に入れなかったときも）は Akarin の席を作らず、すべて Yukarin が受ける。
+
+- 仕事カテゴリの発言を受付に渡すのは Yukarin の gateway だけ。Akarin へのメンションと Akarin の bot ロールへのメンションも、Akarin の bot のユーザー ID として envelope の `mentions` に入って届く。
+- 依頼（仕事テキストチャンネルの発言、フォーラムの新しい投稿）で Akarin の bot がメンションされていれば Akarin の席、そうでなければ Yukarin の席を作る。両方へのメンションなら Akarin。仕事テキストチャンネルでは、Akarin の発言への返信も Akarin 宛てとみなす。
+- 投稿の担当は席を作るときに決めて `seats.json` の `partners` に残す。投稿への返事、止めた席を起こすとき、完了のあとにまた書いたときも、同じ担当が受ける。
+- 投稿・返事・タグ・リアクション・状態の欄・入力中の表示は、担当のパートナーの bot で書く。Akarin の bot には Yukarin の bot と同じ権限が要る。
+- Akarin の席は Codex CLI で動き、前置きの人格は `persona.sh akarin`、記憶の読み書きは Akarin の記憶（`/v1/partners/akarin/working/memory`）にする。
+- Codex は `codex -a never -s danger-full-access` で起動する。止めた席は同じ worktree で `codex resume --last` で起こす。Codex の `resume --last` は作業ディレクトリの最新の会話を選ぶので、投稿ごとの worktree で前の会話のまま続く。
+- Codex は worktree の信頼を元のリポジトリで引く。受付は起動時に、席の元のリポジトリ（`SEATS_REPO` の realpath）を `CODEX_HOME/config.toml` の `[projects."<path>"]` に `trust_level = "trusted"` で足す（表が無いときだけ）。
+- 朝会は Yukarin だけが行う。
+
 ### タグ
 
 フォーラムに `決めてほしい`・`作業中`・`引き継ぎ`・`完了` のタグを作っておく。受付は名前で ID を引く。席を作るときと席に返事を渡すときに `作業中` を付け、席の質問で `決めてほしい` にする。完了報告では本文の最後の行（`状態: …`、投稿には出さない）に合わせて付け替え、書かれていなければ `決めてほしい` にする。人が付けたほかのタグは残す。
@@ -80,7 +95,7 @@ gateway が仕事カテゴリの発言を `POST /events` に送ってくる（`W
 - 席の Claude が動いている間（席の状態が `working`）、投稿に入力中の表示を約 8 秒おきに送る。止まったら送らない。
 - 持ち主の依頼メッセージ（仕事チャンネルの依頼、投稿の最初のメッセージ、投稿への返事）に bot のリアクションを付ける。受付 👀、作業中 ⏳、完了 ✅、決めてほしい・引き継ぎ ❓。状態が変わると前の絵文字を外して付け替え、持ち主が新しく書くとそのメッセージに移す。
 - 席を作るとき投稿に bot のメッセージを 1 件置き、状態の欄にする。状態、作業中なら経過時間（いまの状態になってから）といまやっていること（席の最後の途中経過）を書く。内容が変わったときだけ書き換え、経過時間だけの変化は最短 5 分おき。
-- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": N }` として返す。朝会の席は数えない。gateway が bot のステータスに出す。
+- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": <合計>, "partners": { "yukarin": N, "akarin": M } }` として返す。朝会の席は数えない。gateway が自分のパートナーの数を bot のステータスに出す。
 
 ### 席の Claude に渡すもの
 
@@ -125,6 +140,15 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 
 席の Claude は `orca-ide serve` の環境変数を受け継ぐ。start.sh は `seat-env.sh` で、`HOME`・`PATH`・`GH_TOKEN`・`GIT_AUTHOR_*` / `GIT_COMMITTER_*` などと、hook が使う `YUNOMI_STATE_DIR`・`YUNOMI_SEATS_DIR`、mise・uv・pnpm の置き場所だけを渡して起動する。Discord のトークン、`WORKING_TOKEN`、`MAC_STATE_TOKEN`、記憶の口と chimera の service token は渡さない。
 
+### 席の Codex の権限
+
+持ち主の方針（都度許可を求めない、手元と同じものが見える）に合わせ、席の Codex は承認なし（`approval_policy = never`）・sandbox なし（`sandbox_mode = danger-full-access`）で動く。worktree への書き込み、ネットワーク、`git push`、`gh` を聞かずに実行する。コンテナが外側の囲いになる。Codex の sandbox（bubblewrap）は使わない。
+
+- `/etc/codex/requirements.toml`（root の持ち物）で、Claude CLI と同じ PreToolUse hook（`src/guard/hook.ts`）と SessionStart hook（`src/repo-map/hook.ts`）を managed hook として登録し、`allow_managed_hooks_only = true` で作業場所や `CODEX_HOME` の hook を読ませない。managed hook は信頼の確認なしで動く。
+- PreToolUse hook は、Claude の席と同じく秘密情報の読み出し（`~/.codex` の `auth.json` を含む）と、秘密情報や許可の記録の場所への書き込み（`apply_patch` でのファイルの書き換えを含む）を止める。止めた操作の許可の流れは Claude の席と同じ。Codex には auto モードの判定が無いので、取り消せない操作の前に聞くのは `WORKING_INSTRUCTIONS` の指示による。
+- Codex は CLAUDE_PROJECT_DIR を持たないので、hook は入力の `cwd` から席の投稿を引く。
+- 環境変数は Claude の席と同じく `seat-env.sh` が絞ったものだけを受け継ぐ（`CODEX_HOME` を足してある）。Codex は既定でコマンドに環境変数をそのまま渡すので、`GH_TOKEN` は `gh` と `git push` に届く。
+
 ### 席のビルドとテスト
 
 席の `PATH` の先頭には mise の shims（`~/work/.mise/shims`）がある。clone したリポジトリで `mise install` を実行すると、そのリポジトリの `mise.toml`（または `.tool-versions`）の道具と、`/etc/mise/config.toml` の既定の道具（node 24、pnpm 10、uv、jq）が入る。`mise.toml` を持たないリポジトリでも既定の道具で `pnpm install` や `uv sync` を回せる。
@@ -144,7 +168,7 @@ yunomi-memory write --kind decided --summary "<1行の要約>"  # 決まった�
 yunomi-memory write --kind done --summary "<1行の要約>"     # 終わったこと
 ```
 
-- 呼ぶ先は Worker の `/v1/partners/yukarin/working/memory`。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
+- 呼ぶ先は Worker の `/v1/partners/<パートナー>/working/memory`。パートナーは環境変数 `YUNOMI_PARTNER`（Akarin の席の Codex がコマンドに渡す）、無ければ `yukarin`。受付が完了のときに残す 1 行も、担当のパートナーの記憶に書く。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
 - 受付は起動時に `YUNOMI_URL` と `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` を `STATE_DIR/memory-credentials.json`（権限 600）に書き、`yunomi-memory` はそこから読む。service token は席の Claude の環境変数に載せず、標準出力にも標準エラーにも出さない。3 つのどれかが欠けていれば、ファイルを消して記憶の道具を使えなくする。
 - `summary` は改行を含まない 200 字以内。
 
@@ -185,6 +209,8 @@ Renovate の PR は持ち主の許しで、朝会の席が片付ける。CI が�
 | 変数 | 必須 | 内容 |
 | --- | --- | --- |
 | `DISCORD_TOKEN` | はい | Yukarin の bot トークン。Discord REST に使う |
+| `AKARIN_DISCORD_TOKEN` | いいえ | Akarin の bot トークン。あれば Akarin 宛ての依頼に Codex CLI の席を作る |
+| `CODEX_HOME` | いいえ | Codex CLI の設定とログイン情報の置き場所。イメージでは `~/.codex` |
 | `WORKING_TOKEN` | はい | gateway と共有するトークン |
 | `WORK_TEXT_CHANNEL_ID` | はい | 依頼を受ける仕事テキストチャンネル |
 | `WORK_FORUM_CHANNEL_ID` | はい | 投稿を立てる仕事フォーラム |
@@ -225,7 +251,7 @@ gateway と同じホストに、gateway とは別の compose project で置く�
 - 受付は docker0 のゲートウェイ（`172.17.0.1:8180`）にだけ公開する。gateway は `extra_hosts: host.docker.internal:host-gateway` を足し、`WORKING_URL=http://host.docker.internal:8180/events` で送る。
 - 席の状態の受け口（コンテナの `8090`）は、Mac から届く LAN の口に公開する。`MAC_STATE_URL` は `http://<host>:<公開したポート>/mac-state` にする。
 - `restart: unless-stopped` で、ホストの再起動後も受付と `orca serve` が上がる。
-- volume は 4 つ（上の表）。コンテナを作り直しても、ログイン・pairing・投稿と席の対応・席の worktree と Claude の会話が残る。席の Claude はコンテナと一緒に終わるので、受付は起動時に止めた席として扱い、返事で起こす。
+- volume は 5 つ（上の表）。コンテナを作り直しても、ログイン・pairing・投稿と席の対応・席の worktree と Claude・Codex の会話が残る。席の Claude はコンテナと一緒に終わるので、受付は起動時に止めた席として扱い、返事で起こす。
 
 ### 初回だけ人が行うこと
 
@@ -237,6 +263,17 @@ docker exec <コンテナ名> claude auth status
 ```
 
 ログイン情報は `yunomi-working-claude` の volume に残る。期限が切れたら同じ手順でやり直す。
+
+#### Codex CLI のログイン
+
+Akarin の席を使うときだけ行う。
+
+```sh
+docker exec -it <コンテナ名> codex login --device-auth   # 表示された URL とコードで承認する
+docker exec <コンテナ名> codex login status
+```
+
+ログイン情報は `yunomi-working-codex` の volume に残る。
 
 #### Mac の Orca との pairing
 
@@ -262,6 +299,7 @@ docker run -d --name working \
   -p 127.0.0.1:18080:8080 \
   --env-file .env.working \
   -v yunomi-working-claude:/home/worker/.claude \
+  -v yunomi-working-codex:/home/worker/.codex \
   -v yunomi-working-orca:/home/worker/.config \
   -v yunomi-working-state:/home/worker/state \
   -v yunomi-working-work:/home/worker/work \

@@ -6,13 +6,14 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { ok } from "@yunomi/core";
+import { ok, type PartnerId } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import { openApprovalStore } from "./approval-store.ts";
 import {
 	type ChimeraImages,
 	createAttachmentCollector,
 } from "./attachments.ts";
+import type { DiscordApi } from "./discord-rest.ts";
 import { grantPathOf, guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
 import {
@@ -39,6 +40,31 @@ import {
 
 const T0 = new Date("2026-11-05T08:00:00Z");
 const PREAMBLE = "【人格】\n## 仕事のしかた\n【引き継ぎの指示】";
+const AKARIN_PREAMBLE = "【あかりの人格】\n## 仕事のしかた";
+const AKARIN_BOT = "akarin-bot";
+const WRITES = new Set([
+	"send",
+	"createForumPost",
+	"createMessage",
+	"editMessage",
+	"setTags",
+	"addReaction",
+	"removeReaction",
+	"typing",
+]);
+
+/** 同じ Discord を別の bot として書く口。書き込みの呼び出しを bot ごとに残す。 */
+const asBot = (api: DiscordApi, writes: string[]): DiscordApi =>
+	new Proxy(api, {
+		get: (target, key) => {
+			const f = target[key as keyof DiscordApi];
+			if (typeof f !== "function" || !WRITES.has(String(key))) return f;
+			return (...args: unknown[]) => {
+				writes.push(`${String(key)} ${String(args[0])}`);
+				return (f as (...a: unknown[]) => unknown)(...args);
+			};
+		},
+	});
 
 const setup = async (
 	opts: {
@@ -47,6 +73,7 @@ const setup = async (
 		orca?: ReturnType<typeof fakeOrca>;
 		seatsDir?: string;
 		chimera?: ChimeraImages;
+		akarin?: boolean;
 	} = {},
 ) => {
 	const stateDir = opts.stateDir ?? tempDir();
@@ -54,13 +81,22 @@ const setup = async (
 	const o = opts.orca ?? fakeOrca(opts.seatsDir);
 	let clock = T0.getTime();
 	const remembered: string[] = [];
+	const rememberedBy: PartnerId[] = [];
+	const writes = { yukarin: [] as string[], akarin: [] as string[] };
 	const standup: { text: string; blocked: number }[] = [];
 	const seats = await openSeatStore(stateDir);
 	const ledger = createLedger(guardDirOf(stateDir));
 	let g = 0;
 	const timers = new Set<() => void>();
 	const deps: IntakeDeps = {
-		discord: d.api,
+		discord: asBot(d.api, writes.yukarin),
+		akarin: opts.akarin
+			? {
+					discord: asBot(d.api, writes.akarin),
+					botUserId: AKARIN_BOT,
+					preamble: AKARIN_PREAMBLE,
+				}
+			: null,
 		orca: o.orca,
 		seats,
 		approvals: await openApprovalStore(stateDir),
@@ -70,8 +106,9 @@ const setup = async (
 			chimera: opts.chimera ?? null,
 			logger: silentLogger,
 		}),
-		remember: async (s) => {
+		remember: async (s, partner) => {
 			remembered.push(s);
+			rememberedBy.push(partner);
 		},
 		standupDone: async (text, blocked) => {
 			standup.push({ text, blocked: blocked.length });
@@ -98,6 +135,8 @@ const setup = async (
 		ledger,
 		stateDir,
 		remembered,
+		rememberedBy,
+		writes,
 		standup,
 		intake: createIntake(deps),
 		advance: (ms: number) => {
@@ -993,7 +1032,10 @@ describe("作業中かを Discord で見せる", () => {
 		s.d.addThread("p2", "二つ目");
 		await s.intake.handle(say("p2", "こっちも", { first: true }));
 		await s.intake.startStandup("朝会");
-		expect(s.intake.summary()).toEqual({ working: 2 });
+		expect(s.intake.summary()).toEqual({
+			working: 2,
+			partners: { yukarin: 2, akarin: 0 },
+		});
 
 		await s.intake.onSeatMessage(
 			seatMessage({
@@ -1002,6 +1044,117 @@ describe("作業中かを Discord で見せる", () => {
 				body: "どちらにしますか",
 			}),
 		);
-		expect(s.intake.summary()).toEqual({ working: 1 });
+		expect(s.intake.summary()).toEqual({
+			working: 1,
+			partners: { yukarin: 1, akarin: 0 },
+		});
+	});
+});
+
+describe("Akarin の席", () => {
+	it("仕事チャンネルで Akarin へのメンションがあれば、Akarin の bot で投稿を立て、Codex の席に Akarin の前置きを渡す", async () => {
+		const s = await setup({ akarin: true });
+		await s.intake.handle(
+			envelope({ content: "<@1> 請求書を整理して", mentions: [AKARIN_BOT] }),
+		);
+		const [start] = s.o.opsOf("startSeat") as { spec: string; agent: string }[];
+		expect(start?.agent).toBe("codex");
+		expect(start?.spec.startsWith(AKARIN_PREAMBLE)).toBe(true);
+		expect(s.seats.partnerOf("thread1")).toBe("akarin");
+		expect(s.writes.akarin).toEqual(
+			expect.arrayContaining([
+				`createForumPost ${FORUM}`,
+				`send ${TEXT}`,
+				`addReaction ${TEXT}`,
+				"createMessage thread1",
+				"editMessage thread1",
+				"typing thread1",
+			]),
+		);
+		expect(s.writes.yukarin).toEqual([]);
+		expect(s.intake.summary()).toEqual({
+			working: 1,
+			partners: { yukarin: 0, akarin: 1 },
+		});
+	});
+
+	it("Yukarin と Akarin の両方へのメンションなら Akarin が受ける", async () => {
+		const s = await setup({ akarin: true });
+		await s.intake.handle(envelope({ mentions: [BOT, AKARIN_BOT] }));
+		expect(s.seats.partnerOf("thread1")).toBe("akarin");
+	});
+
+	it("Akarin の bot が無ければ、Akarin へのメンションだけの依頼では席を作らない", async () => {
+		const s = await setup();
+		await s.intake.handle(envelope({ mentions: [AKARIN_BOT] }));
+		expect(s.o.opsOf("startSeat")).toEqual([]);
+	});
+
+	it("Akarin 宛ての投稿は、返事も完了の報告も Akarin の bot で書き、完了のあとも Akarin の Codex の席で続ける", async () => {
+		const s = await setup({ akarin: true });
+		s.d.addThread("p1", "README の誤字");
+		await s.intake.handle(
+			envelope({
+				channel_id: "p1",
+				message_id: "p1",
+				content: "README の誤字を直して",
+				mentions: [AKARIN_BOT],
+			}),
+		);
+		const seat = s.seats.get("p1");
+		if (!seat?.dispatchId) throw new Error("seat not started");
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				body: "直しました\n状態: 完了",
+			}),
+		);
+		expect(s.rememberedBy).toEqual(["akarin"]);
+		expect(s.seats.get("p1")).toBeNull();
+
+		await s.intake.handle(say("p1", "もう一か所お願い"));
+		const starts = s.o.opsOf("startSeat") as { spec: string; agent: string }[];
+		expect(starts.map((x) => x.agent)).toEqual(["codex", "codex"]);
+		expect(starts[1]?.spec.startsWith(AKARIN_PREAMBLE)).toBe(true);
+		expect(s.writes.yukarin).toEqual([]);
+		expect(s.writes.akarin).toContain("send p1");
+	});
+
+	it("止めた Akarin の席は Codex で前の会話のまま起こす", async () => {
+		const s = await setup({ akarin: true });
+		s.d.addThread("p1", "README の誤字");
+		await s.intake.handle(
+			envelope({
+				channel_id: "p1",
+				message_id: "p1",
+				content: "README の誤字を直して",
+				mentions: [AKARIN_BOT],
+			}),
+		);
+		const seat = s.seats.get("p1");
+		if (!seat?.dispatchId) throw new Error("seat not started");
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか\n状態: 決めてほしい",
+			}),
+		);
+		s.advance(3 * 60 * 60_000);
+		await s.intake.sleepIdle();
+		expect(s.seats.get("p1")?.status).toBe("sleeping");
+		await s.intake.handle(say("p1", "A で"));
+		const [resume] = s.o.opsOf("resumeSeat") as { agent: string }[];
+		expect(resume?.agent).toBe("codex");
+	});
+
+	it("担当を volume の対応表に残し、受付を作り直しても同じ担当が受ける", async () => {
+		const stateDir = tempDir();
+		const first = await openSeatStore(stateDir);
+		await first.assign("p1", "akarin");
+		const again = await openSeatStore(stateDir);
+		expect(again.partnerOf("p1")).toBe("akarin");
+		expect(again.partnerOf("p2")).toBeNull();
 	});
 });

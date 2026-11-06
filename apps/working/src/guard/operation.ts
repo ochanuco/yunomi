@@ -32,7 +32,8 @@ export const operationOf = (
 	cwd: string,
 	home: string,
 ): Operation => {
-	if (tool === "Bash") {
+	// Codex の apply_patch はパッチの本文を command に入れてくる
+	if (tool === "Bash" || tool === "apply_patch") {
 		return { tool, target: (str(input.command) ?? "").trim() };
 	}
 	const path = str(input.file_path) ?? str(input.notebook_path);

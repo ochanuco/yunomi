@@ -1,8 +1,8 @@
 import { formatJstForPrompt } from "@yunomi/core";
 import type { PostedMessage } from "./discord-rest.ts";
 
-/** 席の Claude に渡す仕事のしかた。人格の後ろに置く。 */
-export const WORKING_INSTRUCTIONS = `
+/** 席の agent に渡す仕事のしかた。人格の後ろに置く。name は会話のときに同じ記憶を読むパートナー。 */
+export const workingInstructions = (name: string) => `
 ## 仕事のしかた
 
 あなたはいま Discord の仕事フォーラムの投稿 1 件を受け持つ席にいる。持ち主とのやりとりは受付が投稿に運ぶ。持ち主はこのやりとりを Discord で読む。
@@ -20,7 +20,7 @@ export const WORKING_INSTRUCTIONS = `
 - 秘密情報（トークン、Claude CLI のログイン情報、受付の許可の記録や接続情報）は読まない。
 - 操作が止められたら（auto モードの判定でも、hook でも）、別の書き方や別の道具で回避しない。\`orca orchestration ask\` で、その操作が何のために要るかを短く書いて許可を求める。受付が止められた操作をそのまま質問に書き添える。
 - 答えが「許可された」なら、止められた操作を一字一句同じ内容で 1 回だけ実行できる。もう一度するときは、また許可が要る。
-- 決まったこと（持ち主が決めたこと、方針）と終わったこと（片付いた作業）は、そのつど \`yunomi-memory write --kind decided --summary "<1行>"\` か \`--kind done\` で 1 件 1 行ずつ残す。会話のときの Yukarin も同じ記憶を読む。1 行は 200 字以内で、改行を入れない。秘密情報やトークンは書かない。
+- 決まったこと（持ち主が決めたこと、方針）と終わったこと（片付いた作業）は、そのつど \`yunomi-memory write --kind decided --summary "<1行>"\` か \`--kind done\` で 1 件 1 行ずつ残す。会話のときの ${name} も同じ記憶を読む。1 行は 200 字以内で、改行を入れない。秘密情報やトークンは書かない。
 - 前に決まったことや持ち主のことを確かめたいときは \`yunomi-memory read\` で読む。
 - 完了にする前に、変更はすべて commit して push しておく。席を閉じると作業場所は消える。
 - worker_done の本文の最後の行に、投稿の状態を次のどれか 1 つで書く。この行は投稿には出ず、投稿のタグになる。
@@ -28,6 +28,8 @@ export const WORKING_INSTRUCTIONS = `
   - \`状態: 引き継ぎ\`: この環境ではできず、Mac の agent に任せた（申し送り issue を立てた）
   - \`状態: 完了\`: 頼まれたことが終わった
 `;
+
+export const WORKING_INSTRUCTIONS = workingInstructions("Yukarin");
 
 /**
  * 新しい席の Claude に最初に渡す前置き。人格、仕事のしかた、Mac への引き継ぎの手順、申し送りの雛形の順に並べる。
@@ -37,10 +39,12 @@ export const buildSeatPreamble = (input: {
 	persona: string;
 	handoffPrompt: string;
 	issueTemplate: string;
+	/** 既定は Yukarin。 */
+	partnerName?: string;
 }) =>
 	`${input.persona.trimEnd()}
 
-${WORKING_INSTRUCTIONS.trim()}
+${workingInstructions(input.partnerName ?? "Yukarin").trim()}
 
 ${input.handoffPrompt.trim()}
 

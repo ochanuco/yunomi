@@ -212,6 +212,7 @@ describe("createOrcaCli", () => {
 			name: "seat-p1",
 			title: "件名",
 			spec: "頼みます",
+			agent: "claude",
 		});
 		expect(r).toEqual({
 			ok: true,
@@ -264,6 +265,7 @@ describe("createOrcaCli", () => {
 			name: "seat-p1",
 			title: "件名",
 			spec: "x",
+			agent: "claude",
 		});
 		expect(r).toEqual({
 			ok: false,
@@ -306,6 +308,7 @@ describe("createOrcaCli", () => {
 			path: "/ws/seat-p1",
 			title: "件名",
 			spec: "続き",
+			agent: "claude",
 		});
 		expect(r.ok && r.value.dispatchId).toBe("d9");
 		expect(t.argsOf("orchestration worker-start")[0]).toEqual(
@@ -320,6 +323,64 @@ describe("createOrcaCli", () => {
 		expect(t.order.indexOf("trust /ws/seat-p1")).toBeLessThan(
 			t.order.lastIndexOf("terminal create"),
 		);
+	});
+
+	it("Akarin の席は Claude の信頼を書かず、承認なし・sandbox なしの Codex の端末を作って渡す", async () => {
+		const t = setup({
+			"orchestration worker-start": {
+				stdout: {
+					ok: true,
+					result: {
+						dispatchId: "d1",
+						terminal: "rx",
+						workspace: "r1::/ws/seat-p1",
+					},
+				},
+			},
+		});
+		await t.orca.prepare({ runId: null, reception: null });
+		t.order.length = 0;
+		const r = await t.orca.startSeat({
+			name: "seat-p1",
+			title: "件名",
+			spec: "頼みます",
+			agent: "codex",
+		});
+		expect(r.ok).toBe(true);
+		expect(t.order).not.toContain("trust /ws/seat-p1");
+		const created = t.argsOf("terminal create").at(-1) ?? [];
+		const command = created[created.indexOf("--command") + 1] ?? "";
+		expect(command.startsWith("codex ")).toBe(true);
+		expect(command).toContain("-a never -s danger-full-access");
+		expect(command).toContain(
+			"shell_environment_policy.set.YUNOMI_PARTNER=akarin",
+		);
+	});
+
+	it("止めた Akarin の席は codex resume --last で前の会話のまま起こす", async () => {
+		const t = setup({
+			"orchestration worker-start": {
+				stdout: {
+					ok: true,
+					result: {
+						dispatchId: "d9",
+						terminal: "rx",
+						workspace: "r1::/ws/seat-p1",
+					},
+				},
+			},
+		});
+		await t.orca.prepare({ runId: null, reception: null });
+		await t.orca.resumeSeat({
+			path: "/ws/seat-p1",
+			title: "件名",
+			spec: "続き",
+			agent: "codex",
+		});
+		const created = t.argsOf("terminal create").at(-1) ?? [];
+		const command = created[created.indexOf("--command") + 1] ?? "";
+		expect(command.startsWith("codex resume --last ")).toBe(true);
+		expect(command).toContain("-a never -s danger-full-access");
 	});
 
 	it("届いたメッセージを読み、失敗は OrcaFailed にする", async () => {

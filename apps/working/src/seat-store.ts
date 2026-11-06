@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PARTNER_IDS, type PartnerId } from "@yunomi/core";
 import * as v from "valibot";
 import { WORK_STATUSES, type WorkStatus } from "./work-status.ts";
 
@@ -100,6 +101,7 @@ const fileSchema = v.object({
 	run_id: v.nullable(v.string()),
 	reception: v.nullable(v.string()),
 	seats: v.record(v.string(), seatSchema),
+	partners: v.optional(v.record(v.string(), v.picklist(PARTNER_IDS)), {}),
 });
 
 export type SeatStore = {
@@ -110,6 +112,9 @@ export type SeatStore = {
 	delete: (threadId: string) => Promise<void>;
 	orca: () => { runId: string | null; reception: string | null };
 	setOrca: (o: { runId: string; reception: string }) => Promise<void>;
+	/** 投稿の担当。席を閉じたあとも残し、同じ投稿にまた書かれたら同じ担当が受ける。 */
+	partnerOf: (threadId: string) => PartnerId | null;
+	assign: (threadId: string, partner: PartnerId) => Promise<void>;
 };
 
 export const newSeat = (threadId: string, standup = false): Seat => ({
@@ -145,6 +150,7 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 	await mkdir(dir, { recursive: true });
 	const path = join(dir, "seats.json");
 	const seats = new Map<string, Seat>();
+	const partners = new Map<string, PartnerId>();
 	let orca: { runId: string | null; reception: string | null } = {
 		runId: null,
 		reception: null,
@@ -163,6 +169,9 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 		);
 		if (!parsed.success) throw new Error(`${path} を読めない`);
 		orca = { runId: parsed.output.run_id, reception: parsed.output.reception };
+		for (const [id, p] of Object.entries(parsed.output.partners)) {
+			partners.set(id, p);
+		}
 		for (const [id, s] of Object.entries(parsed.output.seats)) {
 			seats.set(id, {
 				threadId: id,
@@ -234,6 +243,7 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 					},
 				]),
 			),
+			partners: Object.fromEntries(partners),
 		};
 		// 書きかけで落ちても前の内容が残るよう、別名に書いてから置き換える
 		writing = writing.then(async () => {
@@ -260,6 +270,12 @@ export const openSeatStore = async (dir: string): Promise<SeatStore> => {
 		orca: () => orca,
 		setOrca: (o) => {
 			orca = o;
+			return flush();
+		},
+		partnerOf: (id) => partners.get(id) ?? null,
+		assign: (id, partner) => {
+			if (partners.get(id) === partner) return Promise.resolve();
+			partners.set(id, partner);
 			return flush();
 		},
 	};

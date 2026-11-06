@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { openApprovalStore } from "./approval-store.ts";
@@ -9,12 +9,13 @@ import {
 } from "./attachments.ts";
 import { childEnv, createSummarizer } from "./claude-cli.ts";
 import { claudeConfigPathOf, trustWorkspace } from "./claude-trust.ts";
+import { trustCodexProject } from "./codex-trust.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
 import { spawnExec } from "./exec.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
-import { createIntake } from "./intake.ts";
+import { createIntake, type SeatPartner } from "./intake.ts";
 import { createLogger } from "./logger.ts";
 import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
@@ -36,18 +37,23 @@ if (!config.ok) {
 const cfg = config.value;
 const logger = createLogger(cfg.logLevel);
 
-const persona = await promisify(execFile)(cfg.personaScript, {
-	maxBuffer: 10_000_000,
-});
+const personaOf = async (args: string[]) =>
+	(
+		await promisify(execFile)(cfg.personaScript, args, {
+			maxBuffer: 10_000_000,
+		})
+	).stdout;
 await mkdir(cfg.stateDir, { recursive: true });
 await mkdir(cfg.workDir, { recursive: true });
+const handoffPrompt = await readFile(join(cfg.handoffDir, "prompt.md"), "utf8");
+const issueTemplate = await readFile(
+	join(cfg.handoffDir, "issue-template.md"),
+	"utf8",
+);
 const preamble = buildSeatPreamble({
-	persona: persona.stdout,
-	handoffPrompt: await readFile(join(cfg.handoffDir, "prompt.md"), "utf8"),
-	issueTemplate: await readFile(
-		join(cfg.handoffDir, "issue-template.md"),
-		"utf8",
-	),
+	persona: await personaOf([]),
+	handoffPrompt,
+	issueTemplate,
 });
 
 // yunomi-memory はこのファイルから接続情報を読む。Claude CLI の環境変数に service token を載せないため
@@ -77,6 +83,35 @@ if (!me.ok) {
 	logger.error("discord login failed", { error: me.error.type });
 	process.exit(1);
 }
+
+// Akarin の bot に入れなければ Akarin の席を作らず、Akarin 宛ての依頼も Yukarin が受ける
+const akarin: SeatPartner | null = await (async () => {
+	if (!cfg.akarinDiscordToken) {
+		logger.info("akarin seats disabled", { reason: "AKARIN_DISCORD_TOKEN" });
+		return null;
+	}
+	const akarinDiscord = createDiscordRest({
+		token: cfg.akarinDiscordToken,
+		logger,
+	});
+	const akarinMe = await akarinDiscord.me();
+	if (!akarinMe.ok) {
+		logger.error("akarin discord login failed; akarin seats disabled", {
+			error: akarinMe.error.type,
+		});
+		return null;
+	}
+	return {
+		discord: akarinDiscord,
+		botUserId: akarinMe.value.id,
+		preamble: buildSeatPreamble({
+			persona: await personaOf(["akarin"]),
+			handoffPrompt,
+			issueTemplate,
+			partnerName: "Akarin",
+		}),
+	};
+})();
 
 const env = childEnv(process.env, cfg.stateDir);
 const summarize = createSummarizer({
@@ -124,6 +159,13 @@ if (!prepared.ok) {
 }
 await seats.setOrca(prepared.value);
 logger.info("orca prepared", { run_id: prepared.value.runId });
+if (akarin) {
+	const added = await trustCodexProject(
+		join(cfg.codexHome, "config.toml"),
+		await realpath(cfg.seatsRepo),
+	);
+	if (added) logger.info("codex trusted seats repo");
+}
 
 if (!cfg.chimera) {
 	logger.warn("chimera images disabled", {
@@ -151,12 +193,17 @@ const intake = createIntake({
 	ledger,
 	summarize,
 	collectAttachments,
-	remember: async (summary) => {
+	remember: async (summary, partner) => {
 		if (!cfg.memory) return;
 		const out = await spawnExec(
 			cfg.memoryBin,
 			["write", "--kind", "done", "--summary", summary.slice(0, 200)],
-			{ stdin: "", cwd: cfg.workDir, timeoutMs: 30_000, env },
+			{
+				stdin: "",
+				cwd: cfg.workDir,
+				timeoutMs: 30_000,
+				env: { ...env, YUNOMI_PARTNER: partner },
+			},
 		);
 		if (out.code !== 0) {
 			logger.warn("memory write failed", { stderr: out.stderr.slice(0, 300) });
@@ -167,6 +214,7 @@ const intake = createIntake({
 	},
 	preamble,
 	botUserId: me.value.id,
+	akarin,
 	workTextChannelId: cfg.workTextChannelId,
 	workForumChannelId: cfg.workForumChannelId,
 	ownerUserIds: cfg.ownerUserIds,
@@ -232,6 +280,7 @@ server.listen(cfg.port, () => {
 	logger.info("working intake ready", {
 		port: cfg.port,
 		bot_user_id: me.value.id,
+		akarin_bot_user_id: akarin?.botUserId ?? null,
 	});
 });
 

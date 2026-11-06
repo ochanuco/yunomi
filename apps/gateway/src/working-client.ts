@@ -13,6 +13,8 @@ export type WorkingClientOptions = {
 	url: string;
 	/** 受付と共有するトークン。Authorization: Bearer で送る。 */
 	token: string;
+	/** 席の数はこのパートナーの分を読む。受付が partners を返さなければ全体の数にする。 */
+	partnerId?: string;
 	timeoutMs?: number;
 	fetch?: typeof fetch;
 };
@@ -21,12 +23,14 @@ export type WorkingClient = {
 	forward: (
 		envelope: DiscordMessageCreatedEnvelope,
 	) => Promise<Result<void, DomainError>>;
-	/** 作業中の席の数。 */
+	/** この gateway のパートナーの、作業中の席の数。 */
 	seatSummary: () => Promise<Result<{ working: number }, DomainError>>;
 };
 
+const count = v.pipe(v.number(), v.integer(), v.minValue(0));
 const summarySchema = v.object({
-	working: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	working: count,
+	partners: v.optional(v.record(v.string(), count)),
 });
 
 /**
@@ -74,7 +78,10 @@ export const createWorkingClient = (
 				if (!parsed.success) {
 					return err(externalServiceUnavailable({ service: "working" }));
 				}
-				return ok({ working: parsed.output.working });
+				const own = opts.partnerId
+					? parsed.output.partners?.[opts.partnerId]
+					: undefined;
+				return ok({ working: own ?? parsed.output.working });
 			} catch {
 				return err(externalServiceUnavailable({ service: "working" }));
 			}

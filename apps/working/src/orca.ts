@@ -24,6 +24,9 @@ export type SeatMessage = {
 	stopReason: string | null;
 };
 
+/** 席で動かす CLI agent。Yukarin は Claude CLI、Akarin は Codex CLI。 */
+export type SeatAgent = "claude" | "codex";
+
 /** 席の Claude の居場所。Orca は席を 1 つの Dispatch とその端末で表す。 */
 export type SeatHandle = { dispatchId: string; terminal: string; path: string };
 
@@ -49,12 +52,14 @@ export type Orca = {
 		name: string;
 		title: string;
 		spec: string;
+		agent: SeatAgent;
 	}) => Promise<Result<SeatHandle, OrcaError>>;
 	/** 止めた席の Claude を前の会話のまま起こし、spec を渡す。 */
 	resumeSeat: (input: {
 		path: string;
 		title: string;
 		spec: string;
+		agent: SeatAgent;
 	}) => Promise<Result<SeatHandle, OrcaError>>;
 	/** 席に続きを渡す。作業中ならターンの終わりに、終わった席なら続きの Dispatch として届く。 */
 	send: (input: {
@@ -193,6 +198,22 @@ const RECEPTION_TITLE = "受付";
 const START_TIMEOUT_MS = 180_000;
 /** 席の Claude の起動。持ち主が手元で使うのと同じ auto モードにする。 */
 const SEAT_CLAUDE = "claude --permission-mode auto";
+/**
+ * 席の Codex の起動。持ち主の方針（都度許可を求めない、手元と同じものが見える）に合わせ、承認なし・sandbox なしで動かす。
+ * コンテナが外側の囲いで、秘密の読み出しは /etc/codex/requirements.toml の managed hook（src/guard）が止める。
+ * 記憶の道具が Akarin の記憶を読み書きするよう、Codex が動かすコマンドにだけ YUNOMI_PARTNER を渡す。
+ * 先頭を codex のままにするのは、Orca が端末のコマンドから agent を見分けるため。
+ */
+const SEAT_CODEX_FLAGS =
+	"-a never -s danger-full-access -c check_for_update_on_startup=false -c shell_environment_policy.set.YUNOMI_PARTNER=akarin";
+/** 起動と、止めた席を前の会話のまま起こすコマンド。Codex の resume --last は作業ディレクトリ（席の worktree）の最新の会話を選ぶ。 */
+const SEAT_COMMANDS: Record<SeatAgent, { start: string; resume: string }> = {
+	claude: { start: SEAT_CLAUDE, resume: `${SEAT_CLAUDE} --continue` },
+	codex: {
+		start: `codex ${SEAT_CODEX_FLAGS}`,
+		resume: `codex resume --last ${SEAT_CODEX_FLAGS}`,
+	},
+};
 /** 席の Claude を起動してから spec を渡すまで待つ時間。手元では 10 秒でコネクタが読み込まれていた。 */
 const MCP_WARMUP_MS = 15_000;
 
@@ -286,17 +307,21 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 	};
 
 	/**
-	 * 席の Claude を受付が起動する。Orca の agent の起動は Orca の設定の権限（--dangerously-skip-permissions）で動くので、
-	 * 端末を作って Claude を auto モードで起動し、その端末に spec を渡す。
+	 * 席の agent を受付が起動する。Orca の agent の起動は Orca の設定の権限（--dangerously-skip-permissions）で動くので、
+	 * 端末を作って Claude を auto モードで（Codex は SEAT_CODEX_FLAGS で）起動し、その端末に spec を渡す。
 	 */
-	const launchClaude = async (
+	const launchAgent = async (
 		path: string,
 		title: string,
 		spec: string,
+		agent: SeatAgent,
 		command: string,
 	): Promise<Result<SeatHandle, OrcaError>> => {
-		const trusted = await trustSeat(path);
-		if (!trusted.ok) return trusted;
+		// Codex は worktree の元のリポジトリ（席の元）で信頼を引くので、受付が起動時に 1 度だけ登録する
+		if (agent === "claude") {
+			const trusted = await trustSeat(path);
+			if (!trusted.ok) return trusted;
+		}
 		const created = await call(
 			[
 				"terminal",
@@ -447,7 +472,7 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			runId = run.value.runId;
 			return ok({ runId, reception });
 		},
-		startSeat: async ({ name, title, spec }) => {
+		startSeat: async ({ name, title, spec, agent }) => {
 			// 前に閉じそこねた同じ名前の worktree があると作れない
 			const stale = join(opts.seatsDir, name);
 			if (
@@ -485,11 +510,11 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			);
 			if (!created.ok) return created;
 			const path = created.value.worktree.path;
-			return launchClaude(path, title, spec, SEAT_CLAUDE);
+			return launchAgent(path, title, spec, agent, SEAT_COMMANDS[agent].start);
 		},
-		resumeSeat: async ({ path, title, spec }) =>
+		resumeSeat: async ({ path, title, spec, agent }) =>
 			// 前の会話のまま起こす
-			launchClaude(path, title, spec, `${SEAT_CLAUDE} --continue`),
+			launchAgent(path, title, spec, agent, SEAT_COMMANDS[agent].resume),
 		send: async ({ dispatchId, subject, body }) => {
 			const r = await call(
 				[
