@@ -48,6 +48,8 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.tags.outputs.sha }}
     permissions:
       contents: read
       packages: write
@@ -72,3 +74,54 @@ jobs:
           tags: |
             ghcr.io/ochanuco/yunomi-gateway:${{ steps.tags.outputs.sha }}
             ghcr.io/ochanuco/yunomi-gateway:main
+
+  deploy-dev:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    concurrency:
+      group: docker01-yunomi-gateway-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/docker01-app
+        with:
+          service: yunomi-gateway-dev
+          tag: ${{ needs.publish.outputs.tag }}
+          op-service-account-token: ${{ secrets.OP_SA_DEPLOY }}
+
+  # docker01 に出す前に、Environment production-approval で持ち主の承認を待つ。prod とあかりは dev で確かめてから出す
+  approve:
+    needs: [publish, deploy-dev]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-approval
+    steps:
+      - run: echo approved
+
+  deploy:
+    needs: [publish, approve]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [yunomi-gateway, yunomi-gateway-akarin]
+    concurrency:
+      group: docker01-${{ matrix.service }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/docker01-app
+        with:
+          service: ${{ matrix.service }}
+          tag: ${{ needs.publish.outputs.tag }}
+          op-service-account-token: ${{ secrets.OP_SA_DEPLOY }}
