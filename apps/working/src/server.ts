@@ -10,6 +10,7 @@ import {
 	discordMessageCreatedEnvelopeSchema,
 } from "@yunomi/protocol";
 import * as v from "valibot";
+import type { SeatSummary } from "./intake.ts";
 import type { Logger } from "./logger.ts";
 
 export const EVENTS_PATH = "/events";
@@ -20,7 +21,8 @@ export type ServerDeps = {
 	sharedToken: string;
 	accept: (envelope: DiscordMessageCreatedEnvelope) => void;
 	/** 作業中の席の数。gateway が bot のステータスに出す。 */
-	seatSummary: () => { working: number };
+	/** working は全体の数、partners はパートナーごとの数。gateway は自分の分を読む。 */
+	seatSummary: () => SeatSummary;
 	logger: Logger;
 };
 

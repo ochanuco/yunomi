@@ -2,6 +2,7 @@
 import { classifyBash, type GuardContext, PROTECTED_TOUCH } from "./bash.ts";
 import type { Ledger } from "./ledger.ts";
 import {
+	absPath,
 	isUnder,
 	type Operation,
 	operationOf,
@@ -19,6 +20,14 @@ const PATH_TOOLS = new Set([
 	"NotebookEdit",
 ]);
 
+/** Codex の apply_patch の本文から、書き換えるファイルのパスを取り出す。 */
+const patchPaths = (patch: string): string[] =>
+	[
+		...patch.matchAll(
+			/^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/gm,
+		),
+	].map((m) => (m[1] ?? "").trim());
+
 /**
  * hook で止める操作かを調べる。止めるのは秘密情報の読み出しと、秘密情報や許可の記録の場所に触る操作だけ。
  * 許可の記録を席の Claude が書き換えると自分で許可を出せてしまうので、書き込みも止める。
@@ -26,6 +35,16 @@ const PATH_TOOLS = new Set([
  */
 export const classify = (op: Operation, ctx: GuardContext): string | null => {
 	if (op.tool === "Bash") return classifyBash(op.target, ctx);
+	if (op.tool === "apply_patch") {
+		const touched = patchPaths(op.target).map((p) =>
+			absPath(p, ctx.workDir, ctx.home),
+		);
+		return touched.some((path) =>
+			ctx.protectedDirs.some((d) => isUnder(path, d)),
+		)
+			? PROTECTED_TOUCH
+			: null;
+	}
 	if (PATH_TOOLS.has(op.tool)) {
 		const path =
 			op.tool === "Glob" || op.tool === "Grep"

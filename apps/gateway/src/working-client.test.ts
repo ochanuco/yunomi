@@ -76,4 +76,19 @@ describe("createWorkingClient", () => {
 		const r = await bad.seatSummary();
 		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
 	});
+
+	it("パートナーごとの数があれば自分の分を読む", async () => {
+		const client = createWorkingClient({
+			url: "http://w/events",
+			token: "secret",
+			partnerId: "akarin",
+			fetch: vi.fn(async () =>
+				Response.json({ working: 3, partners: { yukarin: 2, akarin: 1 } }),
+			),
+		});
+		expect(await client.seatSummary()).toEqual({
+			ok: true,
+			value: { working: 1 },
+		});
+	});
 });

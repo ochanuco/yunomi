@@ -8,6 +8,7 @@ on:
       - packages/protocol/**
       - packages/core/**
       - partners/yukarin/**
+      - partners/akarin/**
       - pnpm-lock.yaml
       - .dockerignore
       - .github/workflows/working-image.yml
@@ -17,6 +18,7 @@ on:
       - packages/protocol/**
       - packages/core/**
       - partners/yukarin/**
+      - partners/akarin/**
       - pnpm-lock.yaml
       - .dockerignore
       - .github/workflows/working-image.yml

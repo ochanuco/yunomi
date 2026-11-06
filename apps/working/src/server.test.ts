@@ -32,7 +32,7 @@ const start = async () => {
 	const server = createWorkingServer({
 		sharedToken: "secret",
 		accept,
-		seatSummary: () => ({ working: 2 }),
+		seatSummary: () => ({ working: 2, partners: { yukarin: 1, akarin: 1 } }),
 		logger: silentLogger,
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -82,7 +82,10 @@ describe("createWorkingServer", () => {
 			headers: { authorization: "Bearer secret" },
 		});
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ working: 2 });
+		expect(await res.json()).toEqual({
+			working: 2,
+			partners: { yukarin: 1, akarin: 1 },
+		});
 		expect((await fetch(`${base}/seats/summary`)).status).toBe(401);
 		expect((await post(`${base}/seats/summary`, {}, "secret")).status).toBe(
 			405,

@@ -28,6 +28,40 @@ const bash = (command: string) => ({
 	cwd: "/home/worker/work",
 });
 
+describe("classify: Codex の席", () => {
+	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
+	const patch = (path: string) =>
+		`*** Begin Patch\n*** Update File: ${path}\n@@\n-a\n+b\n*** End Patch`;
+	it("apply_patch で Codex のログイン情報や設定の場所を書き換えるのは止める", () => {
+		for (const path of [
+			"/home/worker/.codex/auth.json",
+			"/etc/codex/requirements.toml",
+			"/home/worker/state/guard/grants/p1.json",
+		]) {
+			expect(
+				classify({ tool: "apply_patch", target: patch(path) }, ctx),
+			).not.toBeNull();
+		}
+	});
+	it("作業場所の中を書き換える apply_patch は hook では決めない", () => {
+		expect(
+			classify({ tool: "apply_patch", target: patch("r/src/a.ts") }, ctx),
+		).toBeNull();
+	});
+	it("Codex のログイン情報の読み出しは止める", () => {
+		expect(
+			classify({ tool: "Bash", target: "cat ~/.codex/auth.json" }, ctx),
+		).not.toBeNull();
+	});
+	it("Codex の hook の入力の cwd から席の投稿を引く", () => {
+		const run = guardRunFromEnv(
+			{ HOME: "/home/worker", [GUARD_ENV.seatsDir]: "/seats" },
+			"/seats/seat-p1/repo",
+		);
+		expect(run.threadId).toBe("p1");
+	});
+});
+
 describe("classify: Bash 以外の道具", () => {
 	const { ctx } = guardRunFromEnv({ HOME: "/home/worker" });
 	it("秘密に触らない道具は hook では決めない", () => {

@@ -27,6 +27,7 @@ const envSchema = v.pipe(
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
 		WORKING_URL: v.optional(v.pipe(v.string(), v.url())),
 		WORKING_TOKEN: v.optional(nonEmpty),
+		WORKING_FORWARD: v.optional(v.picklist(["true", "false"])),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -69,6 +70,11 @@ export type GatewayConfig = {
 	workCategoryIds: ReadonlySet<string>;
 	/** Working 受付の URL と共有トークン。未設定なら仕事カテゴリの発言は捨てる。 */
 	working: { url: string; token: string } | null;
+	/**
+	 * 仕事カテゴリの発言を Working へ渡すか。false でも捨てるだけで Talking には送らず、席の数は読む。
+	 * Akarin 宛ての依頼も Yukarin の gateway が渡すので、Akarin の gateway は false にして二重に届けない。
+	 */
+	workingForward: boolean;
 	logLevel: LogLevel;
 };
 
@@ -121,6 +127,7 @@ export const loadConfig = (
 			e.WORKING_URL && e.WORKING_TOKEN
 				? { url: e.WORKING_URL, token: e.WORKING_TOKEN }
 				: null,
+		workingForward: (e.WORKING_FORWARD ?? "true") === "true",
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };

@@ -47,6 +47,16 @@ describe("runMemoryCli", () => {
 		});
 	});
 
+	it("YUNOMI_PARTNER があればそのパートナーの記憶を読む", async () => {
+		const env = { ...setup(), YUNOMI_PARTNER: "akarin" };
+		const f = respond(200, { facts: [], episodes: [], open_loops: [] });
+		await runMemoryCli(["read"], env, f as typeof fetch);
+		const [url] = f.mock.calls[0] ?? [];
+		expect(String(url)).toBe(
+			"https://worker.example/v1/partners/akarin/working/memory?discord_user_id=owner-1",
+		);
+	});
+
 	it("write は 1 行を POST する", async () => {
 		const env = setup();
 		const f = respond(201, { id: "n1" });

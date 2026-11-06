@@ -59,9 +59,15 @@ const yunomi = new YunomiClient({
 	logger,
 });
 
-const working = cfg.working ? createWorkingClient(cfg.working) : null;
+const working = cfg.working
+	? createWorkingClient({ ...cfg.working, partnerId: cfg.partnerId })
+	: null;
 if (cfg.workCategoryIds.size > 0 && !working) {
 	logger.warn("WORK_CATEGORY_IDS is set but WORKING_URL is not; dropping");
+} else if (cfg.workCategoryIds.size > 0 && !cfg.workingForward) {
+	logger.info("work category messages dropped", {
+		reason: "WORKING_FORWARD=false",
+	});
 }
 
 const ochoko = cfg.ochoko
@@ -176,7 +182,7 @@ discord.on(Events.MessageCreate, (message) => {
 		voice,
 		avatars,
 		workCategoryIds: cfg.workCategoryIds,
-		working,
+		working: cfg.workingForward ? working : null,
 		logger,
 	});
 	void handle(toMessageLike(message), {

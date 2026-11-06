@@ -1,4 +1,4 @@
-# Working のコンテナ。orca serve と Claude CLI と Working 受付を同じコンテナで動かす。
+# Working のコンテナ。orca serve と Claude CLI・Codex CLI と Working 受付を同じコンテナで動かす。
 # ビルドコンテキストはリポジトリルート: docker build -f apps/working/Dockerfile .
 FROM node:24.22.1-slim AS build
 ENV PNPM_HOME=/pnpm
@@ -18,6 +18,9 @@ ARG ORCA_VERSION=1.4.248
 ARG MISE_VERSION=2026.11.2
 ARG MISE_SHA256_AMD64=62cad463c1413f05398ca339168a8f655120b6f0b0b8adce3bc6758bafaf0602
 ARG MISE_SHA256_ARM64=18bf3ac02033c2a50b772b411e35528cd1888386b4316895fcae626db6ad96f3
+ARG CODEX_VERSION=0.167.0
+ARG CODEX_SHA256_AMD64=9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a
+ARG CODEX_SHA256_ARM64=843489acb4d4b1079745c36b03c5963b887b83155af208fd53584e33ee8eb281
 # build-essential・python3・pkg-config は席で clone したリポジトリの依存のビルド（node-gyp、Python の C 拡張）に使う。
 # libgl1・libglib2.0-0 は opencv-python を import するのに要る。
 RUN apt-get update \
@@ -56,12 +59,27 @@ RUN arch="$(dpkg --print-architecture)" \
 	&& apt-get install -y --no-install-recommends /tmp/orca.deb \
 	&& rm -rf /var/lib/apt/lists/* /tmp/orca.deb
 
+# Akarin の席で動かす Codex CLI。sandbox は使わない（danger-full-access）ので bwrap は入れない。
+RUN arch="$(dpkg --print-architecture)" \
+	&& case "$arch" in \
+		amd64) triple=x86_64-unknown-linux-musl; sha="$CODEX_SHA256_AMD64" ;; \
+		arm64) triple=aarch64-unknown-linux-musl; sha="$CODEX_SHA256_ARM64" ;; \
+		*) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+	esac \
+	&& curl -fsSL -o /tmp/codex.tar.gz \
+		"https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${triple}.tar.gz" \
+	&& echo "$sha  /tmp/codex.tar.gz" | sha256sum -c - \
+	&& tar -xzf /tmp/codex.tar.gz -C /tmp \
+	&& install -m 755 "/tmp/codex-${triple}" /usr/local/bin/codex \
+	&& rm -f /tmp/codex.tar.gz "/tmp/codex-${triple}"
+
 # 席の Claude の手順書（orchestration の preamble）はコマンドを orca と書く。
 RUN ln -s /usr/bin/orca-ide /usr/local/bin/orca
 
 # 取り消せない操作を止める PreToolUse hook。managed settings も hook も root の持ち物にし、
 # Claude CLI（worker で動く）が書き換えて止めるのをやめさせられないようにする。
 COPY apps/working/guard/managed-settings.json /etc/claude-code/managed-settings.json
+COPY apps/working/guard/codex-requirements.toml /etc/codex/requirements.toml
 COPY apps/working/src/guard/hook.ts apps/working/src/guard/decide.ts \
 	apps/working/src/guard/env.ts apps/working/src/guard/ledger.ts \
 	apps/working/src/guard/bash.ts apps/working/src/guard/shell.ts \
@@ -78,7 +96,7 @@ RUN useradd -m -s /bin/bash worker
 USER worker
 WORKDIR /home/worker
 # named volume は空のときマウント先の所有者を引き継ぐ。先に worker 所有で作っておかないと root 所有になり書けない。
-RUN mkdir -p /home/worker/.claude /home/worker/.config /home/worker/state /home/worker/work
+RUN mkdir -p /home/worker/.claude /home/worker/.codex /home/worker/.config /home/worker/state /home/worker/work
 # Orca は席の worktree を ~/orca/workspaces に作る。作り直しても席が残るよう work の volume に置く。
 RUN ln -s /home/worker/work/orca /home/worker/orca
 
@@ -87,6 +105,8 @@ RUN git config --global credential.helper '!gh auth git-credential'
 ENV PATH=/home/worker/.local/bin:$PATH
 # .claude.json（ログインの付随情報）も volume に入れるため、設定の置き場所を 1 か所にまとめる。
 ENV CLAUDE_CONFIG_DIR=/home/worker/.claude
+# Codex CLI のログイン情報（auth.json）・設定・会話を volume に置く。
+ENV CODEX_HOME=/home/worker/.codex
 # mise が入れた道具とダウンロードのキャッシュを work の volume に置き、コンテナを作り直しても入れ直さない。
 # pnpm の store と uv のキャッシュも同じ volume に置くと、席の node_modules と .venv に hardlink で入る。
 ENV MISE_DATA_DIR=/home/worker/work/.mise \
@@ -98,8 +118,10 @@ ENV MISE_DATA_DIR=/home/worker/work/.mise \
 	npm_config_store_dir=/home/worker/work/.pnpm-store
 
 # 人格の元ファイルをそのまま連結して席の Claude に渡す。build context はリポジトリの root。
-COPY --chown=worker:worker partners/yukarin/profile.yaml partners/yukarin/examples.yaml /home/worker/persona/
-COPY --chown=worker:worker partners/yukarin/identity/ /home/worker/persona/identity/
+COPY --chown=worker:worker partners/yukarin/profile.yaml partners/yukarin/examples.yaml /home/worker/persona/yukarin/
+COPY --chown=worker:worker partners/yukarin/identity/ /home/worker/persona/yukarin/identity/
+COPY --chown=worker:worker partners/akarin/profile.yaml partners/akarin/examples.yaml /home/worker/persona/akarin/
+COPY --chown=worker:worker partners/akarin/identity/ /home/worker/persona/akarin/identity/
 COPY --chown=worker:worker apps/working/persona.sh /home/worker/bin/persona.sh
 # Mac への引き継ぎの手順と申し送りの雛形。受付が席の Claude に渡す前置きに足す。
 COPY apps/working/handoff/prompt.md apps/working/handoff/issue-template.md /home/worker/handoff/

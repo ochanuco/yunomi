@@ -27,6 +27,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。未設定ならすべての発言を Worker に送る |
 | `WORKING_URL` | いいえ | Working 受付の URL。仕事カテゴリの発言を POST する。未設定なら仕事カテゴリの発言は捨てる（起動時に警告ログを 1 回） |
 | `WORKING_TOKEN` | `WORKING_URL` と組 | Working 受付と共有するトークン。`Authorization: Bearer` で送る |
+| `WORKING_FORWARD` | いいえ | `false` で仕事カテゴリの発言を Working へ渡さずに捨てる（席の数は読む）。既定は `true` |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
@@ -40,7 +41,8 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `DISCORD_TOKEN` | Akarin の bot の token（Yukarin とは別の bot） |
 | `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の gateway と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
 | `WORK_CATEGORY_IDS` | Yukarin の gateway と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
-| `WORKING_URL` / `WORKING_TOKEN` | 渡さない。仕事カテゴリの発言を Working へ渡すのは Yukarin の gateway だけで、Akarin の gateway はその発言を捨てる（起動時に警告ログが 1 回出る） |
+| `WORKING_URL` / `WORKING_TOKEN` | Yukarin の gateway と同じ値。bot のステータスに Akarin の作業中の席の数を出す |
+| `WORKING_FORWARD` | `false`。仕事カテゴリの発言を Working へ渡すのは Yukarin の gateway だけで（Akarin 宛ての依頼も含む）、Akarin の gateway はその発言を捨てる。二重に届けないため |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` / `KUKICHA_URL` / `KUKICHA_TOKEN` / `OWNER_DISCORD_USER_ID` | Akarin はまだ声を持たないので渡さない |
 | `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
 
@@ -64,7 +66,7 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。VC のテキストチャット（GuildVoice）は通常のチャンネルと同じに中継し、作者が入っている VC を `author_voice_channel_id` に載せる（guild の voice state キャッシュから読む）。
 - 発言のチャンネルの親カテゴリ（スレッドなら親チャンネルのカテゴリ）が `WORK_CATEGORY_IDS` に含まれるときは、Worker に送らず、Worker へ送るのと同じ envelope を `WORKING_URL` に `Authorization: Bearer <WORKING_TOKEN>` 付きで POST する。Talking は返事をしない。転送は 1 回だけ試し（タイムアウト 10 秒）、失敗は warn ログを残して捨てる。それ以外のカテゴリとカテゴリ外の発言は今までどおり Worker に送る。
 - typing は出さない。Worker が REST で出す。
-- `WORKING_URL` があれば、同じ受付の `/seats/summary` を 1 分おきに読み、作業中の席があれば bot のステータスに「作業中 N件」を出す。0 件や読めないときは消す。
+- `WORKING_URL` があれば、同じ受付の `/seats/summary` を 1 分おきに読み、自分のパートナー（`PARTNER_ID`）の作業中の席があれば bot のステータスに「作業中 N件」を出す。0 件や読めないときは消す。受付がパートナーごとの数を返さなければ、全体の数を出す。
 - `ignore` は何もしない。`ack`（Worker が送信まで済ませた）は、`voice` があるときだけ VC を操作する。
 - `reply` と `ack` に `avatar: { emotion }` があれば、返事のテキストを送り終えたあとに、その感情の表情画像からランダムに 1 枚を同じチャンネルへ添付で貼る。分割された返事でも 1 回だけ。`reply` を途中までしか送れなかったときは貼らない。画像の無い感情は何もしない。
 - Worker が `DISCORD_SEND_FROM_WORKER=1` と `DISCORD_BOT_TOKEN` の両方を持つまで、Worker は `reply` を返す。互換のため、`reply` は `allowedMentions: { parse: [], repliedUser: false }` で送り、`@everyone` やロール宛の ping を許さない。

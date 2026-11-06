@@ -12,6 +12,8 @@ const positiveInt = v.pipe(
 
 const envSchema = v.object({
 	DISCORD_TOKEN: nonEmpty,
+	AKARIN_DISCORD_TOKEN: v.optional(nonEmpty),
+	CODEX_HOME: v.optional(nonEmpty),
 	WORKING_TOKEN: nonEmpty,
 	WORK_TEXT_CHANNEL_ID: nonEmpty,
 	WORK_FORUM_CHANNEL_ID: nonEmpty,
@@ -46,6 +48,10 @@ const envSchema = v.object({
 
 export type WorkingConfig = {
 	discordToken: string;
+	/** Akarin の bot トークン。無ければ Akarin の席を作らず、すべて Yukarin が受ける。 */
+	akarinDiscordToken: string | null;
+	/** Codex CLI の設定とログイン情報の置き場所。席の元のリポジトリの信頼をここの config.toml に書く。 */
+	codexHome: string;
 	/** gateway と共有するトークン。Authorization: Bearer で受ける。 */
 	sharedToken: string;
 	workTextChannelId: string;
@@ -117,6 +123,8 @@ export const loadConfig = (
 		.map(Number);
 	return ok({
 		discordToken: e.DISCORD_TOKEN,
+		akarinDiscordToken: e.AKARIN_DISCORD_TOKEN ?? null,
+		codexHome: e.CODEX_HOME ?? `${home}/.codex`,
 		sharedToken: e.WORKING_TOKEN,
 		workTextChannelId: e.WORK_TEXT_CHANNEL_ID,
 		workForumChannelId: e.WORK_FORUM_CHANNEL_ID,

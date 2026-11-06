@@ -16,6 +16,8 @@ describe("loadConfig", () => {
 			ok: true,
 			value: {
 				discordToken: "t",
+				akarinDiscordToken: null,
+				codexHome: "/home/w/.codex",
 				sharedToken: "shared",
 				workTextChannelId: "100",
 				workForumChannelId: "200",
@@ -44,6 +46,11 @@ describe("loadConfig", () => {
 				},
 			},
 		});
+	});
+
+	it("Akarin の bot トークンがあれば読む", () => {
+		const r = loadConfig({ ...base, AKARIN_DISCORD_TOKEN: "ak" });
+		expect(r.ok && r.value.akarinDiscordToken).toBe("ak");
 	});
 
 	it("数値の設定を読み、空文字は未設定として扱う", () => {
