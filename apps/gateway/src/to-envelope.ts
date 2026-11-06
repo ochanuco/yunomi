@@ -17,8 +17,8 @@ export type MessageLike = {
 	createdAt: Date;
 	author: { id: string; bot: boolean; displayName: string };
 	mentionedUserIds: readonly string[];
-	/** Discord の補完は bot 本人ではなく bot の管理ロールを選ぶことがあり、それも partner 宛てとみなす。 */
-	mentionsBotRole: boolean;
+	/** Discord の補完は bot 本人ではなく bot の管理ロールを選ぶことがあり、それもその bot 宛てとみなす。 */
+	roleMentionedBotUserIds: readonly string[];
 	replyToMessageId: string | null;
 	/** チャンネルが属するカテゴリ。スレッドなら親チャンネルのカテゴリ。カテゴリ外なら null。 */
 	categoryId: string | null;
@@ -65,7 +65,7 @@ export const toEnvelope = (
 			mentions: [
 				...new Set([
 					...message.mentionedUserIds,
-					...(message.mentionsBotRole ? [botUserId] : []),
+					...message.roleMentionedBotUserIds,
 				]),
 			],
 			author_voice_channel_id: message.authorVoiceChannelId,

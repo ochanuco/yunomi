@@ -2,10 +2,10 @@ import type { Message, VoiceState } from "discord.js";
 import type { MessageLike } from "./to-envelope.ts";
 import type { VoiceStateLike } from "./voice-state.ts";
 
-const mentionsBotRole = (m: Message): boolean => {
-	const botRoleId = m.guild?.members.me?.roles.botRole?.id;
-	return botRoleId !== undefined && m.mentions.roles.has(botRoleId);
-};
+const roleMentionedBotUserIds = (m: Message): string[] =>
+	[...m.mentions.roles.values()]
+		.map((role) => role.tags?.botId)
+		.filter((id) => id != null);
 
 const categoryIdOf = (m: Message): string | null => {
 	const channel = m.channel;
@@ -34,7 +34,7 @@ export const toMessageLike = (m: Message): MessageLike => ({
 		displayName: m.member?.displayName ?? m.author.displayName,
 	},
 	mentionedUserIds: [...m.mentions.users.keys()],
-	mentionsBotRole: mentionsBotRole(m),
+	roleMentionedBotUserIds: roleMentionedBotUserIds(m),
 	replyToMessageId: m.reference?.messageId ?? null,
 	categoryId: categoryIdOf(m),
 	authorVoiceChannelId: m.member?.voice.channelId ?? null,
