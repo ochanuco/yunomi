@@ -95,7 +95,11 @@ gateway が仕事カテゴリの発言と、bot のメッセージに付けた�
 - 席の Claude が動いている間（席の状態が `working`）、投稿に入力中の表示を約 8 秒おきに送る。止まったら送らない。
 - 持ち主の依頼メッセージ（仕事チャンネルの依頼、投稿の最初のメッセージ、投稿への返事）に bot のリアクションを付ける。受付 👀、作業中 ⏳、完了 ✅、決めてほしい・引き継ぎ ❓。状態が変わると前の絵文字を外して付け替え、持ち主が新しく書くとそのメッセージに移す。
 - 席を作るとき投稿に bot のメッセージを 1 件置き、状態の欄にする。状態、作業中なら経過時間（いまの状態になってから）といまやっていること（席の最後の途中経過）を書く。内容が変わったときだけ書き換え、経過時間だけの変化は最短 5 分おき。
-- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": <合計>, "partners": { "yukarin": N, "akarin": M } }` として返す。朝会の席は数えない。gateway が自分のパートナーの数を bot のステータスに出す。
+- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": <合計>, "partners": { "yukarin": N, "akarin": M }, "usage": { ... } }` として返す。朝会の席は数えない。gateway が自分のパートナーの分を bot のステータスに出す。
+- `usage` はパートナーの席で動く CLI のサブスクリプションの使用率で、Yukarin は Claude、Akarin は Codex。`{ "fiveHour": { "usedPercent": 32, "resetsAt": <UNIX ミリ秒 | null> }, "weekly": { ... } }` の形で、読めていないパートナーは載せない。
+  - 5 分おきに読む。Claude は `~/.claude/.credentials.json`（`CLAUDE_CONFIG_DIR` があればその中）のトークンで `https://api.anthropic.com/api/oauth/usage` を読む。Claude Code の `/usage` と同じ非公開の API。トークンの期限が切れていれば読まず、自分では更新しない（席の Claude が動けば CLI が更新する）。
+  - Codex は `codex app-server` を起こして `account/rateLimits/read` を呼ぶ。primary が 5 時間枠、secondary が週枠。Akarin の席が無効なら読まない。
+  - 一度読めなくても最後の値を 15 分残し、それより古くなったら載せない。
 
 ### 席の Claude に渡すもの
 
