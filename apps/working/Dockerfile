@@ -1,6 +1,6 @@
 # Working のコンテナ。orca serve と Claude CLI・Codex CLI と Working 受付を同じコンテナで動かす。
 # ビルドコンテキストはリポジトリルート: docker build -f apps/working/Dockerfile .
-FROM node:24.22.1-slim AS build
+FROM node:26.12.1-slim AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
@@ -10,10 +10,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @yunomi/working... \
  && pnpm --filter @yunomi/working deploy --prod --legacy /out
 
-FROM node:24.22.1-slim AS node
+FROM node:26.12.1-slim AS node
 
 # TAKT の claude-sdk provider の SDK。~/.takt の下に入り、イメージに焼き込む。版は mise/config.toml の takt と揃える。
-FROM node:24.22.1-slim AS takt
+FROM node:26.12.1-slim AS takt
 ENV TAKT_CONFIG_DIR=/home/worker/.takt
 RUN npx -y takt@0.74.0 install claude-sdk
 
