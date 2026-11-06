@@ -83,7 +83,7 @@ const setup = async (
 	const remembered: string[] = [];
 	const rememberedBy: PartnerId[] = [];
 	const writes = { yukarin: [] as string[], akarin: [] as string[] };
-	const standup: { text: string; blocked: number }[] = [];
+	const standup: { text: string; blocked: number; kind: string }[] = [];
 	const seats = await openSeatStore(stateDir);
 	const ledger = createLedger(guardDirOf(stateDir));
 	let g = 0;
@@ -110,8 +110,8 @@ const setup = async (
 			remembered.push(s);
 			rememberedBy.push(partner);
 		},
-		standupDone: async (text, blocked) => {
-			standup.push({ text, blocked: blocked.length });
+		standupDone: async (text, blocked, kind) => {
+			standup.push({ text, blocked: blocked.length, kind });
 		},
 		preamble: PREAMBLE,
 		botUserId: BOT,
@@ -601,7 +601,7 @@ describe("朝会の席", () => {
 		expect(s.o.opsOf("reply")).toEqual([
 			{
 				messageId: q.id,
-				body: expect.stringContaining("朝会では持ち主に聞けない"),
+				body: expect.stringContaining("朝会と見回りでは持ち主に聞けない"),
 			},
 		]);
 
@@ -616,9 +616,25 @@ describe("朝会の席", () => {
 				body: "```json\n{}\n```",
 			}),
 		);
-		expect(s.standup).toEqual([{ text: "```json\n{}\n```", blocked: 1 }]);
+		expect(s.standup).toEqual([
+			{ text: "```json\n{}\n```", blocked: 1, kind: "standup" },
+		]);
 		expect(s.seats.get(id)).toBeNull();
 		expect(s.o.opsOf("removeWorktree")).toEqual([`/seats/seat-${id}`]);
+	});
+
+	it("見回りの席の報告は見回りとして返す", async () => {
+		const s = await setup();
+		const id = await s.intake.startStandup("見回りの spec", "patrol");
+		expect(id.startsWith("patrol-")).toBe(true);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: s.seats.get(id)?.dispatchId ?? null,
+				body: "x",
+			}),
+		);
+		expect(s.standup).toEqual([{ text: "x", blocked: 0, kind: "patrol" }]);
 	});
 });
 

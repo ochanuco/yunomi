@@ -338,6 +338,9 @@ importers:
       '@yunomi/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@yunomi/partner-yukarin':
+        specifier: workspace:*
+        version: link:../../partners/yukarin
       '@yunomi/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { openApprovalStore } from "./approval-store.ts";
 import {
 	createAttachmentCollector,
@@ -20,13 +21,14 @@ import { createLogger } from "./logger.ts";
 import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
 import { createOrcaCli } from "./orca.ts";
+import { openPatrolStore } from "./patrol.ts";
 import { buildSeatPreamble } from "./prompts.ts";
 import { startRepoMapSync } from "./repo-map/sync.ts";
 import { openSeatStore } from "./seat-store.ts";
 import { createWorkingServer } from "./server.ts";
 import { finishStandup, startStandup } from "./standup.ts";
 import { gatherStandupMaterials } from "./standup-materials.ts";
-import { startStandupTimer } from "./standup-timer.ts";
+import { parseQuietHours, startStandupTimer } from "./standup-timer.ts";
 
 const config = loadConfig(process.env);
 if (!config.ok) {
@@ -136,6 +138,7 @@ const seats = await openSeatStore(cfg.stateDir);
 const approvals = await openApprovalStore(cfg.stateDir);
 const ledger = createLedger(guardDirOf(cfg.stateDir));
 const macState = openMacStateStore(cfg.stateDir);
+const patrolStore = openPatrolStore(cfg.stateDir);
 const standupDeps = {
 	discord,
 	approvals,
@@ -209,8 +212,8 @@ const intake = createIntake({
 			logger.warn("memory write failed", { stderr: out.stderr.slice(0, 300) });
 		}
 	},
-	standupDone: async (text, blocked) => {
-		await finishStandup(standupDeps, text, blocked);
+	standupDone: async (text, blocked, kind) => {
+		await finishStandup(standupDeps, text, blocked, kind);
 	},
 	preamble,
 	botUserId: me.value.id,
@@ -296,10 +299,17 @@ if (cfg.macState && macStateServer) {
 
 const standupTimer = cfg.standup.enabled
 	? startStandupTimer({
-			at: cfg.standup.at,
-			run: async () => {
+			plan: {
+				standupAt: cfg.standup.at,
+				intervalMs: cfg.standup.heartbeatIntervalMs,
+				// 朝会と見回りは Yukarin の席で回すので、Yukarin が寝ている時間帯は見回らない
+				quiet: parseQuietHours(yukarinProfile.living_rhythm.typical_sleep),
+			},
+			run: async (kind) => {
 				await startStandup({
 					deps: standupDeps,
+					kind,
+					store: patrolStore,
 					gather: () =>
 						gatherStandupMaterials({
 							exec: spawnExec,

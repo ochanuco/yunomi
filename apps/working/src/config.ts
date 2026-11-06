@@ -44,6 +44,8 @@ const envSchema = v.object({
 		v.pipe(v.string(), v.regex(/^([01]\d|2[0-3]):[0-5]\d$/)),
 	),
 	STANDUP_GITHUB_OWNER: v.optional(nonEmpty),
+	HEARTBEAT_ENABLED: v.optional(v.picklist(["true", "false"])),
+	HEARTBEAT_INTERVAL_MINUTES: v.optional(v.pipe(positiveInt, v.minValue(30))),
 });
 
 export type WorkingConfig = {
@@ -90,6 +92,8 @@ export type WorkingConfig = {
 		enabled: boolean;
 		at: { hour: number; minute: number };
 		githubOwner: string;
+		/** 朝会の合間の見回りの間隔。null なら見回らず、朝会だけを回す。 */
+		heartbeatIntervalMs: number | null;
 	};
 };
 
@@ -169,6 +173,10 @@ export const loadConfig = (
 			enabled: (e.STANDUP_ENABLED ?? "true") === "true",
 			at: { hour, minute },
 			githubOwner: e.STANDUP_GITHUB_OWNER ?? "ochanuco",
+			heartbeatIntervalMs:
+				(e.HEARTBEAT_ENABLED ?? "true") === "true"
+					? (e.HEARTBEAT_INTERVAL_MINUTES ?? 120) * 60_000
+					: null,
 		},
 	});
 };
