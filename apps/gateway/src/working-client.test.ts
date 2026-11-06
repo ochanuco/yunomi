@@ -62,7 +62,7 @@ describe("createWorkingClient", () => {
 		});
 		expect(await client.seatSummary()).toEqual({
 			ok: true,
-			value: { working: 3 },
+			value: { working: 3, usage: null },
 		});
 		const [url, init] = fetch.mock.calls[0] ?? [];
 		expect(String(url)).toBe("http://w:8080/seats/summary");
@@ -77,18 +77,32 @@ describe("createWorkingClient", () => {
 		expect(!r.ok && r.error.type).toBe("ExternalServiceUnavailable");
 	});
 
-	it("パートナーごとの数があれば自分の分を読む", async () => {
+	it("パートナーごとの数と使用率があれば自分の分を読む", async () => {
+		const codex = {
+			fiveHour: { usedPercent: 58, resetsAt: 1 },
+			weekly: { usedPercent: 71, resetsAt: null },
+		};
 		const client = createWorkingClient({
 			url: "http://w/events",
 			token: "secret",
 			partnerId: "akarin",
 			fetch: vi.fn(async () =>
-				Response.json({ working: 3, partners: { yukarin: 2, akarin: 1 } }),
+				Response.json({
+					working: 3,
+					partners: { yukarin: 2, akarin: 1 },
+					usage: {
+						yukarin: {
+							fiveHour: { usedPercent: 1, resetsAt: 1 },
+							weekly: { usedPercent: 2, resetsAt: 2 },
+						},
+						akarin: codex,
+					},
+				}),
 			),
 		});
 		expect(await client.seatSummary()).toEqual({
 			ok: true,
-			value: { working: 1 },
+			value: { working: 1, usage: codex },
 		});
 	});
 });

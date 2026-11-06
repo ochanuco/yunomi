@@ -27,7 +27,7 @@ import {
 } from "./github-events.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
-import { createIntake, type SeatPartner } from "./intake.ts";
+import { agentOf, createIntake, type SeatPartner } from "./intake.ts";
 import { createLogger } from "./logger.ts";
 import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
@@ -40,6 +40,13 @@ import { createWorkingServer } from "./server.ts";
 import { finishStandup, startStandup } from "./standup.ts";
 import { gatherStandupMaterials } from "./standup-materials.ts";
 import { parseQuietHours, startStandupTimer } from "./standup-timer.ts";
+import {
+	claudeCredentialsPathOf,
+	createClaudeUsageReader,
+	createCodexUsageReader,
+	startUsagePolling,
+	usageByPartner,
+} from "./usage.ts";
 
 const config = loadConfig(process.env);
 if (!config.ok) {
@@ -280,6 +287,23 @@ const repoMapSync = startRepoMapSync({
 	intervalMs: REPO_MAP_SYNC_MS,
 });
 
+const usage = startUsagePolling({
+	readers: {
+		claude: createClaudeUsageReader({
+			credentialsPath: claudeCredentialsPathOf(process.env),
+		}),
+		...(akarin
+			? {
+					codex: createCodexUsageReader({
+						bin: "codex",
+						env: { ...env, CODEX_HOME: cfg.codexHome },
+					}),
+				}
+			: {}),
+	},
+	logger,
+});
+
 const server = createWorkingServer({
 	sharedToken: cfg.sharedToken,
 	accept: (envelope) => {
@@ -298,7 +322,10 @@ const server = createWorkingServer({
 			});
 		});
 	},
-	seatSummary: intake.summary,
+	seatSummary: () => ({
+		...intake.summary(),
+		usage: usageByPartner(usage.current(), agentOf),
+	}),
 	logger,
 });
 server.listen(cfg.port, () => {
@@ -444,6 +471,7 @@ const shutdown = (signal: string) => {
 	stopped = true;
 	clearInterval(sleepTimer);
 	repoMapSync.stop();
+	usage.stop();
 	standupTimer?.stop();
 	activityLogTimer?.stop();
 	githubEventPoller?.stop();
