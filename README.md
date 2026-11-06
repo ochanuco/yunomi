@@ -1,7 +1,11 @@
 # yunomi
 
 湯呑み（You know me）。記憶と関係性を持ち続ける AI パートナーの実行基盤です。
-現在のパートナーは結月ゆかり（Yukarin）です。
+現在のパートナーは結月ゆかり（Yukarin）と紲星あかり（Akarin）です。
+
+yunomi が受け持つのは、パートナーの記憶と人格、そして会話（Talking。テキスト、VC、声）です。
+仕事（Working。仕事フォーラムの依頼を Orca の席で作業する）は [ochanuco/mizuya](https://github.com/ochanuco/mizuya) にあります。
+Working は yunomi の記憶を記憶の口（[docs/working-memory-api.md](docs/working-memory-api.md)）で共有し、人格の元ファイル（`partners/`）を image に取り込んで使います。
 
 ## 考え方
 
@@ -52,7 +56,7 @@
 | パス | 役割 |
 |---|---|
 | `apps/worker` | Cloudflare Worker。パートナーごとの Durable Object、記憶、夜間バッチ、Admin API |
-| `apps/gateway` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る |
+| `apps/gateway` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る。仕事カテゴリの発言とボタンは mizuya の Working へ渡す |
 | `apps/admin` | Admin Web（Vite + plain DOM）。Worker に埋め込んで `/admin/` で配信する |
 | `apps/cli` | `ykm`。Admin API を読む CLI（状態、記憶、KPI、監査ログ、スナップショット） |
 | `packages/core` | ID、`Result` とドメインエラー、Envelope、EventBus、ドメイン型 |
@@ -60,7 +64,7 @@
 | `packages/conversation` | プロンプト組み立て、発話判定プロンプト、応答スキーマ |
 | `packages/llm` | LLM プロバイダの抽象と Claude 実装 |
 | `packages/admin-contract` | Admin API の応答型と Valibot スキーマ |
-| `partners/yukarin` | ゆかりの人格本文とプロファイル |
+| `partners/yukarin`、`partners/akarin` | 人格本文とプロファイル。mizuya の Working も image の build で取り込む |
 | `evals` | persona eval。Tier 1 は決定的なテスト、Tier 2 は実際の Claude API を使う統計的な評価 |
 
 ## 開発
@@ -92,6 +96,7 @@ pnpm --filter @yunomi/cli ykm status
 - [apps/admin/README.md](apps/admin/README.md): Admin Web
 - [evals/README.md](evals/README.md): eval の書き方と実行
 - [partners/yukarin/README.md](partners/yukarin/README.md): ゆかりのプロファイル
+- [docs/working-memory-api.md](docs/working-memory-api.md): 外部のクライアント（mizuya の Working）向けの記憶の口
 
 ## 設計
 

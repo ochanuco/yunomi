@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'git %s\n' "$*" >>"$STATE/calls"

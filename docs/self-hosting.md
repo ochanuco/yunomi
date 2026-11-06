@@ -60,7 +60,7 @@ Worker は、`/health` 以外へのリクエストに `Cf-Access-Jwt-Assertion` 
 4. service token を作る
    - Gateway 用
    - `ykm`（CLI）用
-   - Working 用（仕事の Yukarin が記憶を読み書きする）
+   - Working 用（mizuya の Working が記憶を読み書きする。`docs/working-memory-api.md`）
 
 JWT にメールアドレスがあれば `OWNER_EMAILS` と照合し、owner として扱います。
 service token の JWT は `common_name`（service token の Client ID）を `ACCESS_CALLERS` で `gateway`・`ykm`・`working` のいずれかに引きます。
@@ -164,7 +164,7 @@ docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # リポジトリ�
 
 bot をメンションして、返事が来れば動いています。
 
-Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、`apps/working/README.md` の「配備」に従い、Gateway と同じホストに置きます。Gateway には `WORK_CATEGORY_IDS`・`WORKING_URL`・`WORKING_TOKEN` を足します。
+Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、[ochanuco/mizuya](https://github.com/ochanuco/mizuya) の `apps/working/README.md` の「配備」に従い、Gateway と同じホストに置きます。Gateway には `WORK_CATEGORY_IDS`・`WORKING_URL`・`WORKING_TOKEN` を足します。
 
 ## 8. `ykm` と Admin Web
 
@@ -193,7 +193,7 @@ pnpm --filter @yunomi/worker dev
 
 - `.github/workflows/deploy*.yml`、`eval-nightly.yml`: 作者の 1Password と共有 workflow を使う
 - `.github/deploy/*.env.op`、`apps/gateway/*.env.op`: 作者の 1Password の参照
-- `.github/workflows/gateway-image.yml`、`working-image.yml`: 作者の GHCR にイメージを公開する
+- `.github/workflows/gateway-image.yml`: 作者の GHCR にイメージを公開する
 
 ## キャラクターを変える
 
