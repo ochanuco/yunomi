@@ -21,8 +21,6 @@ import { startWorkActivity } from "./work-activity.ts";
 import { createWorkingClient } from "./working-client.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
-const PARTNER_ID = "yukarin";
-
 const config = loadConfig(process.env);
 if (!config.ok) {
 	console.error("設定が不正です:");
@@ -87,7 +85,7 @@ const hear =
 		? createHearing({
 				kukicha,
 				client: yunomi,
-				partnerId: PARTNER_ID,
+				partnerId: cfg.partnerId,
 				ownerUserId: cfg.ownerUserId,
 				displayNameOf: (guildId, userId) =>
 					discord.guilds.cache.get(guildId)?.members.cache.get(userId)
@@ -123,7 +121,7 @@ const ears = cfg.ownerUserId
 	: null;
 
 const voice = new VoiceManager({
-	partnerId: PARTNER_ID,
+	partnerId: cfg.partnerId,
 	ochoko,
 	yunomi,
 	ears,
@@ -136,7 +134,7 @@ const voice = new VoiceManager({
 const handleVoiceState = createVoiceStateHandler({
 	client: yunomi,
 	voice,
-	partnerId: PARTNER_ID,
+	partnerId: cfg.partnerId,
 	get botUserId() {
 		return discord.user?.id ?? "";
 	},
@@ -173,7 +171,7 @@ discord.on(Events.MessageCreate, (message) => {
 	const channel = message.channel;
 	const handle = createMessageHandler({
 		client: yunomi,
-		partnerId: PARTNER_ID,
+		partnerId: cfg.partnerId,
 		botUserId,
 		voice,
 		avatars,

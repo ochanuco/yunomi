@@ -3,6 +3,7 @@ import {
 	STATE_HISTORY_DEFAULT_DAYS,
 	STATE_HISTORY_MAX_DAYS,
 } from "@yunomi/admin-contract";
+import { DEFAULT_PARTNER_ID, isPartnerId, PARTNER_IDS } from "@yunomi/core";
 
 export type Command =
 	| { name: "help" }
@@ -35,7 +36,6 @@ export type ParseResult =
 	| { ok: true; command: Command; global: Global }
 	| { ok: false; message: string };
 
-export const DEFAULT_PARTNER = "yukarin";
 const MAX_PAGE = 200;
 const MAX_KPI_DAYS = 365;
 
@@ -100,10 +100,14 @@ export const parseCli = (argv: string[]): ParseResult => {
 		if (env !== "dev" && env !== "prod") {
 			return fail(`--env は dev か prod: ${env}`);
 		}
+		const partner = values.partner ?? DEFAULT_PARTNER_ID;
+		if (!isPartnerId(partner)) {
+			return fail(`--partner は ${PARTNER_IDS.join(" / ")}: ${partner}`);
+		}
 		const global: Global = {
 			env,
 			url: values.url ?? null,
-			partner: values.partner ?? DEFAULT_PARTNER,
+			partner,
 			json: values.json ?? false,
 		};
 		const [first, second, ...rest] = positionals;
@@ -278,7 +282,7 @@ export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う C
 共通オプション:
   --env dev|prod   接続先環境（既定 dev）
   --url URL        接続先 URL を直接指定
-  --partner ID     partner id（既定 ${DEFAULT_PARTNER}）
+  --partner ID     partner id（${PARTNER_IDS.join(" / ")}、既定 ${DEFAULT_PARTNER_ID}）
   --json           整形せず JSON を出力
   -h, --help       このヘルプ
 

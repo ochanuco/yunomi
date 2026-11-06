@@ -1,5 +1,4 @@
 import { toModelJson } from "@yunomi/core";
-import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { and, eq } from "drizzle-orm";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import * as v from "valibot";
@@ -8,6 +7,7 @@ import { externalIdentities } from "./db/schema.ts";
 import { accessEnv } from "./env.ts";
 import { createMemoryRepo } from "./memory.ts";
 import { createOpenLoopRepo } from "./open-loops.ts";
+import { partnerProfile } from "./partners.ts";
 import {
 	createWorkNoteRepo,
 	WORK_NOTE_SUMMARY_MAX_LENGTH,
@@ -56,7 +56,7 @@ const findEntity = async (db: DrizzleD1Database, discordUserId: string) => {
 };
 
 /**
- * Working（仕事）の Yukarin が Talking と同じ記憶を読み書きする口。
+ * Working（仕事）のパートナーが Talking と同じ記憶を読み書きする口。
  * 会話の処理（DO の turn）を通さず D1 だけを触るので、関係性・興味・意見・直近の会話履歴は動かない。
  */
 export async function handleWorkingMemory(
@@ -75,7 +75,7 @@ export async function handleWorkingMemory(
 	) {
 		return error(403, "forbidden");
 	}
-	if (partnerId !== yukarinProfile.partner_id) {
+	if (!partnerProfile(partnerId)) {
 		return error(404, "unknown_partner");
 	}
 	const db = drizzle(env.DB);

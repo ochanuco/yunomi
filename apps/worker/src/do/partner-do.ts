@@ -6,13 +6,13 @@ import {
 	type CommunicationPort,
 	err,
 	externalServiceUnavailable,
+	type PartnerProfile,
 	type PartnerState,
 	type Relationship,
 	resolveAivoiceRealization,
 	toAivoiceValues,
 } from "@yunomi/core";
 import { ClaudeProvider, type LLMProvider, ModelRouter } from "@yunomi/llm";
-import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	type AvatarDirective,
 	type DiscordSent,
@@ -46,6 +46,7 @@ import {
 } from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
+import { defaultPartnerProfile, partnerProfile } from "../partners.ts";
 import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
@@ -92,6 +93,11 @@ const defaultCommunication = (env: Env): CommunicationPort | null =>
 		: null;
 
 export class PartnerDO extends DurableObject<Env> {
+	/**
+	 * DO は idFromName(partner_id) で引かれるので、名前からパートナーが決まる。
+	 * 名簿にない名前（疎通確認の health、テストの DO）は既定のパートナーとして振る舞う。
+	 */
+	readonly profile: PartnerProfile;
 	readonly #store: DoStore;
 	readonly #gate = new ChannelGate();
 	readonly #pending = new Set<Promise<void>>();
@@ -123,7 +129,7 @@ export class PartnerDO extends DurableObject<Env> {
 		runTurn(
 			{
 				store: this.#store,
-				profile: yukarinProfile,
+				profile: this.profile,
 				partnerUserId: this.env.PARTNER_DISCORD_USER_ID,
 				now: () => this.now(),
 				createRouter: () => this.createRouter(this.env),
@@ -143,6 +149,7 @@ export class PartnerDO extends DurableObject<Env> {
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
+		this.profile = partnerProfile(ctx.id.name ?? "") ?? defaultPartnerProfile;
 		this.#store = new DoStore(ctx.storage.sql);
 		const db = drizzle(env.DB);
 		this.#history = createHistoryWriter(db);
@@ -155,7 +162,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.capabilities =
 			defaultCapabilities(env, {
 				pending: createPendingStore(ctx.storage.sql),
-				policy: yukarinProfile.capability_defaults,
+				policy: this.profile.capability_defaults,
 				now: () => this.now(),
 			}) ?? undefined;
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
@@ -172,7 +179,7 @@ export class PartnerDO extends DurableObject<Env> {
 	}
 
 	adminRelationships(): Relationship[] {
-		return this.#store.listRelationships(yukarinProfile.partner_id);
+		return this.#store.listRelationships(this.profile.partner_id);
 	}
 
 	/** Snapshot 用。会話本文・dedupe・channel_state は含めない。 */
@@ -364,7 +371,7 @@ export class PartnerDO extends DurableObject<Env> {
 	}
 
 	#aivoiceValues(intent: BodyIntent) {
-		const voice = yukarinProfile.voice;
+		const voice = this.profile.voice;
 		const selected = this.env.VOICE_REALIZATION;
 		const resolved = voice && resolveAivoiceRealization(voice, selected);
 		if (resolved?.fellBack) {
@@ -518,7 +525,7 @@ export class PartnerDO extends DurableObject<Env> {
 			.find("discord", u.user.id)
 			.catch(() => null);
 		const rel = entityId
-			? this.#store.getRelationship(yukarinProfile.partner_id, entityId)
+			? this.#store.getRelationship(this.profile.partner_id, entityId)
 			: null;
 		if (!rel) return { join: false, reason: "unknown_user" };
 		const tier = relationshipTier(rel.relationship);

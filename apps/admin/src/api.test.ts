@@ -13,6 +13,16 @@ describe("createApi", () => {
 		expect(calls).toEqual(["/admin/api/partners/yukarin/status"]);
 	});
 
+	it("指定したパートナーの API を叩く", async () => {
+		const calls: string[] = [];
+		const api = createApi(async (input) => {
+			calls.push(String(input));
+			return Response.json(status);
+		}, "akarin");
+		await api.status();
+		expect(calls).toEqual(["/admin/api/partners/akarin/status"]);
+	});
+
 	it("クエリを付ける", async () => {
 		const calls: string[] = [];
 		const api = createApi(async (input) => {

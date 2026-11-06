@@ -13,6 +13,7 @@ import {
 	type StatusResponse,
 	StatusResponseSchema,
 } from "@yunomi/admin-contract";
+import { DEFAULT_PARTNER_ID } from "@yunomi/core";
 import * as v from "valibot";
 
 export class ApiError extends Error {}
@@ -29,11 +30,9 @@ export type Api = {
 	audit(q: { limit: number; cursor?: string }): Promise<AuditResponse>;
 };
 
-export const PARTNER_ID = "yukarin";
-
 export const createApi = (
 	fetchImpl: typeof fetch = (input, init) => fetch(input, init),
-	partner = PARTNER_ID,
+	partner: string = DEFAULT_PARTNER_ID,
 ): Api => {
 	const call = async <T extends v.GenericSchema>(
 		path: string,

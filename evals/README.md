@@ -1,10 +1,10 @@
 # @yunomi/evals
 
-Yukarin の人格を、決定的な検査と統計的な検査の二段で追跡する。
+パートナーの人格を、決定的な検査と統計的な検査の二段で追跡する。
 
 ## シナリオ
 
-`scenarios/*.yaml` に 1 ファイル 1 シナリオで書く（スキーマは `src/scenario.ts`）。
+`scenarios/*.yaml`（Yukarin）と `scenarios-akarin/*.yaml`（Akarin）に 1 ファイル 1 シナリオで書く（スキーマは `src/scenario.ts`）。呼び名や話し方が人格ごとに違うので、シナリオはパートナーごとに持つ。パートナーとシナリオの対応は `src/partners.ts`。
 入力会話（直近ログと新着メッセージ、メンションの有無）、関係・状態のプリセット、持ちネタの cooldown 状態、期待する傾向を持つ。
 期待は個々の出力の一致ではなく、複数サンプルで見る傾向として書く（返信率の範囲、丁寧語、質問終わりの割合の上限、Open Loop 抽出率・意見の shift 率・興味の up 率の範囲など）。
 
@@ -27,6 +27,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/evals eval:tier2 -- --samples 5 --en
 
 | オプション | 既定 | 内容 |
 | --- | --- | --- |
+| `--partner` | yukarin | 対象のパートナー（`yukarin` / `akarin`） |
 | `--samples` | 5 | シナリオごとのサンプル数 |
 | `--env` | development | プロファイルの環境。応答は dev / prod とも Sonnet で生成する |
 | `--scenario <id>` | 全件 | 対象を絞る（複数指定可） |

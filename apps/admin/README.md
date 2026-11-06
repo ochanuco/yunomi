@@ -1,12 +1,14 @@
 # @yunomi/admin
 
-Yukarin の State / Memory / Audit を見る Admin Web。Vite + TypeScript + plain DOM（フレームワークなし）。読み取り専用で、`/admin/api/` の応答は `@yunomi/admin-contract` のスキーマで検証する。
+パートナーの State / Memory / Audit を見る Admin Web。Vite + TypeScript + plain DOM（フレームワークなし）。読み取り専用で、`/admin/api/` の応答は `@yunomi/admin-contract` のスキーマで検証する。
 
 | ハッシュ | 内容 |
 | --- | --- |
 | `#/state` | State、件数、Relationship |
 | `#/memory` | Facts / Candidates のタブ（`?kind=candidates`） |
 | `#/audit` | 新しい順の一覧。行を選ぶと詳細ドロワー（`?id=`、Esc で閉じる） |
+
+見るパートナーは `?partner=`（`yukarin` / `akarin`、既定 `yukarin`）で選び、ヘッダーのリンクで切り替える。
 
 表示中の画面だけを 10 秒ごとに取り直す。一覧は先頭ページを取り直して既読分へ id で混ぜるので、「古いものを読み込む」で足した行は消えない。API 由来の文字列は `textContent` / text node でだけ描画し（`src/dom.ts`）、`innerHTML` は使わない。
 

@@ -2,8 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { DEFAULT_PARTNER_ID, isPartnerId, PARTNER_IDS } from "@yunomi/core";
 import { ClaudeProvider, type Env, type LLMProvider } from "@yunomi/llm";
-import { profileVersion, yukarinProfile } from "@yunomi/partner-yukarin";
+import { EVAL_PARTNERS } from "./partners.ts";
 import { loadScenarios } from "./scenario.ts";
 import { formatSummary, runTier2 } from "./tier2.ts";
 
@@ -40,6 +41,7 @@ export const main = async (argv: string[], deps: CliDeps): Promise<number> => {
 		env?: string;
 		strict?: boolean;
 		scenario?: string[];
+		partner?: string;
 	};
 	try {
 		({ values } = parseArgs({
@@ -49,6 +51,7 @@ export const main = async (argv: string[], deps: CliDeps): Promise<number> => {
 				env: { type: "string" },
 				strict: { type: "boolean" },
 				scenario: { type: "string", multiple: true },
+				partner: { type: "string" },
 			},
 		}));
 	} catch (e) {
@@ -66,13 +69,22 @@ export const main = async (argv: string[], deps: CliDeps): Promise<number> => {
 		log("--env は development か production");
 		return 2;
 	}
+	const partnerId = values.partner ?? DEFAULT_PARTNER_ID;
+	if (!isPartnerId(partnerId)) {
+		log(`--partner は ${PARTNER_IDS.join(" か ")}`);
+		return 2;
+	}
+	const partner = EVAL_PARTNERS[partnerId];
 	const apiKey = deps.env.ANTHROPIC_API_KEY;
 	if (!apiKey) {
 		log("ANTHROPIC_API_KEY が未設定");
 		return 2;
 	}
 
-	let scenarios = loadScenarios(deps.scenariosDir, yukarinProfile);
+	let scenarios = loadScenarios(
+		deps.scenariosDir ?? partner.scenariosDir,
+		partner.profile,
+	);
 	if (values.scenario?.length) {
 		const want = new Set(values.scenario);
 		scenarios = scenarios.filter((s) => want.has(s.id));
@@ -88,8 +100,8 @@ export const main = async (argv: string[], deps: CliDeps): Promise<number> => {
 	const report = await runTier2({
 		provider: deps.createProvider(apiKey),
 		env,
-		profile: yukarinProfile,
-		profileVersion,
+		profile: partner.profile,
+		profileVersion: partner.profileVersion,
 		scenarios,
 		samples,
 		now: deps.now,

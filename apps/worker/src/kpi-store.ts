@@ -13,10 +13,6 @@ export const KPI_DEFAULT_DAYS = 30;
 export const KPI_MAX_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 生活日 `YYYY-MM-DD` の開始時刻（UTC）。 */
-const dayStart = (day: string, boundary: string): Date =>
-	new Date(Date.parse(`${day}T${boundary}:00+09:00`));
-
 const shiftDay = (day: string, days: number): string =>
 	new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS)
 		.toISOString()
@@ -45,12 +41,12 @@ type Row = {
 
 export const aggregateRows = (
 	rows: Row[],
-	boundary: string,
+	boundaryOf: (partnerId: string) => string,
 	now: Date,
 ): (typeof auditDailyKpis.$inferInsert)[] => {
 	const groups = new Map<string, Row[]>();
 	for (const r of rows) {
-		const day = lifestyleDay(new Date(r.createdAt), boundary);
+		const day = lifestyleDay(new Date(r.createdAt), boundaryOf(r.partnerId));
 		const key = `${r.partnerId}\u0000${day}`;
 		const g = groups.get(key);
 		if (g) g.push(r);
@@ -90,11 +86,10 @@ export const aggregateRows = (
 export const aggregateDailyKpis = async (
 	db: DrizzleD1Database,
 	now: Date,
-	boundary: string,
+	boundaryOf: (partnerId: string) => string,
 ): Promise<number> => {
-	const today = lifestyleDay(now, boundary);
-	const from = dayStart(shiftDay(today, -KPI_RECOMPUTE_DAYS), boundary);
-	const to = dayStart(today, boundary);
+	// 生活日の境目はパートナーごとに違いうるので、前後 1 日広く読んでから、行ごとに自分の境目で絞る。
+	const from = new Date(now.getTime() - (KPI_RECOMPUTE_DAYS + 2) * DAY_MS);
 	const rows = await db
 		.select({
 			partnerId: auditEvents.partnerId,
@@ -113,10 +108,16 @@ export const aggregateDailyKpis = async (
 		.where(
 			and(
 				gte(auditEvents.createdAt, from.toISOString()),
-				sql`${auditEvents.createdAt} < ${to.toISOString()}`,
+				sql`${auditEvents.createdAt} < ${now.toISOString()}`,
 			),
 		);
-	const kpis = aggregateRows(rows, boundary, now);
+	const settled = rows.filter((r) => {
+		const boundary = boundaryOf(r.partnerId);
+		const today = lifestyleDay(now, boundary);
+		const day = lifestyleDay(new Date(r.createdAt), boundary);
+		return day >= shiftDay(today, -KPI_RECOMPUTE_DAYS) && day < today;
+	});
+	const kpis = aggregateRows(settled, boundaryOf, now);
 	const stmts = kpis.map((k) =>
 		db
 			.insert(auditDailyKpis)

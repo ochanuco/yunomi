@@ -15,6 +15,12 @@ describe("parseCli", () => {
 		});
 	});
 
+	it("--partner は名簿の ID だけを受け付ける", () => {
+		expect(ok(["--partner", "akarin", "status"]).global.partner).toBe("akarin");
+		const r = parseCli(["--partner", "nobody", "status"]);
+		expect(r.ok).toBe(false);
+	});
+
 	it("共通オプションはコマンドの前後どちらでも受ける", () => {
 		const r = ok(["--env", "prod", "memory", "list", "--json", "--limit", "5"]);
 		expect(r.global).toMatchObject({ env: "prod", json: true });

@@ -44,6 +44,22 @@ const boot = async (hash: string, api: Api, interval = 10_000) => {
 };
 
 describe("startApp", () => {
+	it("パートナーの切り替えは見ている画面を保ち、選んでいるパートナーを示す", async () => {
+		location.hash = "#/memory";
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		stop = startApp(root, fakeApi(), 10_000, "akarin");
+		await flush();
+		const links = [...root.querySelectorAll(".partner-nav a")];
+		expect(links.map((a) => a.getAttribute("href"))).toEqual([
+			"?partner=yukarin#/memory",
+			"?partner=akarin#/memory",
+		]);
+		expect(
+			root.querySelector('.partner-nav a[aria-current="page"]')?.textContent,
+		).toBe("akarin");
+	});
+
 	it("dev では環境バッジとタイトルで dev と分かるようにする", async () => {
 		const root = await boot("", fakeApi());
 		expect(root.querySelector(".env-badge")?.textContent).toBe("DEV");

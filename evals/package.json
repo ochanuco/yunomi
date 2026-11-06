@@ -14,6 +14,7 @@
 		"@yunomi/conversation": "workspace:*",
 		"@yunomi/core": "workspace:*",
 		"@yunomi/llm": "workspace:*",
+		"@yunomi/partner-akarin": "workspace:*",
 		"@yunomi/partner-yukarin": "workspace:*",
 		"valibot": "^1.5.0",
 		"yaml": "^2.8.1"

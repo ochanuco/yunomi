@@ -8,6 +8,7 @@ export * from "./memory.ts";
 export * from "./open-loop.ts";
 export * from "./partner-profile.ts";
 export * from "./partner-state.ts";
+export * from "./partners.ts";
 export * from "./result.ts";
 export * from "./time.ts";
 export * from "./voice-mapping.ts";

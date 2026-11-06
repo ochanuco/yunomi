@@ -1,6 +1,5 @@
 import { ADMIN_API_PREFIX } from "@yunomi/admin-contract";
 import { type DomainError, ok, type Result } from "@yunomi/core";
-import { yukarinProfile } from "@yunomi/partner-yukarin";
 import {
 	DISCORD_MESSAGE_CREATED,
 	DISCORD_VOICE_EVENTS_PATH,
@@ -25,6 +24,11 @@ import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
+import {
+	defaultPartnerProfile,
+	partnerProfile,
+	partnerProfiles,
+} from "./partners.ts";
 import { createSnapshot } from "./snapshot.ts";
 import { purgeExpiredSnapshots } from "./snapshot-store.ts";
 import { handleWorkingMemory, WORKING_MEMORY_PATH } from "./working.ts";
@@ -82,19 +86,24 @@ export default {
 		const db = drizzle(env.DB);
 		const now = new Date(controller.scheduledTime);
 		// Snapshot の失敗で KPI 集計と audit 削除を止めない。audit が先に消えても Snapshot は影響を受けない。
-		await snapshotDaily(env, now);
+		for (const p of partnerProfiles)
+			await snapshotDaily(env, p.partner_id, now);
 		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
-		await aggregateDailyKpis(
-			db,
-			now,
-			yukarinProfile.living_rhythm.lifestyle_day_boundary,
-		);
+		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
 	},
 } satisfies ExportedHandler<Env>;
 
-const snapshotDaily = async (env: Env, now: Date): Promise<void> => {
-	const partnerId = yukarinProfile.partner_id;
+// 名簿にない partner の audit は来ないはずだが、来ても集計からは落とさない。
+const lifestyleDayBoundaryOf = (partnerId: string): string =>
+	(partnerProfile(partnerId) ?? defaultPartnerProfile).living_rhythm
+		.lifestyle_day_boundary;
+
+const snapshotDaily = async (
+	env: Env,
+	partnerId: string,
+	now: Date,
+): Promise<void> => {
 	try {
 		const partner = partnerNamespace(env);
 		const created = await createSnapshot({
@@ -130,7 +139,7 @@ async function discordEvents(request: Request, env: Env): Promise<Response> {
 			{ status: 400 },
 		);
 	}
-	if (event.value.value.partnerId !== yukarinProfile.partner_id) {
+	if (!partnerProfile(event.value.value.partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
 
@@ -210,7 +219,7 @@ async function discordVoiceEvents(
 			{ status: 400 },
 		);
 	}
-	if (update.value.partnerId !== yukarinProfile.partner_id) {
+	if (!partnerProfile(update.value.partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
 	const partner = partnerNamespace(env);
@@ -226,7 +235,7 @@ async function discordVoiceConnection(
 ): Promise<Response> {
 	const read = await readGatewayJson(request, env);
 	if ("response" in read) return read.response;
-	if (partnerId !== yukarinProfile.partner_id) {
+	if (!partnerProfile(partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
 	const parsed = v.safeParse(discordVoiceConnectionSchema, read.body);
@@ -264,7 +273,7 @@ async function discordSent(
 	if (!isGateway(auth.principal)) {
 		return Response.json({ error: "forbidden" }, { status: 403 });
 	}
-	if (partnerId !== yukarinProfile.partner_id) {
+	if (!partnerProfile(partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
 
