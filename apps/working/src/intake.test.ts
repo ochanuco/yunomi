@@ -672,6 +672,29 @@ describe("決めてほしいまま時間がたった席", () => {
 		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
 	});
 
+	it("止めた席の worktree が消えていたら、やりとりを読ませて新しい席で始める", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "どちらにしますか",
+			}),
+		);
+		s.advance(3 * 60 * 60_000);
+		await s.intake.sleepIdle();
+		s.o.worktrees.delete("/seats/seat-p1");
+
+		await s.intake.handle(say("p1", "閉じて"));
+		expect(s.o.opsOf("startSeat")).toHaveLength(2);
+		expect(s.seats.get("p1")?.status).toBe("working");
+		expect(s.d.sentTo("p1").join("\n")).not.toContain(
+			"席を始められませんでした",
+		);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-working"]);
+	});
+
 	it("止めた席は上限に数えない", async () => {
 		const s = await setup({ seatLimit: 1 });
 		const seat = await openPost(s, "p1");
