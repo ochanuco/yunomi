@@ -154,14 +154,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 
 ## Working の記憶
 
-Working（仕事）の Yukarin は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。相手は `discord_user_id` で既存の entity を引き、Talking で話したことのない相手は 404（`unknown_entity`）にする。`entities` / `external_identities` には書かない。
-
-- `GET ?discord_user_id=...`: `facts`（続く事実）/ `episodes`（できごと。仕事の1行を含む）/ `open_loops`（未決）を、Talking の prompt と同じ選び方と順で返す。`goals` は open な目標（`id` / `summary` / `created_at`）を古い順に全件返す。`watches` は動いている見張り（期限切れを除く）を古い順に全件、`due`（前に調べてから間隔が過ぎたか、まだ調べていない）と `seen`（前に知らせたものの key）と `notify_thread_id`（新着を書く投稿。無ければ null）付きで返す。時刻は `toModelJson` で `YYYY-MM-DD HH:mm JST` にする。
-- `POST { discord_user_id, kind: "decided" | "done" | "goal", summary }`: 決まったこと・終わったこと・目標を1行（改行なし、200 字まで）で `work_notes` に残す。目標は `status: "open"` で入り、同じ文面の open な目標があれば 409 `duplicate_goal`、open な目標が `OPEN_GOAL_LIMIT`（10）件あれば 409 `goal_limit`。
-- `POST { discord_user_id, watch: { query, sources, interval_hours, until }, notify_thread_id? }`: 席が持ち主に頼まれた見張りを 1 件足す。`notify_thread_id` は頼まれた仕事の投稿の ID（数字だけ）で、見回りが新着をそこに書く。`watch` は道具 `watch_add` と同じ `parseWatchAdd`（`@yunomi/capabilities`）で検証し、通らなければ 400 `validation_failed`（`message` に理由）。同じ `query` の見張りがあれば 409 `duplicate_watch`、`ACTIVE_WATCH_LIMIT` 件あれば 409 `watch_limit`。201 で `id` と保存した `query` / `sources` / `interval_minutes` / `until_at` を返す。
-- `PATCH { discord_user_id, watch_id, status: "stopped" }`: 動いている見張りを止める。動いている見張りに無い `watch_id` は 404 `unknown_watch`。
-- `PATCH { discord_user_id, id, status: "achieved" | "dropped" }`: open な目標を閉じ、`closed_at` を入れる。その人の open な目標に無い `id` は 404 `unknown_goal`。
-- `PATCH { discord_user_id, watch_id, seen }`: 見回りの席が見張りを調べ終えたことを残す。`last_checked_at` を今にし、`seen` の key（200 字まで）を重ねずに足す。覚えるのは新しい `WATCH_SEEN_LIMIT`（100）件まで。動いている見張りに無い `watch_id` は 404 `unknown_watch`。
+mizuya の Working は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。要求と応答の形は [docs/working-memory-api.md](../../docs/working-memory-api.md) にある。
 
 Talking の prompt では、`work_notes` の decided と done の新しい `WORK_NOTE_PROMPT_LIMIT`（10）件を `仕事で決めたこと` / `仕事で終えたこと` の出来事として、facts の出来事と合わせて新しい順に並べる。出来事と同じく 3 日以上たったものは「前に聞いた話」に回る。
 
@@ -172,11 +165,11 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 - 会話からは道具 `goal_add`（`summary`）と `goal_close`（`id`、`status: achieved | dropped`）で足す・閉じる。category は `goal_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録し、話し手の Discord user id から entity を引いて書く。
 - 重複・上限・見つからない（`duplicate` / `limit` / `not_found`）は失敗にせず、結果の `status: "not_done"` と `reason` で返してモデルに言い分けさせる。D1 に届かないときだけ `ExternalServiceUnavailable`。
 - Audit の `toolCalls` の要約に目標の文面は入れない。
-- Working の席は `yunomi-memory` で同じ目標を読み書きし、朝会と見回りの材料にする（`apps/working/README.md`）。
+- mizuya の Working の席は記憶の口で同じ目標を読み書きし、朝会と見回りの材料にする。
 
 ### 見張り
 
-オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは Working の見回りで（`apps/working/README.md`）、Worker は持つだけ。
+オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは mizuya の Working の見回りで、Worker は持つだけ。
 
 - 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（2 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。仕事の席からは Working の記憶の口（`yunomi-memory watch-add` / `watch-stop`）で同じ検証と保存を通して登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
 - 動いている見張りは 1 人 `ACTIVE_WATCH_LIMIT`（10）件まで。同じ `query` の見張りは重ねない。重複・上限・見つからないは目標と同じく `status: "not_done"` と `reason` で返す。
@@ -185,7 +178,7 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 
 ## GitHub の出来事（webhook）
 
-Working は公開していないので、GitHub の webhook は Worker が受け、D1 の `github_events` に置く。Working が `working` の service token で取りに来る（`src/github-webhook.ts`）。
+mizuya の Working は公開していないので、GitHub の webhook は Worker が受け、D1 の `github_events` に置く。Working が `working` の service token で取りに来る（`src/github-webhook.ts`）。
 
 - `POST /v1/github/webhook`: Access を通らない（chabatake で bypass する）。`X-Hub-Signature-256` を `GITHUB_WEBHOOK_SECRET` で確かめ、署名が無いか違えば 401 で捨てる。secret の無い環境（dev）では 404。
 - 置くのは席を動かす出来事だけ: `workflow_run` と `check_suite`（Actions 以外）の失敗、`pull_request_review` の submitted、`issue_comment` の created。payload は席の材料になる値だけに絞り、`X-GitHub-Delivery` で再送を一つにまとめる。ほかは 204。

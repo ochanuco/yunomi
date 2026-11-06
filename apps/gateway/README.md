@@ -25,7 +25,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
 | `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。未設定ならすべての発言を Worker に送る |
-| `WORKING_URL` | いいえ | Working 受付の URL。仕事カテゴリの発言を POST する。未設定なら仕事カテゴリの発言は捨てる（起動時に警告ログを 1 回） |
+| `WORKING_URL` | いいえ | Working 受付（ochanuco/mizuya の `apps/working`）の URL。仕事カテゴリの発言を POST する。未設定なら仕事カテゴリの発言は捨てる（起動時に警告ログを 1 回） |
 | `WORKING_TOKEN` | `WORKING_URL` と組 | Working 受付と共有するトークン。`Authorization: Bearer` で送る |
 | `WORKING_FORWARD` | いいえ | `false` で仕事カテゴリの発言を Working へ渡さずに捨てる（席の数は読む）。押されたボタンはこの値によらず渡す。既定は `true` |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
