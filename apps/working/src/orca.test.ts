@@ -83,7 +83,7 @@ const setup = (
 		exec.mock.calls
 			.filter(([, a]) => a.slice(0, 2).join(" ") === cmd)
 			.map(([, a]) => a);
-	return { orca, exec, argsOf, seatsRepo, order };
+	return { orca, exec, argsOf, seatsRepo, order, root };
 };
 
 describe("waitReady", () => {
@@ -304,8 +304,10 @@ describe("createOrcaCli", () => {
 			},
 		});
 		await t.orca.prepare({ runId: null, reception: null });
+		const seat = join(t.root, "ws", "seat-p1");
+		mkdirSync(seat, { recursive: true });
 		const r = await t.orca.resumeSeat({
-			path: "/ws/seat-p1",
+			path: seat,
 			title: "件名",
 			spec: "続き",
 			agent: "claude",
@@ -316,13 +318,25 @@ describe("createOrcaCli", () => {
 				"--terminal",
 				"t9",
 				"--worktree",
-				"path:/ws/seat-p1",
+				`path:${seat}`,
 			]),
 		);
 		expect(t.argsOf("orchestration worker-start")[0]).not.toContain("--agent");
-		expect(t.order.indexOf("trust /ws/seat-p1")).toBeLessThan(
+		expect(t.order.indexOf(`trust ${seat}`)).toBeLessThan(
 			t.order.lastIndexOf("terminal create"),
 		);
+	});
+
+	it("worktree が無くなった席は起こさず、無いと返す", async () => {
+		const t = setup({});
+		const r = await t.orca.resumeSeat({
+			path: join(t.root, "ws", "seat-gone"),
+			title: "件名",
+			spec: "続き",
+			agent: "claude",
+		});
+		expect(!r.ok && r.error.type).toBe("SeatWorktreeMissing");
+		expect(t.argsOf("terminal create")).toEqual([]);
 	});
 
 	it("Akarin の席は Claude の信頼を書かず、承認なし・sandbox なしの Codex の端末を作って渡す", async () => {
@@ -371,8 +385,10 @@ describe("createOrcaCli", () => {
 			},
 		});
 		await t.orca.prepare({ runId: null, reception: null });
+		const seat = join(t.root, "ws", "seat-p1");
+		mkdirSync(seat, { recursive: true });
 		await t.orca.resumeSeat({
-			path: "/ws/seat-p1",
+			path: seat,
 			title: "件名",
 			spec: "続き",
 			agent: "codex",

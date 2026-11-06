@@ -617,6 +617,20 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		}
 	};
 
+	/** 投稿のやりとりを読ませる依頼文。前の会話が無い席を作り直すときに渡す。 */
+	const historyText = async (threadId: string) => {
+		const [history, title] = await Promise.all([
+			deps.discord.listMessages(threadId, HISTORY_LIMIT),
+			titleOf(threadId),
+		]);
+		return historyPrompt({
+			now: now(),
+			title,
+			history: history.ok ? history.value : [],
+			botUserId: speaker(partnerOf(threadId)).botUserId,
+		});
+	};
+
 	/** 席に Claude を座らせ、溜まっている言葉を渡す。worktree があれば前の会話のまま起こす。 */
 	const launch = async (seat: Seat) => {
 		const threadId = seat.threadId;
@@ -637,12 +651,32 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 					spec: seatSpec(speaker(partner).preamble, text),
 					agent,
 				});
+		if (!r.ok && r.error.type === "SeatWorktreeMissing" && !seat.standup) {
+			// 前の会話は worktree ごと失われたので、席を忘れてやりとりを読ませた新しい席で始める。
+			// 止めた席のまま残すと、返事のたびに同じ失敗を繰り返して投稿が動かなくなる
+			log.warn("seat worktree missing", { thread_id: threadId });
+			await seats.delete(threadId);
+			await openSeat(
+				{
+					...newSeat(threadId),
+					request: seat.request,
+					reaction: seat.reaction,
+					panelId: seat.panelId,
+					panelText: seat.panelText,
+					panelAt: seat.panelAt,
+					label: seat.label,
+					labelSince: seat.labelSince,
+				},
+				await historyText(threadId),
+			);
+			return;
+		}
 		if (!r.ok) {
 			log.error("seat start failed", {
 				thread_id: threadId,
 				reason: r.error.reason,
 			});
-			// worktree が無ければ席ごと忘れ、次の返事でやりとりを読ませて作り直す
+			// 前の会話を残せる席は止めた席に戻し、次の返事でもう一度起こす
 			if (seat.path) {
 				await seats.set({ ...seat, status: "sleeping", pending: [] });
 			} else {
@@ -757,16 +791,7 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		const stored = seats.get(threadId);
 		if (stored === null) {
 			// 席が無い（完了したあと、朝会の投稿、作れなかった）ときは、やりとりを読ませて新しい席を作る
-			const [history, title] = await Promise.all([
-				deps.discord.listMessages(threadId, HISTORY_LIMIT),
-				titleOf(threadId),
-			]);
-			const prompt = historyPrompt({
-				now: now(),
-				title,
-				history: history.ok ? history.value : [],
-				botUserId: speaker(partnerOf(threadId)).botUserId,
-			});
+			const prompt = await historyText(threadId);
 			await openSeat(
 				{ ...newSeat(threadId), request: from },
 				granted ? `${prompt}\n\n${approvedNote(granted)}` : prompt,

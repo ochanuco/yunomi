@@ -8,7 +8,9 @@ import type { Logger } from "./logger.ts";
 export type OrcaError =
 	| { type: "OrcaFailed"; command: string; reason: string }
 	/** 席の作業場所を Claude CLI の信頼済みにできなかった。 */
-	| { type: "SeatTrustFailed"; command: string; reason: string };
+	| { type: "SeatTrustFailed"; command: string; reason: string }
+	/** 止めた席の worktree が無くなっていて、前の会話のまま起こせない。 */
+	| { type: "SeatWorktreeMissing"; command: string; reason: string };
 
 /** 席から受付に届くメッセージ。 */
 export type SeatMessage = {
@@ -512,9 +514,21 @@ export const createOrcaCli = (opts: OrcaCliOptions): Orca => {
 			const path = created.value.worktree.path;
 			return launchAgent(path, title, spec, agent, SEAT_COMMANDS[agent].start);
 		},
-		resumeSeat: async ({ path, title, spec, agent }) =>
+		resumeSeat: async ({ path, title, spec, agent }) => {
+			const exists = await stat(path).then(
+				() => true,
+				() => false,
+			);
+			if (!exists) {
+				return err({
+					type: "SeatWorktreeMissing",
+					command: "resume",
+					reason: path,
+				});
+			}
 			// 前の会話のまま起こす
-			launchAgent(path, title, spec, agent, SEAT_COMMANDS[agent].resume),
+			return launchAgent(path, title, spec, agent, SEAT_COMMANDS[agent].resume);
+		},
 		send: async ({ dispatchId, subject, body }) => {
 			const r = await call(
 				[

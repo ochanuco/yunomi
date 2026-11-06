@@ -269,6 +269,13 @@ export const fakeOrca = (seatsDir = "/seats") => {
 		}),
 		resumeSeat: vi.fn(async (input) => {
 			calls.push({ op: "resumeSeat", args: input });
+			if (!worktrees.has(input.path)) {
+				return err({
+					type: "SeatWorktreeMissing" as const,
+					command: "resume",
+					reason: input.path,
+				});
+			}
 			return ok(handle(input.path));
 		}),
 		send: vi.fn(async (input) => {
