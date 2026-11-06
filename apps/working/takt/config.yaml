@@ -1,0 +1,3 @@
+# claude-headless は claude CLI のログイン（サブスクリプション）をそのまま使い、API キーが要らない。
+provider: claude-headless
+language: ja
