@@ -277,3 +277,141 @@ describe("見張りの記録", () => {
 		});
 	});
 });
+
+const seatRequest = (
+	method: "POST" | "PATCH",
+	body: unknown,
+	headers: Record<string, string> = working,
+) =>
+	exports.default.fetch(
+		new Request(URL_MEMORY, {
+			method,
+			headers: { "content-type": "application/json", ...headers },
+			body: JSON.stringify(body),
+		}),
+	);
+
+// 口は実時刻で期限を比べるので、先の日付にしておく
+const seatWatch = {
+	query: "RTX3090 の中古、24GB",
+	sources: ["じゃんぱら", "https://shop.example/gpu"],
+	interval_hours: 6,
+	until: "2099-12-31T23:59:00+09:00",
+};
+
+describe("Working の席が足す見張り", () => {
+	it("working の service だけが見張りを足し止められる", async () => {
+		const { owner } = await setup("seat-watch-auth");
+		for (const caller of ["gateway", "ykm"]) {
+			const headers = { "x-yunomi-dev-caller": caller };
+			expect(
+				(
+					await seatRequest(
+						"POST",
+						{ discord_user_id: owner.id, watch: seatWatch },
+						headers,
+					)
+				).status,
+			).toBe(403);
+			expect(
+				(
+					await seatRequest(
+						"PATCH",
+						{ discord_user_id: owner.id, watch_id: "x", status: "stopped" },
+						headers,
+					)
+				).status,
+			).toBe(403);
+		}
+		expect(await readWatches(owner.id)).toEqual([]);
+	});
+
+	it("足した見張りが記憶に出て、止めると消える", async () => {
+		const { owner } = await setup("seat-watch-add");
+		const res = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: seatWatch,
+		});
+		expect(res.status).toBe(201);
+		const added = (await res.json()) as {
+			id: string;
+			query: string;
+			sources: string[];
+			interval_minutes: number;
+		};
+		expect(added).toMatchObject({
+			query: seatWatch.query,
+			sources: seatWatch.sources,
+			interval_minutes: 360,
+		});
+		const [w] = await readWatches(owner.id);
+		expect(w).toMatchObject({
+			id: added.id,
+			query: seatWatch.query,
+			sources: seatWatch.sources,
+			interval_minutes: 360,
+			due: true,
+		});
+
+		const dup = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: seatWatch,
+		});
+		expect(dup.status).toBe(409);
+		expect(await dup.json()).toEqual({ error: "duplicate_watch" });
+
+		const stop = await seatRequest("PATCH", {
+			discord_user_id: owner.id,
+			watch_id: added.id,
+			status: "stopped",
+		});
+		expect(stop.status).toBe(200);
+		expect(await stop.json()).toEqual({
+			id: added.id,
+			query: seatWatch.query,
+			stopped: true,
+		});
+		expect(await readWatches(owner.id)).toEqual([]);
+
+		const again = await seatRequest("PATCH", {
+			discord_user_id: owner.id,
+			watch_id: added.id,
+			status: "stopped",
+		});
+		expect(again.status).toBe(404);
+		expect(await again.json()).toEqual({ error: "unknown_watch" });
+	});
+
+	it("Talking の watch_add と同じ検証で弾き、何も残さない", async () => {
+		const { owner } = await setup("seat-watch-validate");
+		for (const watch of [
+			{ ...seatWatch, query: "1行目\n2行目" },
+			{ ...seatWatch, query: "あ".repeat(201) },
+			{ ...seatWatch, sources: Array(6).fill("店") },
+			{ ...seatWatch, interval_hours: 1 },
+			{ ...seatWatch, interval_hours: 1.5 },
+			{ ...seatWatch, until: "2020-01-01T00:00:00+09:00" },
+			{ ...seatWatch, until: "そのうち" },
+			{ query: "期限の項目が無い", sources: [], interval_hours: 24 },
+		]) {
+			const res = await seatRequest("POST", {
+				discord_user_id: owner.id,
+				watch,
+			});
+			expect(res.status).toBe(400);
+			expect(((await res.json()) as { error: string }).error).toBe(
+				"validation_failed",
+			);
+		}
+		expect(await readWatches(owner.id)).toEqual([]);
+	});
+
+	it("Talking で話したことのない相手は 404", async () => {
+		const res = await seatRequest("POST", {
+			discord_user_id: "seat-watch-stranger",
+			watch: seatWatch,
+		});
+		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({ error: "unknown_entity" });
+	});
+});

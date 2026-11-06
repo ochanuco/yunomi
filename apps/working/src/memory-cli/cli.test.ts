@@ -137,6 +137,104 @@ describe("runMemoryCli", () => {
 		expect(JSON.parse(String(none.mock.calls[0]?.[1]?.body)).seen).toEqual([]);
 	});
 
+	it("watch-add は何を・どこを・間隔・期限を POST し、登録した内容を出す", async () => {
+		const env = { ...setup(), YUNOMI_PARTNER: "akarin" };
+		const f = respond(201, { id: "w1" });
+		const out = await runMemoryCli(
+			[
+				"watch-add",
+				"--query",
+				" RTX3090 の中古、24GB ",
+				"--source",
+				"じゃんぱら",
+				"--source",
+				"https://shop.example/gpu",
+				"--interval-hours",
+				"6",
+				"--until",
+				"2026-12-31T23:59:00+09:00",
+			],
+			env,
+			f as typeof fetch,
+		);
+		expect(out.code).toBe(0);
+		const [url, init] = f.mock.calls[0] ?? [];
+		expect(String(url)).toBe(
+			"https://worker.example/v1/partners/akarin/working/memory",
+		);
+		expect(init?.method).toBe("POST");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			discord_user_id: "owner-1",
+			watch: {
+				query: "RTX3090 の中古、24GB",
+				sources: ["じゃんぱら", "https://shop.example/gpu"],
+				interval_hours: 6,
+				until: "2026-12-31T23:59:00+09:00",
+			},
+		});
+		expect(out.stdout).toBe(
+			[
+				"見張りを足した (id: w1)",
+				"何を: RTX3090 の中古、24GB",
+				"どこを: じゃんぱら、https://shop.example/gpu",
+				"間隔: 6 時間おき",
+				"期限: 2026-12-31T23:59:00+09:00",
+				"",
+			].join("\n"),
+		);
+	});
+
+	it("watch-add は場所・間隔・期限を省くと普通の検索、24 時間おき、期限なし", async () => {
+		const env = setup();
+		const f = respond(201, { id: "w2" });
+		const out = await runMemoryCli(
+			["watch-add", "--query", "中古の万年筆"],
+			env,
+			f as typeof fetch,
+		);
+		expect(JSON.parse(String(f.mock.calls[0]?.[1]?.body)).watch).toEqual({
+			query: "中古の万年筆",
+			sources: [],
+			interval_hours: 24,
+			until: null,
+		});
+		expect(out.stdout).toContain("どこを: 普通の検索");
+		expect(out.stdout).toContain("間隔: 24 時間おき");
+		expect(out.stdout).toContain("期限: なし");
+	});
+
+	it("watch-add が Worker に弾かれたら理由を出す", async () => {
+		const out = await runMemoryCli(
+			["watch-add", "--query", "q", "--until", "2020-01-01T00:00:00+09:00"],
+			setup(),
+			respond(400, {
+				error: "validation_failed",
+				message: "until: 過去の日時",
+			}) as typeof fetch,
+		);
+		expect(out.code).toBe(1);
+		expect(out.stderr).toContain("validation_failed (until: 過去の日時)");
+	});
+
+	it("watch-stop は見張りの id を止める PATCH を送る", async () => {
+		const env = setup();
+		const f = respond(200, { id: "w1", query: "中古の万年筆", stopped: true });
+		const out = await runMemoryCli(
+			["watch-stop", "--id", " w1 "],
+			env,
+			f as typeof fetch,
+		);
+		expect(out.code).toBe(0);
+		const [, init] = f.mock.calls[0] ?? [];
+		expect(init?.method).toBe("PATCH");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			discord_user_id: "owner-1",
+			watch_id: "w1",
+			status: "stopped",
+		});
+		expect(out.stdout).toBe("見張りを止めた: 中古の万年筆 (id: w1)\n");
+	});
+
 	it("書き方が違えば呼ばずに断る", async () => {
 		const env = setup();
 		const f = respond(201, {});
@@ -156,6 +254,28 @@ describe("runMemoryCli", () => {
 			["watch-checked", "--id", "w1", "--seen", "a\nb"],
 			["watch-checked", "--id", "w1", "--seen", "あ".repeat(201)],
 			["close", "--id", "g1", "--status", "achieved", "--seen", "x"],
+			["watch-add"],
+			["watch-add", "--query", "  "],
+			["watch-add", "--query", "a\nb"],
+			["watch-add", "--query", "あ".repeat(201)],
+			["watch-add", "--query", "q", "--source", " "],
+			["watch-add", "--query", "q", "--source", "a\nb"],
+			["watch-add", "--query", "q", "--source", "あ".repeat(301)],
+			[
+				"watch-add",
+				"--query",
+				"q",
+				...Array.from({ length: 6 }, (_, i) => ["--source", `店${i}`]).flat(),
+			],
+			["watch-add", "--query", "q", "--interval-hours", "1"],
+			["watch-add", "--query", "q", "--interval-hours", "169"],
+			["watch-add", "--query", "q", "--interval-hours", "1.5"],
+			["watch-add", "--query", "q", "--interval-hours", "毎日"],
+			["watch-add", "--query", "q", "--until", ""],
+			["watch-add", "--query", "q", "--id", "w1"],
+			["watch-stop"],
+			["watch-stop", "--id", " "],
+			["watch-stop", "--id", "w1", "--query", "q"],
 		]) {
 			expect((await runMemoryCli(argv, env, f as typeof fetch)).code).toBe(2);
 		}
