@@ -70,6 +70,8 @@ export default defineConfig(({ mode }) => {
 							GOOGLE_CALENDAR_ID: bindings.secret(),
 							GOOGLE_PLACES_API_KEY: bindings.secret(),
 							GITHUB_TOKEN: bindings.secret(),
+							// GitHub の webhook の署名を確かめる。/v1/github/webhook は Access を通らない。
+							GITHUB_WEBHOOK_SECRET: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_ID: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_SECRET: bindings.secret(),
 							HOME_ASSISTANT_TOKEN: bindings.secret(),

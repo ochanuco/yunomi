@@ -63,7 +63,11 @@ const DECIDE_TAG = "決めてほしい";
 
 export type StandupReport = { posted: string[]; failed: number };
 
-const RUN_NAME: Record<RunKind, string> = { standup: "朝会", patrol: "見回り" };
+const RUN_NAME: Record<RunKind, string> = {
+	standup: "朝会",
+	patrol: "見回り",
+	event: "GitHub の知らせ",
+};
 
 /** 投稿の最後に足す「どの回から」。朝会は日付、見回りは時刻で見分ける。 */
 const runLabel = (kind: RunKind, now: Date) => {

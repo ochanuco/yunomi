@@ -124,7 +124,11 @@ const STANDUP_NO_ASK =
 
 /** 朝会と見回りの席は、席の ID の頭で見分ける。受付が作り直されても分かる。 */
 const runKindOf = (seat: Seat): RunKind =>
-	seat.threadId.startsWith("patrol-") ? "patrol" : "standup";
+	seat.threadId.startsWith("patrol-")
+		? "patrol"
+		: seat.threadId.startsWith("event-")
+			? "event"
+			: "standup";
 
 /**
  * 席を始められなかったときに投稿に書く文。持ち主が次に何をすればよいか分かるよう、止まった所だけを短く書く。
