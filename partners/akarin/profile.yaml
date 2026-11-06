@@ -98,3 +98,4 @@ capability_defaults:
   github_read: auto
   web_read: auto
   home_read: auto
+  goal_write: auto

@@ -1,15 +1,15 @@
-import { toModelJson } from "@yunomi/core";
-import { and, eq } from "drizzle-orm";
-import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
+import { err, ok, type Result, toModelJson } from "@yunomi/core";
+import { drizzle } from "drizzle-orm/d1";
 import * as v from "valibot";
 import { authenticate } from "./auth/access.ts";
-import { externalIdentities } from "./db/schema.ts";
 import { accessEnv } from "./env.ts";
 import { createMemoryRepo } from "./memory.ts";
 import { createOpenLoopRepo } from "./open-loops.ts";
 import { partnerProfile } from "./partners.ts";
 import {
 	createWorkNoteRepo,
+	findDiscordEntity as findEntity,
+	goalClosings,
 	WORK_NOTE_SUMMARY_MAX_LENGTH,
 	workNoteKinds,
 } from "./work-notes.ts";
@@ -29,6 +29,12 @@ const writeSchema = v.object({
 	),
 });
 
+const closeSchema = v.object({
+	discord_user_id: v.pipe(v.string(), v.nonEmpty()),
+	id: v.pipe(v.string(), v.nonEmpty()),
+	status: v.picklist(goalClosings),
+});
+
 const json = (body: unknown, status = 200) =>
 	new Response(toModelJson(body), {
 		status,
@@ -38,33 +44,44 @@ const json = (body: unknown, status = 200) =>
 const error = (status: number, error: string, message?: string) =>
 	Response.json(message ? { error, message } : { error }, { status });
 
-/**
- * entity は Talking で話したことのある相手だけを引く。ここでは作らないので、
- * Working の読み書きで entities / external_identities に行が増えることはない。
- */
-const findEntity = async (db: DrizzleD1Database, discordUserId: string) => {
-	const [row] = await db
-		.select({ entityId: externalIdentities.entityId })
-		.from(externalIdentities)
-		.where(
-			and(
-				eq(externalIdentities.provider, "discord"),
-				eq(externalIdentities.externalId, discordUserId),
+const readJson = async <T>(
+	request: Request,
+	schema: v.GenericSchema<unknown, T>,
+): Promise<Result<T, Response>> => {
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		return err(error(400, "invalid_json"));
+	}
+	const parsed = v.safeParse(schema, body);
+	if (!parsed.success) {
+		return err(
+			error(
+				400,
+				"validation_failed",
+				parsed.issues.map((i) => v.getDotPath(i) ?? i.message).join(", "),
 			),
 		);
-	return row?.entityId ?? null;
+	}
+	return ok(parsed.output);
 };
 
 /**
  * Working（仕事）のパートナーが Talking と同じ記憶を読み書きする口。
  * 会話の処理（DO の turn）を通さず D1 だけを触るので、関係性・興味・意見・直近の会話履歴は動かない。
+ * GET で読み、POST で 1 件足し、PATCH で目標を閉じる。
  */
 export async function handleWorkingMemory(
 	request: Request,
 	env: Env,
 	partnerId: string,
 ): Promise<Response> {
-	if (request.method !== "GET" && request.method !== "POST") {
+	if (
+		request.method !== "GET" &&
+		request.method !== "POST" &&
+		request.method !== "PATCH"
+	) {
 		return error(405, "method_not_allowed");
 	}
 	const auth = await authenticate(request, accessEnv(env));
@@ -89,9 +106,10 @@ export async function handleWorkingMemory(
 		}
 		const entityId = await findEntity(db, discordUserId);
 		if (!entityId) return error(404, "unknown_entity");
-		const [memory, openLoops] = await Promise.all([
+		const [memory, openLoops, goals] = await Promise.all([
 			createMemoryRepo(db).topFacts(partnerId, entityId),
 			createOpenLoopRepo(db).topOpen(partnerId, entityId),
+			createWorkNoteRepo(db).openGoals(partnerId, entityId),
 		]);
 		const line = (f: (typeof memory)[number]) => ({
 			predicate: f.predicate,
@@ -106,32 +124,59 @@ export async function handleWorkingMemory(
 				summary: l.summary,
 				due_at: l.dueAt,
 			})),
+			goals: goals.map((g) => ({
+				id: g.id,
+				summary: g.summary,
+				created_at: g.createdAt,
+			})),
 		});
 	}
 
-	let body: unknown;
-	try {
-		body = await request.json();
-	} catch {
-		return error(400, "invalid_json");
+	const notes = createWorkNoteRepo(db);
+	if (request.method === "PATCH") {
+		const parsed = await readJson(request, closeSchema);
+		if (!parsed.ok) return parsed.error;
+		const entityId = await findEntity(db, parsed.value.discord_user_id);
+		if (!entityId) return error(404, "unknown_entity");
+		const goal = await notes.closeGoal({
+			partnerId,
+			entityId,
+			id: parsed.value.id,
+			status: parsed.value.status,
+			now: new Date(),
+		});
+		if (!goal) return error(404, "unknown_goal");
+		return json({
+			id: goal.id,
+			summary: goal.summary,
+			status: parsed.value.status,
+		});
 	}
-	const parsed = v.safeParse(writeSchema, body);
-	if (!parsed.success) {
-		return error(
-			400,
-			"validation_failed",
-			parsed.issues.map((i) => v.getDotPath(i) ?? i.message).join(", "),
+
+	const parsed = await readJson(request, writeSchema);
+	if (!parsed.ok) return parsed.error;
+	const { discord_user_id, kind, summary } = parsed.value;
+	const entityId = await findEntity(db, discord_user_id);
+	if (!entityId) return error(404, "unknown_entity");
+	const now = new Date();
+	if (kind === "goal") {
+		const added = await notes.openGoal({ partnerId, entityId, summary, now });
+		if (!added.ok) {
+			return added.error.type === "duplicate"
+				? error(409, "duplicate_goal")
+				: error(409, "goal_limit");
+		}
+		return json(
+			{
+				id: added.value.id,
+				kind,
+				summary,
+				created_at: added.value.createdAt,
+			},
+			201,
 		);
 	}
-	const entityId = await findEntity(db, parsed.output.discord_user_id);
-	if (!entityId) return error(404, "unknown_entity");
-	const note = await createWorkNoteRepo(db).add({
-		partnerId,
-		entityId,
-		kind: parsed.output.kind,
-		summary: parsed.output.summary,
-		now: new Date(),
-	});
+	const note = await notes.add({ partnerId, entityId, kind, summary, now });
 	return json(
 		{
 			id: note.id,

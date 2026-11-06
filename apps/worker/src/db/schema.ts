@@ -349,9 +349,12 @@ export const workNotes = sqliteTable(
 		entityId: text("entity_id")
 			.notNull()
 			.references(() => entities.id),
-		kind: text("kind", { enum: ["decided", "done"] }).notNull(),
+		kind: text("kind", { enum: ["decided", "done", "goal"] }).notNull(),
 		summary: text("summary").notNull(),
 		createdAt: text("created_at").notNull(),
+		/** goal だけが持つ。decided と done は null。 */
+		status: text("status", { enum: ["open", "achieved", "dropped"] }),
+		closedAt: text("closed_at"),
 	},
 	(t) => [index("work_notes_entity").on(t.partnerId, t.entityId, t.createdAt)],
 );

@@ -103,8 +103,10 @@ const seedD1 = async (partner = PARTNER_ID) => {
 		partner,
 	);
 	await run(
-		`INSERT INTO work_notes (id, partner_id, entity_id, kind, summary, created_at)
-		VALUES ('w1', ?, 'e1', 'decided', '移行は来週に回す', '2026-10-06T00:00:00Z')`,
+		`INSERT INTO work_notes (id, partner_id, entity_id, kind, summary, created_at, status, closed_at)
+		VALUES ('w1', ?, 'e1', 'decided', '移行は来週に回す', '2026-10-06T00:00:00Z', NULL, NULL),
+		       ('w2', ?, 'e1', 'goal', '英語で発表する', '2026-10-07T00:00:00Z', 'open', NULL)`,
+		partner,
 		partner,
 	);
 };
@@ -191,7 +193,10 @@ describe("Snapshot の組み立て", () => {
 		expect(s.d1.open_loops[0]?.summary).toBe("面接の結果待ち");
 		expect(s.d1.interest_states).toHaveLength(1);
 		expect(s.d1.opinion_states).toHaveLength(1);
-		expect(s.d1.work_notes[0]?.summary).toBe("移行は来週に回す");
+		expect(s.d1.work_notes.map((n) => [n.summary, n.status])).toEqual([
+			["移行は来週に回す", null],
+			["英語で発表する", "open"],
+		]);
 		expect(s.do.state?.version).toBe(4);
 		expect(s.do.relationships[0]).toMatchObject({
 			entity_id: "e1",
@@ -420,7 +425,7 @@ describe("restore", () => {
 			counts: {
 				facts: 1,
 				open_loops: 1,
-				work_notes: 1,
+				work_notes: 2,
 				relationships: 1,
 				entities: 1,
 			},
@@ -467,7 +472,39 @@ describe("restore", () => {
 		const body = v.parse(SnapshotRestoreResponseSchema, await res.json());
 		expect(body.counts).toMatchObject({ facts: 1, work_notes: 0 });
 		expect(await count("facts")).toBe(1);
-		expect(await count("work_notes")).toBe(1);
+		expect(await count("work_notes")).toBe(2);
+	});
+
+	it("目標を持たない v2 の Snapshot も復元でき、status と closed_at は null で入る", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		const v2: Snapshot = {
+			...current,
+			schema_version: 2,
+			d1: {
+				...current.d1,
+				work_notes: current.d1.work_notes
+					.filter((n) => n.kind !== "goal")
+					.map(({ status: _s, closed_at: _c, ...n }) => ({
+						...n,
+						kind: n.kind as "decided" | "done",
+					})),
+			},
+		};
+		expect(parseSnapshot(v2).ok).toBe(true);
+		// v2 を名乗って goal を含むものは拒否する
+		expect(parseSnapshot({ ...current, schema_version: 2 }).ok).toBe(false);
+
+		const res = await restoreRequest(v2);
+		expect(res.status).toBe(200);
+		expect(
+			(
+				await env.DB.prepare(
+					"SELECT id, kind, status, closed_at FROM work_notes ORDER BY id",
+				).all()
+			).results,
+		).toEqual([{ id: "w1", kind: "decided", status: null, closed_at: null }]);
 	});
 
 	it("restore を 1 行のログに残す", async () => {

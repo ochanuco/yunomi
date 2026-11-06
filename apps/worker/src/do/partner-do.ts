@@ -49,6 +49,11 @@ import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
 import { otherPartners, partnerDiscord } from "../partner-discord.ts";
 import { defaultPartnerProfile, partnerProfile } from "../partners.ts";
 import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
+import {
+	createGoalStore,
+	createWorkNoteRepo,
+	type WorkNoteRepo,
+} from "../work-notes.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
@@ -111,6 +116,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #history: HistoryWriter;
 	readonly #memory: MemoryRepo;
 	readonly #openLoops: OpenLoopRepo;
+	readonly #workNotes: WorkNoteRepo;
 	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
 	readonly #conversationLog: ConversationLogWriter;
@@ -146,6 +152,7 @@ export class PartnerDO extends DurableObject<Env> {
 				history: this.#history,
 				memory: this.#memory,
 				openLoops: this.#openLoops,
+				goals: this.#workNotes,
 				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
 				onEngaged,
@@ -162,6 +169,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#history = createHistoryWriter(db);
 		this.#memory = createMemoryRepo(db);
 		this.#openLoops = createOpenLoopRepo(db);
+		this.#workNotes = createWorkNoteRepo(db);
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
 		this.#conversationLog = createConversationLogWriter(db);
@@ -177,6 +185,7 @@ export class PartnerDO extends DurableObject<Env> {
 					pending: createPendingStore(ctx.storage.sql),
 					policy: this.profile.capability_defaults,
 					now: () => this.now(),
+					goals: createGoalStore(db),
 				},
 			) ?? undefined;
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));
