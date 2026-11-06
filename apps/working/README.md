@@ -30,7 +30,7 @@ Orca の Linux 版は GitHub Releases（`stablyai/orca`）の `orca-ide_<版>_<a
 | `yunomi-working-claude` | `/home/worker/.claude` | Claude CLI のログイン情報（`.credentials.json`）、設定（`.claude.json`）、セッション（`projects/`） |
 | `yunomi-working-codex` | `/home/worker/.codex` | Codex CLI のログイン情報（`auth.json`）、設定（`config.toml`）、会話（`sessions/`） |
 | `yunomi-working-orca` | `/home/worker/.config` | orcad の本体と状態、pairing 済みの端末 |
-| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿と席の対応、Orca の Run と受付の端末（`seats.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、最後に届いた Mac の席の状態（`mac-state.json`）、記憶の口の接続情報（`memory-credentials.json`） |
+| `yunomi-working-state` | `/home/worker/state` | フォーラム投稿と席の対応、Orca の Run と受付の端末（`seats.json`）、許可を待っている操作（`approvals.json`）、止めた操作と許可の記録（`guard/`）、最後に届いた Mac の席の状態（`mac-state.json`）、活動ログの記録（`activity-log.jsonl`・`activity-log-state.json`）、記憶の口の接続情報（`memory-credentials.json`） |
 | `yunomi-working-work` | `/home/worker/work` | 席の元にする空の git リポジトリ（`seats/`）と、席の worktree（`orca/workspaces/seats/seat-<投稿の ID>/`）。席の Claude はその中に clone する。mise が入れた道具（`.mise/`）、pnpm の store（`.pnpm-store/`）、uv のキャッシュと Python（`.cache/uv/`・`.uv/`） |
 
 `CLAUDE_CONFIG_DIR` を `~/.claude` に向けているので、通常は `~/.claude.json` に置かれる設定も volume に入る。Orca は worktree を `~/orca/workspaces` に作るので、`~/orca` は `~/work/orca` への symlink にしてある。
@@ -95,7 +95,11 @@ gateway が仕事カテゴリの発言と、bot のメッセージに付けた�
 - 席の Claude が動いている間（席の状態が `working`）、投稿に入力中の表示を約 8 秒おきに送る。止まったら送らない。
 - 持ち主の依頼メッセージ（仕事チャンネルの依頼、投稿の最初のメッセージ、投稿への返事）に bot のリアクションを付ける。受付 👀、作業中 ⏳、完了 ✅、決めてほしい・引き継ぎ ❓。状態が変わると前の絵文字を外して付け替え、持ち主が新しく書くとそのメッセージに移す。
 - 席を作るとき投稿に bot のメッセージを 1 件置き、状態の欄にする。状態、作業中なら経過時間（いまの状態になってから）といまやっていること（席の最後の途中経過）を書く。内容が変わったときだけ書き換え、経過時間だけの変化は最短 5 分おき。
-- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": <合計>, "partners": { "yukarin": N, "akarin": M } }` として返す。朝会の席は数えない。gateway が自分のパートナーの数を bot のステータスに出す。
+- 作業中の席の数を `GET /seats/summary`（`Authorization: Bearer <WORKING_TOKEN>`）で `{ "working": <合計>, "partners": { "yukarin": N, "akarin": M }, "usage": { ... } }` として返す。朝会の席は数えない。gateway が自分のパートナーの分を bot のステータスに出す。
+- `usage` はパートナーの席で動く CLI のサブスクリプションの使用率で、Yukarin は Claude、Akarin は Codex。`{ "fiveHour": { "usedPercent": 32, "resetsAt": <UNIX ミリ秒 | null> }, "weekly": { ... } }` の形で、読めていないパートナーは載せない。
+  - 5 分おきに読む。Claude は `~/.claude/.credentials.json`（`CLAUDE_CONFIG_DIR` があればその中）のトークンで `https://api.anthropic.com/api/oauth/usage` を読む。Claude Code の `/usage` と同じ非公開の API。トークンの期限が切れていれば読まず、自分では更新しない（席の Claude が動けば CLI が更新する）。
+  - Codex は `codex app-server` を起こして `account/rateLimits/read` を呼ぶ。primary が 5 時間枠、secondary が週枠。Akarin の席が無効なら読まない。
+  - 一度読めなくても最後の値を 15 分残し、それより古くなったら載せない。
 
 ### 席の Claude に渡すもの
 
@@ -221,6 +225,15 @@ Renovate の PR は持ち主の許しで、朝会と見回りの席が片付け�
 - 変わった件があれば、見回りの席（`seat-patrol-<ID>`）に変わった件と記憶、席の状態を渡す。席の扱いと投稿のしかたは朝会と同じで、投稿の最後には見回りの時刻が付く。ログインの期限は朝会だけが投稿する。
 - 取れなかった材料は前の回に見たものを残すので、次に取れたときに全部を新しい件とは見ない。
 
+### 活動ログ
+
+`ACTIVITY_LOG_THREAD_ID` を設定すると、受付は毎日 `ACTIVITY_LOG_TIME`（既定は `23:30`、Asia/Tokyo）に、前の回からその時刻までに席がしたことを、そのスレッドへ Yukarin の bot で 1 投稿にまとめる。設定しなければまとめない。
+
+- 席が完了・引き継ぎで閉じたときと、hook が止めた操作の許可を求めたとき（朝会・見回り・GitHub の知らせの席が止められた操作の投稿を含む）に、受付が `STATE_DIR/activity-log.jsonl` に 1 行ずつ残す。行には投稿の件名、担当、止めた道具の名前だけを書き、コマンドの本文や席の出力は残さない。
+- 投稿には、終えた仕事、Mac に引き継いだ仕事、止められた操作（投稿ごとに道具の名前と件数）、Working が出した PR（`GH_TOKEN` の人が `STANDUP_GITHUB_OWNER` の repo に `dev/` ブランチから出したもの）のうち、その範囲でマージされたものと新しく出したものを並べる。
+- 何もなかった日は投稿しない。まとめ終えた時刻は `STATE_DIR/activity-log-state.json` に残し、それより前の行は消す。初めての回は 24 時間前から見る。受付が落ちていて回を飛ばしたら、次の回に前の回からの分をまとめる。
+- 投稿に失敗した回と、PR を取れず席の記録も無かった回は、まとめ終えたと残さず、次の回に同じ範囲を見直す。
+
 ### GitHub の出来事
 
 CI の失敗、PR のレビュー、issue と PR のコメントがあると、見回りの時刻を待たずに小さな席を立てる。受付は公開していないので、GitHub の webhook は Worker が受けて溜め（Worker の README の「GitHub の出来事（webhook）」）、受付が 1 分ごとに取りに行く。朝会が有効で、`YUNOMI_URL` と `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`（記憶と同じ Worker の service token）がそろっているときだけ動く。
@@ -271,6 +284,8 @@ CI の失敗、PR のレビュー、issue と PR のコメントがあると、�
 | `STANDUP_GITHUB_OWNER` | いいえ | 朝会で PR と申し送りを探す GitHub の owner。既定は `ochanuco` |
 | `HEARTBEAT_ENABLED` | いいえ | `false` で見回りを止め、朝会だけにする。既定は `true` |
 | `HEARTBEAT_INTERVAL_MINUTES` | いいえ | 見回りの間隔（分、30 以上）。既定は `120` |
+| `ACTIVITY_LOG_THREAD_ID` | いいえ | 活動ログを投稿するスレッドの ID。設定したときだけ活動ログをまとめる |
+| `ACTIVITY_LOG_TIME` | いいえ | 活動ログをまとめる時刻（`HH:MM`、Asia/Tokyo）。既定は `23:30` |
 | `CLAUDE_BIN` | いいえ | 受付が件名の要約とログインの期限に使う Claude CLI のパス。既定は `claude` |
 | `ORCA_BIN` | いいえ | Orca の CLI。既定は `orca-ide` |
 | `SEATS_REPO` | いいえ | 席の元にする空の git リポジトリ。既定は `~/work/seats` |

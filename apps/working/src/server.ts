@@ -5,6 +5,7 @@ import {
 	type Server,
 	type ServerResponse,
 } from "node:http";
+import type { PartnerId } from "@yunomi/core";
 import {
 	DISCORD_BUTTON_PRESSED,
 	type DiscordButtonPressedEnvelope,
@@ -15,6 +16,7 @@ import {
 import * as v from "valibot";
 import type { SeatSummary } from "./intake.ts";
 import type { Logger } from "./logger.ts";
+import type { Usage } from "./usage.ts";
 
 export const EVENTS_PATH = "/events";
 export const SEATS_SUMMARY_PATH = "/seats/summary";
@@ -25,10 +27,14 @@ export type ServerDeps = {
 	accept: (envelope: DiscordMessageCreatedEnvelope) => void;
 	/** 仕事カテゴリで押されたボタン。 */
 	press: (envelope: DiscordButtonPressedEnvelope) => void;
-	/** 作業中の席の数。gateway が bot のステータスに出す。 */
-	/** working は全体の数、partners はパートナーごとの数。gateway は自分の分を読む。 */
-	seatSummary: () => SeatSummary;
+	/** gateway が bot のステータスに出す。各 gateway は自分のパートナーの分を読む。 */
+	seatSummary: () => WorkingSummary;
 	logger: Logger;
+};
+
+/** 作業中の席の数と、パートナーの席で動く CLI の使用率。読めていない使用率は載せない。 */
+export type WorkingSummary = SeatSummary & {
+	usage: Partial<Record<PartnerId, Usage>>;
 };
 
 export const authorized = (

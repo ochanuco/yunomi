@@ -3,6 +3,12 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
+import {
+	gatherActivityPrs,
+	openActivityLog,
+	postActivityLog,
+	startDailyTimer,
+} from "./activity-log.ts";
 import { openApprovalStore } from "./approval-store.ts";
 import {
 	createAttachmentCollector,
@@ -21,7 +27,7 @@ import {
 } from "./github-events.ts";
 import { guardDirOf } from "./guard/env.ts";
 import { createLedger } from "./guard/ledger.ts";
-import { createIntake, type SeatPartner } from "./intake.ts";
+import { agentOf, createIntake, type SeatPartner } from "./intake.ts";
 import { createLogger } from "./logger.ts";
 import { createMacStateServer, openMacStateStore } from "./mac-state.ts";
 import { credentialsPathOf } from "./memory-cli/cli.ts";
@@ -34,6 +40,13 @@ import { createWorkingServer } from "./server.ts";
 import { finishStandup, startStandup } from "./standup.ts";
 import { gatherStandupMaterials } from "./standup-materials.ts";
 import { parseQuietHours, startStandupTimer } from "./standup-timer.ts";
+import {
+	claudeCredentialsPathOf,
+	createClaudeUsageReader,
+	createCodexUsageReader,
+	startUsagePolling,
+	usageByPartner,
+} from "./usage.ts";
 
 const config = loadConfig(process.env);
 if (!config.ok) {
@@ -144,12 +157,14 @@ const approvals = await openApprovalStore(cfg.stateDir);
 const ledger = createLedger(guardDirOf(cfg.stateDir));
 const macState = openMacStateStore(cfg.stateDir);
 const patrolStore = openPatrolStore(cfg.stateDir);
+const activityLog = openActivityLog(cfg.stateDir);
 const standupDeps = {
 	discord,
 	approvals,
 	ledger,
 	workForumChannelId: cfg.workForumChannelId,
 	workTextChannelId: cfg.workTextChannelId,
+	recordActivity: activityLog.record,
 	logger,
 };
 
@@ -218,6 +233,7 @@ const intake = createIntake({
 			logger.warn("memory write failed", { stderr: out.stderr.slice(0, 300) });
 		}
 	},
+	recordActivity: activityLog.record,
 	standupDone: async (text, blocked, kind) => {
 		await finishStandup(standupDeps, text, blocked, kind);
 	},
@@ -272,6 +288,23 @@ const repoMapSync = startRepoMapSync({
 	intervalMs: REPO_MAP_SYNC_MS,
 });
 
+const usage = startUsagePolling({
+	readers: {
+		claude: createClaudeUsageReader({
+			credentialsPath: claudeCredentialsPathOf(process.env),
+		}),
+		...(akarin
+			? {
+					codex: createCodexUsageReader({
+						bin: "codex",
+						env: { ...env, CODEX_HOME: cfg.codexHome },
+					}),
+				}
+			: {}),
+	},
+	logger,
+});
+
 const server = createWorkingServer({
 	sharedToken: cfg.sharedToken,
 	accept: (envelope) => {
@@ -290,7 +323,10 @@ const server = createWorkingServer({
 			});
 		});
 	},
-	seatSummary: intake.summary,
+	seatSummary: () => ({
+		...intake.summary(),
+		usage: usageByPartner(usage.current(), agentOf),
+	}),
 	logger,
 });
 server.listen(cfg.port, () => {
@@ -353,6 +389,35 @@ const standupTimer = cfg.standup.enabled
 		})
 	: null;
 
+const activityLogConfig = cfg.activityLog;
+const activityLogTimer = activityLogConfig
+	? startDailyTimer({
+			at: activityLogConfig.at,
+			run: () =>
+				postActivityLog({
+					log: activityLog,
+					gatherPrs: (since, until) =>
+						gatherActivityPrs({
+							exec: spawnExec,
+							env,
+							cwd: cfg.workDir,
+							owner: cfg.standup.githubOwner,
+							since,
+							until,
+							logger,
+						}),
+					discord,
+					threadId: activityLogConfig.threadId,
+					now: () => new Date(),
+					logger,
+				}),
+			logger,
+		})
+	: null;
+if (!activityLogConfig) {
+	logger.info("activity log disabled", { reason: "ACTIVITY_LOG_THREAD_ID" });
+}
+
 // 自分の書いたコメントで席を立てないよう、GH_TOKEN の持ち主を一度だけ引く
 const githubSelfLogin = async (): Promise<string | null> => {
 	const out = await spawnExec("gh", ["api", "user", "--jq", ".login"], {
@@ -407,7 +472,9 @@ const shutdown = (signal: string) => {
 	stopped = true;
 	clearInterval(sleepTimer);
 	repoMapSync.stop();
+	usage.stop();
 	standupTimer?.stop();
+	activityLogTimer?.stop();
 	githubEventPoller?.stop();
 	macStateServer?.close();
 	server.close();

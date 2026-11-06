@@ -8,6 +8,7 @@ import {
 import { join } from "node:path";
 import { ok, type PartnerId } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
+import type { ActivityEntry } from "./activity-log.ts";
 import { openApprovalStore } from "./approval-store.ts";
 import {
 	type ChimeraImages,
@@ -83,6 +84,7 @@ const setup = async (
 	let clock = T0.getTime();
 	const remembered: string[] = [];
 	const rememberedBy: PartnerId[] = [];
+	const activity: ActivityEntry[] = [];
 	const writes = { yukarin: [] as string[], akarin: [] as string[] };
 	const standup: { text: string; blocked: number; kind: string }[] = [];
 	const seats = await openSeatStore(stateDir);
@@ -111,6 +113,9 @@ const setup = async (
 			remembered.push(s);
 			rememberedBy.push(partner);
 		},
+		recordActivity: async (e) => {
+			activity.push(e);
+		},
 		standupDone: async (text, blocked, kind) => {
 			standup.push({ text, blocked: blocked.length, kind });
 		},
@@ -137,6 +142,7 @@ const setup = async (
 		stateDir,
 		remembered,
 		rememberedBy,
+		activity,
 		writes,
 		standup,
 		intake: createIntake(deps),
@@ -468,6 +474,16 @@ describe("取り消せない操作で止まったとき", () => {
 		expect(s.d.tagsOf("p1")).toEqual(["tag-decide"]);
 		expect(s.seats.get("p1")?.status).toBe("waiting");
 		expect(s.o.opsOf("removeWorktree")).toEqual([]);
+		// 活動ログには道具の名前だけを残し、コマンドの本文は残さない
+		expect(s.activity).toEqual([
+			expect.objectContaining({
+				kind: "blocked",
+				threadId: "p1",
+				title: "README の誤字",
+				tools: ["Bash"],
+			}),
+		]);
+		expect(JSON.stringify(s.activity)).not.toContain("wrangler");
 	});
 });
 
@@ -486,6 +502,16 @@ describe("席の完了報告", () => {
 		expect(s.d.sentTo("p1").at(-1)).toBe("直して PR を出しました");
 		expect(s.d.tagsOf("p1")).toEqual(["tag-done"]);
 		expect(s.remembered).toEqual(["仕事フォーラムの「README の誤字」を終えた"]);
+		expect(s.activity).toEqual([
+			{
+				at: T0,
+				kind: "done",
+				threadId: "p1",
+				title: "README の誤字",
+				partner: "yukarin",
+				tools: [],
+			},
+		]);
 		expect(s.o.opsOf("stopSeat")).toEqual([
 			expect.objectContaining({
 				dispatchId: seat.dispatchId,
@@ -509,6 +535,7 @@ describe("席の完了報告", () => {
 		);
 		expect(s.d.tagsOf("p1")).toEqual(["tag-handoff"]);
 		expect(s.remembered[0]).toContain("Mac に引き継いだ");
+		expect(s.activity.map((e) => e.kind)).toEqual(["handoff"]);
 		expect(s.seats.get("p1")).toBeNull();
 	});
 

@@ -4,6 +4,7 @@ import type {
 	DiscordButtonPressedEnvelope,
 	DiscordMessageCreatedEnvelope,
 } from "@yunomi/protocol";
+import type { ActivityEntry, ActivityKind } from "./activity-log.ts";
 import {
 	APPROVAL_BUTTONS,
 	type ApprovalAnswer,
@@ -80,6 +81,8 @@ export type IntakeDeps = {
 	collectAttachments: AttachmentCollector;
 	/** 終わった仕事を、席を受け持ったパートナーの記憶に 1 行残す。 */
 	remember: (summary: string, partner: PartnerId) => Promise<void>;
+	/** 席がしたこと（閉じた・止められた）を活動ログに 1 行残す。 */
+	recordActivity?: (entry: ActivityEntry) => Promise<void>;
 	/** 朝会か見回りの席が返した決めてほしいことを投稿にする。 */
 	standupDone: (
 		text: string,
@@ -517,6 +520,29 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		});
 	};
 
+	const record = async (
+		threadId: string,
+		kind: ActivityKind,
+		tools: string[],
+		knownTitle?: string,
+	) => {
+		if (!deps.recordActivity) return;
+		const title =
+			knownTitle ?? (await titleOf(threadId)) ?? "仕事フォーラムの投稿";
+		await deps
+			.recordActivity({
+				at: now(),
+				kind,
+				threadId,
+				title,
+				partner: partnerOf(threadId),
+				tools,
+			})
+			.catch((e: unknown) =>
+				log.warn("activity record failed", { error: String(e) }),
+			);
+	};
+
 	/** hook が止めた操作を投稿に書き、許可を待つ。lead は同じメッセージの頭に置く文。 */
 	const postWithApproval = async (
 		threadId: string,
@@ -551,6 +577,11 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 			return;
 		}
 		const operations = blocked.map((b) => b.operation);
+		await record(
+			threadId,
+			"blocked",
+			operations.map((o) => o.tool),
+		);
 		await deps.approvals.set(threadId, {
 			messageIds: sent.value.messageIds,
 			operations,
@@ -882,6 +913,12 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 				? `仕事フォーラムの「${title}」を終えた`
 				: `仕事フォーラムの「${title}」を Mac に引き継いだ`,
 			partnerOf(threadId),
+		);
+		await record(
+			threadId,
+			taken.status === "完了" ? "done" : "handoff",
+			[],
+			title,
 		);
 		await closeSeat(seat);
 		log.info("seat done", { thread_id: threadId, status: taken.status });
