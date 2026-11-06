@@ -1,3 +1,4 @@
+import { err, externalServiceUnavailable } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivityEntry } from "./activity-log.ts";
 import type { ExecResult } from "./exec.ts";
@@ -365,6 +366,36 @@ describe("finishStandup", () => {
 		expect(t.discord.posts).toEqual([]);
 		expect(t.discord.sentTo(TEXT)).toEqual([
 			"RTX3090 の中古が A 店に 89,800 円で出ていました https://shop.example/gpu/2\nB 店にも 92,000 円で https://b.example/3",
+		]);
+	});
+
+	it("見張りの新着が書けなければ、間をおいてやり直す", async () => {
+		const t = setup();
+		const send = t.deps.discord.send;
+		let failures = 2;
+		const waits: number[] = [];
+		const deps = {
+			...t.deps,
+			discord: {
+				...t.deps.discord,
+				send: (async (...args: Parameters<typeof send>) =>
+					failures-- > 0
+						? err(externalServiceUnavailable({ service: "discord" }))
+						: send(...args)) as typeof send,
+			},
+			sleep: async (ms: number) => {
+				waits.push(ms);
+			},
+		};
+		await finishStandup(
+			deps,
+			'```json\n{"decisions": [], "notices": ["A 店に出ていました https://a.example/1"]}\n```',
+			[],
+			"patrol",
+		);
+		expect(waits).toEqual([10_000, 60_000]);
+		expect(t.discord.sentTo(TEXT)).toEqual([
+			"A 店に出ていました https://a.example/1",
 		]);
 	});
 
