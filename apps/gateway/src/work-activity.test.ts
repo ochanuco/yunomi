@@ -36,12 +36,24 @@ describe("workActivityText", () => {
 });
 
 describe("usageBioBody", () => {
-	it("ゲージとリセット時刻を出し、時刻は分を切り上げる。今日のリセットは時刻だけ", () => {
+	it("使用率とリセット時刻の下にゲージを置き、時刻は近いほうの分に丸める。今日のリセットは時刻だけ", () => {
 		expect(usageBioBody(usage, now)).toBe(
 			[
-				"5時間 ▰▰▰▰▰▱▱▱▱▱ 50%・19:00 に戻る",
-				"週間 ▰▰▱▱▱▱▱▱▱▱ 22%・11/12(木) 1:00 に戻る",
+				"5時間 50%・19:00 に戻る",
+				"▰▰▰▰▰▱▱▱▱▱",
+				"週間 22%・11/12(木) 1:00 に戻る",
+				"▰▰▱▱▱▱▱▱▱▱",
 			].join("\n"),
+		);
+		const late: Usage = {
+			...usage,
+			fiveHour: {
+				...usage.fiveHour,
+				resetsAt: Date.parse("2026-11-06T10:00:00.6Z"),
+			},
+		};
+		expect(usageBioBody(late, now).split("\n")[0]).toBe(
+			"5時間 50%・19:00 に戻る",
 		);
 	});
 
@@ -54,7 +66,7 @@ describe("usageBioBody", () => {
 				},
 				now,
 			),
-		).toBe("5時間 ▱▱▱▱▱▱▱▱▱▱ 0%\n週間 ▰▰▰▰▰▰▰▰▰▰ 100%");
+		).toBe("5時間 0%\n▱▱▱▱▱▱▱▱▱▱\n週間 100%\n▰▰▰▰▰▰▰▰▰▰");
 		expect(usageBioBody(null, now)).toBe("");
 	});
 });
@@ -126,8 +138,8 @@ describe("startWorkActivity", () => {
 		stop();
 
 		expect(setBio.mock.calls.map(([t]) => t)).toEqual([
-			`使用状況（12:41 時点）\n${usageBioBody(usage, now)}`,
-			`使用状況（12:44 時点）\n${usageBioBody(more, now)}`,
+			`${usageBioBody(usage, now)}\n（12:41 時点）`,
+			`${usageBioBody(more, now)}\n（12:44 時点）`,
 			"",
 		]);
 	});
