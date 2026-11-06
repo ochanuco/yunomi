@@ -167,17 +167,20 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 席の Claude は `yunomi-memory` で、Talking と共有する長い記憶を読み書きする。受付も、席が完了したときと Mac に引き継いだときに 1 行残す。決まったことと終わったことは、そのつど 1 件 1 行ずつ残すよう `WORKING_INSTRUCTIONS` に書いてある。
 
 ```sh
-yunomi-memory read                                         # 事実・出来事・open loop・目標を JSON で出す
+yunomi-memory read                                         # 事実・出来事・open loop・目標・見張りを JSON で出す
 yunomi-memory write --kind decided --summary "<1行の要約>"  # 決まったこと
 yunomi-memory write --kind done --summary "<1行の要約>"     # 終わったこと
 yunomi-memory write --kind goal --summary "<1行の目標>"     # 持ち主の目標。id を返す
 yunomi-memory close --id <目標の id> --status achieved      # 目標を閉じる（やめたら dropped）
+yunomi-memory watch-add --query "<何を>" --source "<どこを>" --interval-hours 6 --until "2026-12-31T23:59:00+09:00"  # 見張りを足す。id と登録した内容を出す
+yunomi-memory watch-stop --id <見張りの id>                  # 見張りを止める
 yunomi-memory watch-checked --id <見張りの id> --seen "<key>"  # 見張りを調べ終えた。--seen は知らせたもの（0 件以上）
 ```
 
 - 呼ぶ先は Worker の `/v1/partners/<パートナー>/working/memory`。パートナーは環境変数 `YUNOMI_PARTNER`（Akarin の席の Codex がコマンドに渡す）、無ければ `yukarin`。受付が完了のときに残す 1 行も、担当のパートナーの記憶に書く。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
 - 受付は起動時に `YUNOMI_URL` と `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` を `STATE_DIR/memory-credentials.json`（権限 600）に書き、`yunomi-memory` はそこから読む。service token は席の Claude の環境変数に載せず、標準出力にも標準エラーにも出さない。3 つのどれかが欠けていれば、ファイルを消して記憶の道具を使えなくする。
 - `summary` は改行を含まない 200 字以内。
+- `watch-add` の項目と検証は Talking の道具 `watch_add` と同じ。`--query` は改行を含まない 200 字以内、`--source` は店やサイトの名前か URL で 1 件 300 字以内・5 件まで（省くと普通の検索）、`--interval-hours` は 2 〜 168 の整数（省くと 24）、`--until` はタイムゾーン付きの ISO 8601（省くと期限なし）。日時の形と過去の期限は Worker が弾き、理由を標準エラーに出す。同じ `--query` の見張りがあるときと、動いている見張りが 10 件あるときは 409 で足さない。
 
 ### 席の状態の受け口
 
@@ -201,7 +204,7 @@ Renovate の PR は持ち主の許しで、朝会と見回りの席が片付け�
 
 ### 見張り
 
-持ち主が会話で頼んだ見張り（Worker の README の「見張り」）は、朝会と見回りの席が調べる。
+持ち主が会話で頼んだ見張り（Worker の README の「見張り」）と、仕事の投稿で頼まれて席が `yunomi-memory watch-add` で足した見張りは、朝会と見回りの席が調べる。
 
 - 記憶の `watches` のうち `due`（前に調べてから間隔が過ぎた、まだ調べていない）のものだけを `due_watches` として席に渡す。見回りは GitHub に変わりが無くても、時間が来た見張りがあれば席を立てる。どちらも無い回は席を立てない。
 - 席は持ち主に確認せず、WebSearch と WebFetch で調べる（auto モードが通す読み取り）。URL の場所は検索よりそのページを直接読む。

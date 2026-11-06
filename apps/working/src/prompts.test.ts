@@ -32,6 +32,27 @@ describe("buildSeatPreamble", () => {
 	});
 });
 
+describe("workingInstructions", () => {
+	it.each(["Yukarin", "Akarin"])(
+		"%s の席は見張りを自分で登録・停止し、登録した内容を返事に書く",
+		(name) => {
+			const text = buildSeatPreamble({
+				persona: "",
+				handoffPrompt: "",
+				issueTemplate: "",
+				partnerName: name,
+			});
+			expect(text).toContain("yunomi-memory watch-add --query");
+			expect(text).toContain("--source");
+			expect(text).toContain("--interval-hours");
+			expect(text).toContain("--until");
+			expect(text).toContain("yunomi-memory watch-stop --id");
+			expect(text).toContain("何を・どこを・何時間おきに見張るか");
+			expect(text).not.toContain("登録と停止は会話のとき");
+		},
+	);
+});
+
 describe("acceptTitle", () => {
 	it("1 行の件名はそのまま、件名: や括弧は外して受ける", () => {
 		expect(acceptTitle("先月分の請求書の整理\n")).toBe("先月分の請求書の整理");

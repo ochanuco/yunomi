@@ -26,12 +26,22 @@ export const SUMMARY_MAX_LENGTH = 200;
 /** Worker の WATCH_SEEN_KEY_MAX_LENGTH と揃える。 */
 export const SEEN_KEY_MAX_LENGTH = 200;
 
+/** Talking の道具 watch_add（packages/capabilities の definitions/watch.ts）と揃える。日時の形と過去の期限は Worker が同じ検証で弾く。 */
+export const WATCH_QUERY_MAX_LENGTH = 200;
+export const WATCH_SOURCE_MAX_LENGTH = 300;
+export const WATCH_SOURCES_MAX = 5;
+export const WATCH_INTERVAL_MIN_HOURS = 2;
+export const WATCH_INTERVAL_MAX_HOURS = 24 * 7;
+export const WATCH_INTERVAL_DEFAULT_HOURS = 24;
+
 export type CliOutput = { code: number; stdout: string; stderr: string };
 
 const USAGE = `使い方:
   yunomi-memory read
   yunomi-memory write --kind decided|done|goal --summary "<1行の要約>"
   yunomi-memory close --id <目標の id> --status achieved|dropped
+  yunomi-memory watch-add --query "<何を>" [--source "<どこを>"]... [--interval-hours <時間>] [--until "<ISO 8601>"]
+  yunomi-memory watch-stop --id <見張りの id>
   yunomi-memory watch-checked --id <見張りの id> [--seen "<知らせたものの key>"]...
 `;
 
@@ -79,6 +89,8 @@ export const runMemoryCli = async (
 		command !== "read" &&
 		command !== "write" &&
 		command !== "close" &&
+		command !== "watch-add" &&
+		command !== "watch-stop" &&
 		command !== "watch-checked"
 	) {
 		return fail(2, USAGE);
@@ -89,6 +101,10 @@ export const runMemoryCli = async (
 		id?: string;
 		status?: string;
 		seen?: string[];
+		query?: string;
+		source?: string[];
+		"interval-hours"?: string;
+		until?: string;
 	};
 	try {
 		values = parseArgs({
@@ -99,6 +115,10 @@ export const runMemoryCli = async (
 				id: { type: "string" },
 				status: { type: "string" },
 				seen: { type: "string", multiple: true },
+				query: { type: "string" },
+				source: { type: "string", multiple: true },
+				"interval-hours": { type: "string" },
+				until: { type: "string" },
 			},
 			strict: true,
 			allowPositionals: false,
@@ -113,6 +133,8 @@ export const runMemoryCli = async (
 		read: [],
 		write: ["kind", "summary"],
 		close: ["id", "status"],
+		"watch-add": ["query", "source", "interval-hours", "until"],
+		"watch-stop": ["id"],
 		"watch-checked": ["id", "seen"],
 	};
 	if (given.some((k) => !allowed[command].includes(k))) return fail(2, USAGE);
@@ -136,6 +158,55 @@ export const runMemoryCli = async (
 		) {
 			return fail(2, `--status は achieved か dropped\n${USAGE}`);
 		}
+		values.id = (values.id ?? "").trim();
+	}
+	let watch:
+		| {
+				query: string;
+				sources: string[];
+				interval_hours: number;
+				until: string | null;
+		  }
+		| undefined;
+	if (command === "watch-add") {
+		const query = (values.query ?? "").trim();
+		if (query === "" || /[\r\n]/.test(query)) {
+			return fail(2, "--query は改行を含まない 1 行で書く");
+		}
+		if (query.length > WATCH_QUERY_MAX_LENGTH) {
+			return fail(2, `--query は ${WATCH_QUERY_MAX_LENGTH} 字以内`);
+		}
+		const sources = (values.source ?? []).map((s) => s.trim());
+		if (sources.some((s) => s === "" || /[\r\n]/.test(s))) {
+			return fail(2, "--source は改行を含まない 1 行で書く");
+		}
+		if (sources.some((s) => s.length > WATCH_SOURCE_MAX_LENGTH)) {
+			return fail(2, `--source は ${WATCH_SOURCE_MAX_LENGTH} 字以内`);
+		}
+		if (sources.length > WATCH_SOURCES_MAX) {
+			return fail(2, `--source は ${WATCH_SOURCES_MAX} 件まで`);
+		}
+		const hoursText =
+			values["interval-hours"]?.trim() ?? String(WATCH_INTERVAL_DEFAULT_HOURS);
+		const hours = Number(hoursText);
+		if (
+			!/^\d+$/.test(hoursText) ||
+			hours < WATCH_INTERVAL_MIN_HOURS ||
+			hours > WATCH_INTERVAL_MAX_HOURS
+		) {
+			return fail(
+				2,
+				`--interval-hours は ${WATCH_INTERVAL_MIN_HOURS} 〜 ${WATCH_INTERVAL_MAX_HOURS} の整数`,
+			);
+		}
+		const until = values.until?.trim();
+		if (until !== undefined && (until === "" || /[\r\n]/.test(until))) {
+			return fail(2, "--until はタイムゾーン付きの ISO 8601 の日時で書く");
+		}
+		watch = { query, sources, interval_hours: hours, until: until ?? null };
+	}
+	if (command === "watch-stop") {
+		if ((values.id ?? "").trim() === "") return fail(2, USAGE);
 		values.id = (values.id ?? "").trim();
 	}
 	if (command === "watch-checked") {
@@ -171,7 +242,8 @@ export const runMemoryCli = async (
 						{ headers, signal: AbortSignal.timeout(15_000) },
 					)
 				: await doFetch(base, {
-						method: command === "write" ? "POST" : "PATCH",
+						method:
+							command === "write" || command === "watch-add" ? "POST" : "PATCH",
 						headers: { ...headers, "content-type": "application/json" },
 						body: JSON.stringify(
 							command === "write"
@@ -180,17 +252,25 @@ export const runMemoryCli = async (
 										kind: values.kind,
 										summary: values.summary,
 									}
-								: command === "close"
-									? {
-											discord_user_id: creds.discord_user_id,
-											id: values.id,
-											status: values.status,
-										}
-									: {
-											discord_user_id: creds.discord_user_id,
-											watch_id: values.id,
-											seen: values.seen,
-										},
+								: command === "watch-add"
+									? { discord_user_id: creds.discord_user_id, watch }
+									: command === "watch-stop"
+										? {
+												discord_user_id: creds.discord_user_id,
+												watch_id: values.id,
+												status: "stopped",
+											}
+										: command === "close"
+											? {
+													discord_user_id: creds.discord_user_id,
+													id: values.id,
+													status: values.status,
+												}
+											: {
+													discord_user_id: creds.discord_user_id,
+													watch_id: values.id,
+													seen: values.seen,
+												},
 						),
 						signal: AbortSignal.timeout(15_000),
 					});
@@ -201,12 +281,42 @@ export const runMemoryCli = async (
 	if (!res.ok) {
 		let code = "";
 		try {
-			const e = JSON.parse(text) as { error?: unknown };
+			const e = JSON.parse(text) as { error?: unknown; message?: unknown };
 			if (typeof e.error === "string") code = `: ${e.error}`;
+			if (typeof e.message === "string") code += ` (${e.message})`;
 		} catch {}
 		return fail(1, `記憶の口が ${res.status} を返した${code}`);
 	}
 	if (command === "read") return { code: 0, stdout: `${text}\n`, stderr: "" };
+	if (command === "watch-add" && watch) {
+		let id = "";
+		try {
+			const r = JSON.parse(text) as { id?: unknown };
+			if (typeof r.id === "string") id = r.id;
+		} catch {}
+		const where =
+			watch.sources.length === 0 ? "普通の検索" : watch.sources.join("、");
+		const lines = [
+			`見張りを足した (id: ${id})`,
+			`何を: ${watch.query}`,
+			`どこを: ${where}`,
+			`間隔: ${watch.interval_hours} 時間おき`,
+			`期限: ${watch.until ?? "なし"}`,
+		];
+		return { code: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
+	}
+	if (command === "watch-stop") {
+		let query = "";
+		try {
+			const r = JSON.parse(text) as { query?: unknown };
+			if (typeof r.query === "string") query = ` ${r.query}`;
+		} catch {}
+		return {
+			code: 0,
+			stdout: `見張りを止めた:${query} (id: ${values.id})\n`,
+			stderr: "",
+		};
+	}
 	if (command === "watch-checked") {
 		return {
 			code: 0,

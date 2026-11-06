@@ -158,6 +158,8 @@ Working（仕事）の Yukarin は `/v1/partners/:partnerId/working/memory` で 
 
 - `GET ?discord_user_id=...`: `facts`（続く事実）/ `episodes`（できごと。仕事の1行を含む）/ `open_loops`（未決）を、Talking の prompt と同じ選び方と順で返す。`goals` は open な目標（`id` / `summary` / `created_at`）を古い順に全件返す。`watches` は動いている見張り（期限切れを除く）を古い順に全件、`due`（前に調べてから間隔が過ぎたか、まだ調べていない）と `seen`（前に知らせたものの key）付きで返す。時刻は `toModelJson` で `YYYY-MM-DD HH:mm JST` にする。
 - `POST { discord_user_id, kind: "decided" | "done" | "goal", summary }`: 決まったこと・終わったこと・目標を1行（改行なし、200 字まで）で `work_notes` に残す。目標は `status: "open"` で入り、同じ文面の open な目標があれば 409 `duplicate_goal`、open な目標が `OPEN_GOAL_LIMIT`（10）件あれば 409 `goal_limit`。
+- `POST { discord_user_id, watch: { query, sources, interval_hours, until } }`: 席が持ち主に頼まれた見張りを 1 件足す。`watch` は道具 `watch_add` と同じ `parseWatchAdd`（`@yunomi/capabilities`）で検証し、通らなければ 400 `validation_failed`（`message` に理由）。同じ `query` の見張りがあれば 409 `duplicate_watch`、`ACTIVE_WATCH_LIMIT` 件あれば 409 `watch_limit`。201 で `id` と保存した `query` / `sources` / `interval_minutes` / `until_at` を返す。
+- `PATCH { discord_user_id, watch_id, status: "stopped" }`: 動いている見張りを止める。動いている見張りに無い `watch_id` は 404 `unknown_watch`。
 - `PATCH { discord_user_id, id, status: "achieved" | "dropped" }`: open な目標を閉じ、`closed_at` を入れる。その人の open な目標に無い `id` は 404 `unknown_goal`。
 - `PATCH { discord_user_id, watch_id, seen }`: 見回りの席が見張りを調べ終えたことを残す。`last_checked_at` を今にし、`seen` の key（200 字まで）を重ねずに足す。覚えるのは新しい `WATCH_SEEN_LIMIT`（100）件まで。動いている見張りに無い `watch_id` は 404 `unknown_watch`。
 
@@ -176,7 +178,7 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 
 オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは Working の見回りで（`apps/working/README.md`）、Worker は持つだけ。
 
-- 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（2 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
+- 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（2 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。仕事の席からは Working の記憶の口（`yunomi-memory watch-add` / `watch-stop`）で同じ検証と保存を通して登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
 - 動いている見張りは 1 人 `ACTIVE_WATCH_LIMIT`（10）件まで。同じ `query` の見張りは重ねない。重複・上限・見つからないは目標と同じく `status: "not_done"` と `reason` で返す。
 - オーナーが話し相手のターンだけ「見張り」の区画に、動いている見張りを id・場所・間隔・期限付きで出す。
 - 期限を過ぎた見張りは読み出しから外れるだけで、行は `active` のまま残る。

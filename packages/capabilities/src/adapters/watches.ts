@@ -43,6 +43,33 @@ const NOTE: Record<Exclude<WatchStoreError["type"], "unavailable">, string> = {
 	not_found: "その id の見張りは無いか、もう止めてある。",
 };
 
+export type WatchToAdd = {
+	query: string;
+	sources: string[];
+	intervalMinutes: number;
+	untilAt: Date | null;
+};
+
+/** watch_add の入力を検証し、置き場所に渡す形にする。Working の席が記憶の口から足す見張りも同じ検証を通す。 */
+export const parseWatchAdd = (
+	raw: unknown,
+	now: Date,
+): Result<WatchToAdd, DomainError> => {
+	const input = parseToolInput(watchAdd, raw);
+	if (!input.ok) return input;
+	const untilAt =
+		input.value.until === null ? null : new Date(input.value.until);
+	if (untilAt !== null && untilAt.getTime() <= now.getTime()) {
+		return err(validationFailed({ issues: ["until: 過去の日時"] }));
+	}
+	return ok({
+		query: input.value.query,
+		sources: input.value.sources,
+		intervalMinutes: input.value.interval_hours * 60,
+		untilAt,
+	});
+};
+
 const outcome = (
 	e: WatchStoreError,
 ): Result<CapabilityResponse, DomainError> =>
@@ -64,20 +91,12 @@ export const createWatchAdapter = (deps: {
 	async execute(request) {
 		const ctx = request.context;
 		if (request.tool === watchAdd.name) {
-			const input = parseToolInput(watchAdd, request.input);
+			const input = parseWatchAdd(request.input, ctx.now);
 			if (!input.ok) return input;
-			const untilAt =
-				input.value.until === null ? null : new Date(input.value.until);
-			if (untilAt !== null && untilAt.getTime() <= ctx.now.getTime()) {
-				return err(validationFailed({ issues: ["until: 過去の日時"] }));
-			}
 			const r = await deps.store.add({
 				partnerId: ctx.partnerId,
 				discordUserId: ctx.speakerId,
-				query: input.value.query,
-				sources: input.value.sources,
-				intervalMinutes: input.value.interval_hours * 60,
-				untilAt,
+				...input.value,
 				now: ctx.now,
 			});
 			if (!r.ok) return outcome(r.error);
