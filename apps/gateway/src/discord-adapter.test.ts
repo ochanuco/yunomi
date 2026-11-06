@@ -12,7 +12,6 @@ const fakeMessage = (over: Record<string, unknown> = {}) =>
 		author: { id: "4", bot: false, displayName: "alice" },
 		member: { displayName: "Alice", voice: { channelId: "vc1" } },
 		mentions: { users: new Map(), roles: new Map() },
-		guild: { members: { me: { roles: { botRole: null } } } },
 		reference: null,
 		attachments: new Map(),
 		channel: {
@@ -42,6 +41,17 @@ describe("isRelayable", () => {
 });
 
 describe("toMessageLike", () => {
+	it("メンションされたロールのうち bot の管理ロールだけを、その bot のユーザー ID にする", () => {
+		const roles = new Map([
+			["r-self", { tags: { botId: "999" } }],
+			["r-other", { tags: { botId: "888" } }],
+			["r-plain", { tags: null }],
+			["r-untagged", {}],
+		]);
+		const m = fakeMessage({ mentions: { users: new Map(), roles } });
+		expect(toMessageLike(m).roleMentionedBotUserIds).toEqual(["999", "888"]);
+	});
+
 	it("チャンネルの親カテゴリを categoryId に載せる", () => {
 		expect(toMessageLike(fakeMessage()).categoryId).toBe("cat1");
 	});

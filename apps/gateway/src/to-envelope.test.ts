@@ -16,7 +16,7 @@ const msg = (over: Partial<MessageLike> = {}): MessageLike => ({
 	createdAt: new Date("2026-01-01T00:00:00.000Z"),
 	author: { id: "4", bot: false, displayName: "alice" },
 	mentionedUserIds: [],
-	mentionsBotRole: false,
+	roleMentionedBotUserIds: [],
 	replyToMessageId: null,
 	categoryId: null,
 	authorVoiceChannelId: null,
@@ -66,14 +66,22 @@ describe("toEnvelope", () => {
 		expect(r.ok && r.value.payload.mentions).toEqual(["999", "5"]);
 	});
 
-	it("bot の管理ロールへのメンションは bot 本人へのメンションとして含める", () => {
+	it("自分の bot の管理ロールへのメンションは、自分へのメンションとして含める", () => {
 		const r = toEnvelope(
-			msg({ mentionedUserIds: ["5", "999"], mentionsBotRole: true }),
+			msg({ mentionedUserIds: ["5", "999"], roleMentionedBotUserIds: ["999"] }),
 			opts,
 		);
 		expect(r.ok && r.value.payload.mentions).toEqual(["5", "999"]);
-		const roleOnly = toEnvelope(msg({ mentionsBotRole: true }), opts);
+		const roleOnly = toEnvelope(
+			msg({ roleMentionedBotUserIds: ["999"] }),
+			opts,
+		);
 		expect(roleOnly.ok && roleOnly.value.payload.mentions).toEqual(["999"]);
+	});
+
+	it("相手の bot の管理ロールへのメンションは、相手の bot へのメンションとして含める", () => {
+		const r = toEnvelope(msg({ roleMentionedBotUserIds: ["888"] }), opts);
+		expect(r.ok && r.value.payload.mentions).toEqual(["888"]);
 	});
 
 	it("返信先 message id を写す", () => {
