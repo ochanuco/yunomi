@@ -75,6 +75,27 @@ describe("シナリオファイル", () => {
 		).toBeGreaterThanOrEqual(0.5);
 	});
 
+	it("もうひとりのパートナーのシナリオは、取り違えを禁じ、横で聞いた話に触れることを求める", () => {
+		const byId = Object.fromEntries(scenarios.map((s) => [s.id, s]));
+		for (const id of [
+			"overheard-not-told",
+			"other-partner-promise",
+			"overheard-acknowledged",
+		]) {
+			const s = byId[id];
+			expect(s?.other_partners).toEqual(["紲星あかり"]);
+			expect(s?.recent.some((l) => l.other_partner)).toBe(true);
+			expect(s?.expectations.must_not_misattribute_overheard).toBe(true);
+		}
+		expect(
+			byId["overheard-not-told"]?.expectations.open_loop_rate?.max,
+		).toBeLessThanOrEqual(0.2);
+		expect(
+			byId["overheard-acknowledged"]?.expectations.overheard_acknowledged_rate
+				?.min,
+		).toBeGreaterThanOrEqual(0.5);
+	});
+
 	it("不正なシナリオを拒否する", () => {
 		const ok = scenarios[0];
 		const bad = [

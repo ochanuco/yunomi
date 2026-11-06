@@ -25,6 +25,7 @@ import {
 	applyStateDelta,
 	applyTimeDecay,
 	type BodyState,
+	DEFAULT_PARTNER_ID,
 	type DomainError,
 	externalServiceUnavailable,
 	initialPartnerState,
@@ -58,10 +59,19 @@ const GATE_MAX_OUTPUT_TOKENS = 300;
 // チャンネルの処理は直列なので、遅い判定でほかの発言を待たせない。
 export const GATE_TIMEOUT_MS = 8000;
 
+/** 同じ Discord にいる、自分以外のパートナー。 */
+export type OtherPartner = {
+	userId: string;
+	displayName: string;
+	aliases: readonly string[];
+};
+
 export type TurnDeps = {
 	store: DoStore;
 	profile: PartnerProfile;
 	partnerUserId: string;
+	/** bot の user id が分かっている、自分以外のパートナー。空ならひとりでいるときと同じに振る舞う。 */
+	otherPartners?: readonly OtherPartner[];
 	now: () => Date;
 	createRouter: () => ModelRouter;
 	entities: EntityResolver;
@@ -84,16 +94,87 @@ const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
 	if (last && deps.now().getTime() - last.getTime() <= CONTINUATION_WINDOW_MS) {
 		return true;
 	}
-	if (msg.replyToMessageId) {
-		return deps.store.getMessage(msg.replyToMessageId)?.isPartner === true;
-	}
-	return false;
+	return isReplyToSelf(deps, msg);
 };
 
-const isCalledByName = (deps: TurnDeps, msg: InboundMessage): boolean => {
-	const text = msg.content.toLowerCase();
-	return deps.profile.aliases.some((a) => text.includes(a.toLowerCase()));
+const includesAlias = (text: string, aliases: readonly string[]): boolean => {
+	const lower = text.toLowerCase();
+	return aliases.some((a) => lower.includes(a.toLowerCase()));
 };
+
+const isCalledByName = (deps: TurnDeps, msg: InboundMessage): boolean =>
+	includesAlias(msg.content, deps.profile.aliases);
+
+const isReplyToSelf = (deps: TurnDeps, msg: InboundMessage): boolean =>
+	msg.replyToMessageId !== null &&
+	deps.store.getMessage(msg.replyToMessageId)?.isPartner === true;
+
+const otherPartnerOf = (
+	deps: TurnDeps,
+	authorId: string,
+): OtherPartner | undefined =>
+	deps.otherPartners?.find((p) => p.userId === authorId);
+
+// もうひとりのパートナーの bot へのメンション、その発言へのリプライ、その呼び名。
+const isAddressedToOtherPartner = (
+	deps: TurnDeps,
+	msg: InboundMessage,
+): boolean => {
+	const others = deps.otherPartners ?? [];
+	if (others.length === 0) return false;
+	const repliedAuthor =
+		msg.replyToMessageId === null
+			? null
+			: (deps.store.getMessage(msg.replyToMessageId)?.authorId ?? null);
+	return others.some(
+		(p) =>
+			msg.mentionedUserIds.includes(p.userId) ||
+			repliedAuthor === p.userId ||
+			includesAlias(msg.content, p.aliases),
+	);
+};
+
+/**
+ * 宛先のない発言を受け持つのは、このチャンネルで最後に話したパートナー。直近ログに誰もいなければ既定のパートナー。
+ * どちらの DO も同じ直近ログから同じ答えを出すので、ふたりが同時に返事をしない。
+ */
+const holdsFloor = (deps: TurnDeps, msg: InboundMessage): boolean => {
+	if ((deps.otherPartners ?? []).length === 0) return true;
+	const recent = deps.store.recentMessages(msg.channelId, msg.messageId);
+	for (let i = recent.length - 1; i >= 0; i--) {
+		const m = recent[i];
+		if (!m) continue;
+		if (m.isPartner) return true;
+		if (otherPartnerOf(deps, m.authorId)) return false;
+	}
+	return deps.profile.partner_id === DEFAULT_PARTNER_ID;
+};
+
+// Discord の本文のメンションは <@id> なので、もうひとりのパートナー宛てだと読めるよう名前に置き換える。
+const withPartnerNames = (deps: TurnDeps, text: string): string =>
+	(deps.otherPartners ?? []).reduce(
+		(t, p) =>
+			t.replace(new RegExp(`<@!?${p.userId}>`, "g"), `@${p.displayName}`),
+		text,
+	);
+
+/** チャンネルログに発言か宛先として出てくる、もうひとりのパートナーの名前。 */
+const otherPartnersInLog = (
+	deps: TurnDeps,
+	recent: readonly { authorId: string; content: string }[],
+	msg: InboundMessage,
+): string[] =>
+	(deps.otherPartners ?? [])
+		.filter(
+			(p) =>
+				msg.mentionedUserIds.includes(p.userId) ||
+				recent.some(
+					(m) =>
+						m.authorId === p.userId ||
+						new RegExp(`<@!?${p.userId}>`).test(m.content),
+				),
+		)
+		.map((p) => p.displayName);
 
 // 自分以外へのメンション、または自分の発言ではない発言へのリプライ。
 const isAddressedToOther = (deps: TurnDeps, msg: InboundMessage): boolean => {
@@ -157,13 +238,17 @@ const judgeInterjection = async (
 			})),
 		recent: recent.map((m) => ({
 			speaker: m.authorName,
-			text: m.content,
+			text: withPartnerNames(deps, m.content),
 			minutesAgo: minutesSince(new Date(m.occurredAt)),
 			isPartner: m.isPartner,
 			isBot: m.isBot,
+			...(otherPartnerOf(deps, m.authorId) ? { isOtherPartner: true } : {}),
 		})),
 		minutesSincePartnerSpoke: last ? minutesSince(last) : null,
-		message: { speaker: msg.author.displayName, text: msg.content },
+		message: {
+			speaker: msg.author.displayName,
+			text: withPartnerNames(deps, msg.content),
+		},
 		headcount,
 		state,
 		relationship: rel
@@ -232,6 +317,20 @@ export const runTurn = async (
 	let gateInterests:
 		| Awaited<ReturnType<typeof loadInterestOpinion>>
 		| undefined;
+	// もうひとりのパートナーに宛てた発言と、その相手が受け持っている流れには、継続枠の中でも返さない。
+	if (
+		msg.modality === "text" &&
+		!mentioned &&
+		!isCalledByName(deps, msg) &&
+		!isReplyToSelf(deps, msg)
+	) {
+		if (isAddressedToOtherPartner(deps, msg)) {
+			return ignoreOutcome(msg, "addressed_to_other");
+		}
+		if (!holdsFloor(deps, msg)) {
+			return ignoreOutcome(msg, "other_partner_floor");
+		}
+	}
 	// 聞いた発話は、耳を開けて同じ VC にいる自分に向けた声として扱う。相づちや独り言はターンの中で黙る。
 	if (
 		msg.modality === "text" &&
@@ -309,6 +408,8 @@ export const runTurn = async (
 		: undefined;
 
 	const connection = store.getVoiceConnection();
+	const recent = store.recentMessages(msg.channelId, msg.messageId);
+	const othersInLog = otherPartnersInLog(deps, recent, msg);
 	const prompt = new PromptBuilder().build({
 		profile,
 		examples: selectExamples(profile.examples, {
@@ -354,12 +455,17 @@ export const runTurn = async (
 			listening: connection?.listening ?? false,
 			messageChannelId: msg.channelId,
 		},
-		recent: store.recentMessages(msg.channelId, msg.messageId).map((m) => ({
+		recent: recent.map((m) => ({
 			speaker: m.authorName,
-			text: m.content,
+			text: withPartnerNames(deps, m.content),
 			modality: m.modality,
+			...(otherPartnerOf(deps, m.authorId) ? { otherPartner: true } : {}),
 		})),
-		message: toPromptMessage(msg, deps.partnerUserId),
+		...(othersInLog.length > 0 ? { otherPartners: othersInLog } : {}),
+		message: {
+			...toPromptMessage(msg, deps.partnerUserId),
+			text: withPartnerNames(deps, msg.content),
+		},
 	});
 
 	const started = Date.now();

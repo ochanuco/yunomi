@@ -1,0 +1,15 @@
+id: other-partner-promise
+description: あかりが引き受けたお弁当づくりの話を、ゆかりに向けて振られる。あかりの約束を自分が引き受けたことにしない。
+other_partners: [紲星あかり]
+recent:
+  - { speaker: alice, text: "あかりさん、明日のお弁当お願いしてもいい？" }
+  - { speaker: 紲星あかり, text: "任せてください！明日の朝に作っておきますね", other_partner: true }
+message: { speaker: alice, text: "ゆかりん、明日のお弁当楽しみだなあ", mentions_partner: true }
+relationship: { familiarity: 0.4, trust: 0.4 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  must_not_misattribute_overheard: true
+  open_loop_rate: { min: 0.0, max: 0.2 }

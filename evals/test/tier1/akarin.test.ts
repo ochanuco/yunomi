@@ -25,6 +25,9 @@ describe("Akarin のシナリオ", () => {
 			"cannot-do",
 			"over-agreement-bait",
 			"first-person-question",
+			"overheard-not-told",
+			"other-partner-promise",
+			"overheard-acknowledged",
 		]) {
 			expect(ids).toContain(id);
 		}
@@ -50,8 +53,13 @@ describe("Akarin のシナリオ", () => {
 					familiarity: s.relationship.familiarity,
 				}),
 			});
-			expect(p.system).toHaveLength(13);
-			const system = p.system.map((b) => b.text).join("\n");
+			// もうひとりのパートナーがいるシナリオだけ、その扱いのブロックが 1 つ増える
+			expect(p.system).toHaveLength(13 + (s.other_partners.length > 0 ? 1 : 0));
+			// もうひとりのパートナーの扱いのブロックは、相手の名前を出すのが役目なので除いて見る
+			const system = p.system
+				.map((b) => b.text)
+				.filter((t) => !t.startsWith("## もうひとりのパートナー"))
+				.join("\n");
 			expect(system).toContain("紲星あかり");
 			expect(system).not.toContain("結月ゆかり");
 			expect(p.messages[0]?.content ?? "").toContain(s.message.text);

@@ -50,6 +50,8 @@ export type ChannelLine = {
 	text: string;
 	/** voice は VC で聞き取った発話。未指定は書かれた発言。 */
 	modality?: "text" | "voice";
+	/** もうひとりのパートナー（別の bot で話す、あなたではない相手）の発言。 */
+	otherPartner?: boolean;
 };
 
 export type PendingLine = {
@@ -112,6 +114,8 @@ export type PromptInput = {
 	channel: { name: string | null; presence: string | null };
 	/** 古い順。予算超過時は古いものから削る。 */
 	recent: ChannelLine[];
+	/** チャンネルログに発言か宛先として出てくる、もうひとりのパートナーの名前。いなければ未指定か空。 */
+	otherPartners?: readonly string[];
 	message: {
 		speaker: string;
 		text: string;
@@ -470,8 +474,22 @@ const transcriptTokens = (lines: ChannelLine[], message: string): number =>
 const HEARD_MARK =
 	"（VC で声で話した。文字は聞き取った結果で、聞き違いがありうる）";
 
+const OTHER_PARTNER_MARK = "（もうひとりのパートナー）";
+
 const renderLine = (l: ChannelLine) =>
-	`${l.speaker}${l.modality === "voice" ? HEARD_MARK : ""}: ${l.text}`;
+	`${l.speaker}${l.otherPartner ? OTHER_PARTNER_MARK : ""}${l.modality === "voice" ? HEARD_MARK : ""}: ${l.text}`;
+
+// 同じ場にいるもうひとりのパートナーに宛てた話を、自分が言われたこと・約束したことと取り違えさせない。
+const otherPartnerBlock = (names: readonly string[]): string => {
+	const who = names.join("・");
+	return [
+		"## もうひとりのパートナー",
+		`- このチャンネルには、あなたとは別に ${who} がいる。チャンネルログで${OTHER_PARTNER_MARK}と付いた発言は ${who} のもので、あなたの発言ではない。`,
+		`- ${who} の発言と、${who} に宛てた発言（@${names[0]} のような宛先があるものや、${who} への返事）は、あなたが横で聞いていた話として扱う。あなたが言われたこと・あなたが話したことのように言わない。`,
+		"- その話に触れるときは、「横で聞いていたけど」のように、聞いていたと分かる言い方にする。",
+		`- ${who} が引き受けたことや約束したことを、あなたが引き受けたことにしない。open_loops には、新着メッセージであなたに向けて話されたことだけを入れる。`,
+	].join("\n");
+};
 
 const renderUserTurn = (lines: ChannelLine[], newMessage: string): string =>
 	[
@@ -517,6 +535,9 @@ export class PromptBuilder {
 			: null;
 		const pending = input.tools ? pendingBlock(input.tools) : null;
 		const opening = input.opening ? openingBlock(input.opening) : null;
+		const otherPartner = input.otherPartners?.length
+			? otherPartnerBlock(input.otherPartners)
+			: null;
 
 		const m = input.message;
 		const newMessage = [
@@ -575,6 +596,9 @@ export class PromptBuilder {
 				{ text: memoryBlock(memory, input.now), cache: false },
 				{ text: openLoop, cache: false },
 				{ text: channel, cache: false },
+				...(otherPartner === null
+					? []
+					: [{ text: otherPartner, cache: false }]),
 				{ text: body, cache: false },
 				...(pending === null ? [] : [{ text: pending, cache: false }]),
 				...(opening === null ? [] : [{ text: opening, cache: false }]),

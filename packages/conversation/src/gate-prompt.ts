@@ -26,6 +26,8 @@ export type GateLine = {
 	/** ゆかり自身の発言。 */
 	isPartner: boolean;
 	isBot: boolean;
+	/** もうひとりのパートナーの発言。bot だが、通知の bot とは分けて見せる。 */
+	isOtherPartner?: boolean;
 };
 
 export type GateInput = {
@@ -131,7 +133,7 @@ const interestBlock = (interests: InterestLine[]): string =>
 	].join("\n");
 
 const renderLine = (l: GateLine): string =>
-	`${l.speaker}${l.isPartner ? "（あなた）" : l.isBot ? "（bot）" : ""}（${l.minutesAgo} 分前）: ${l.text}`;
+	`${l.speaker}${l.isPartner ? "（あなた）" : l.isOtherPartner ? "（もうひとりのパートナー）" : l.isBot ? "（bot）" : ""}（${l.minutesAgo} 分前）: ${l.text}`;
 
 const headcountLine = (input: GateInput): string =>
 	input.headcount === 1

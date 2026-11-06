@@ -27,7 +27,23 @@
 
 入口（`runTurn`）は、bot の発言を捨てたあと、メンション・リプライ・3 分の継続枠・本文のプロファイルの呼び名（`aliases`）のどれかがあれば Sonnet の判定に回す。どれもない発言は、自分以外へのメンションかリプライなら `addressed_to_other`、ほかの人がいる場（ゆかりと bot を除く作者が 2 人以上）で、同じチャンネルで 30 分以内に割り込んでいれば `interjection_cooldown` で捨て、そうでなければ Haiku が「入る / 入らない」を判定する（`@yunomi/conversation` の `buildGatePrompt`）。判定には直近ログと新着に加えて、場の人数（ゆかりと bot を除く作者の数。ログでは bot の発言に（bot）と付ける）、ゆかりの state（mood・energy・presence。未作成なら初期値で、書き込まない）、発言者との関係（familiarity・trust の平均から 初対面 / 顔見知り / 親しい / とても親しい の段階を付け、数値を添える。既に entity があるときだけ読み、無ければ初めての相手として渡す。判定のために entity は作らない）を user メッセージで渡す。入らなければ `gate_rejected`（Haiku の理由は `decisionSummary`）、Haiku の失敗は `gate_failed` で黙り、`llm_health` には数えない。入る場合は Sonnet の通常判定に回り、reply したときだけ `channel_state.last_interjection_at` を記録する。
 
-返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev・prod `1` / local `0`）が `1` で、secret `DISCORD_BOT_TOKEN` があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（テキスト、入力中、multipart 添付。返信形式の `message_reference` は、返信先の発言のあとに partner 以外の発言が積まれているときだけ付け、1 対 1 の流れでは普通のメッセージで送る。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
+### もうひとりのパートナー
+
+パートナーの bot はそれぞれ自分の Gateway から同じチャンネルの発言を受け取り、互いの発言も `author.is_bot=true` で届く。どの発言が自分のものかは、自分の bot の user id（下の表）だけで決める。もうひとりのパートナーの発言は `is_partner=0` の bot の発言として `recent_messages` に名前つきで残り、入口の `bot` で捨てるので返事はしない。bot の user id が分かっているもうひとりのパートナーがいるとき、入口は次の 2 つを、メンション・自分の呼び名・自分の発言へのリプライのない発言に、継続枠より先に当てる。
+
+- もうひとりのパートナーの bot へのメンション、その発言へのリプライ、その呼び名を含む発言は `addressed_to_other` で捨てる。
+- 宛先のない発言を受け持つのは、直近ログで最後に話したパートナー。もうひとりのパートナーのほうが後に話していれば `other_partner_floor` で捨てる。直近ログにどちらもいなければ、名簿の先頭（`yukarin`）が今までどおり継続枠と Haiku の判定に回し、ほかのパートナーは `other_partner_floor` で黙る。両方の DO が同じ直近ログから同じ答えを出すので、ふたりが同時に返事をしない。
+
+ふたりともメンションされた発言には、ふたりとも返す。横で聞いた発言はターンに入らないので、記憶・Open Loop・関係の変化を作らない。あとで自分に宛てた発言に返すときは、Sonnet のプロンプトのチャンネルログで、もうひとりのパートナーの発言に（もうひとりのパートナー）と付け、本文の `<@id>` をその名前に置き換え、横で聞いた話として扱う指示のブロック（もうひとりのパートナー）を足す。このブロックは、チャンネルログか新着にもうひとりのパートナーが出てくるターンにだけ入る。Haiku の判定でも、その発言には（bot）ではなく（もうひとりのパートナー）と付ける。
+
+| パートナー | bot の user id | bot の token |
+| --- | --- | --- |
+| `yukarin` | `PARTNER_DISCORD_USER_ID`（text。`resources.ts`） | `DISCORD_BOT_TOKEN`（secret） |
+| `akarin` | `AKARIN_DISCORD_USER_ID`（text。デプロイ時の環境変数。未設定なら空） | `AKARIN_DISCORD_BOT_TOKEN`（secret。production だけ宣言） |
+
+token は返事の送信（下記）と添付の読み取りに、そのパートナーの bot のものを使う。token の無いパートナーは Gateway に `reply` を返す。
+
+返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev・prod `1` / local `0`）が `1` で、そのパートナーの bot の token（Yukarin は secret `DISCORD_BOT_TOKEN`）があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（テキスト、入力中、multipart 添付。返信形式の `message_reference` は、返信先の発言のあとに partner 以外の発言が積まれているときだけ付け、1 対 1 の流れでは普通のメッセージで送る。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
 
 ## 声の添付
 
