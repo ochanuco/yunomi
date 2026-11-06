@@ -405,7 +405,11 @@ describe("取り消せない操作で止まったとき", () => {
 			}),
 		);
 		const at = s.d.sent.findIndex((m) => m.buttons !== undefined);
-		expect(s.d.sent[at]?.buttons).toEqual(["approval:grant", "approval:deny"]);
+		expect(s.d.sent[at]?.buttons).toEqual([
+			"approval:grant",
+			"approval:deny",
+			"thread:dismiss",
+		]);
 		return `sent${at + 1}`;
 	};
 	const events = (s: Awaited<ReturnType<typeof setup>>) =>
@@ -455,6 +459,18 @@ describe("取り消せない操作で止まったとき", () => {
 		await s.intake.press(press("p1", asked, "approval:grant"));
 		expect(existsSync(grantPathOf(guardDirOf(s.stateDir), "p1"))).toBe(false);
 		expect(events(s)).toEqual(["requested", "dismissed"]);
+	});
+
+	it("不要のボタンは待っていた許可を却下として片付け、席を閉じる", async () => {
+		const s = await setup();
+		const asked = await askApproval(s);
+		await s.intake.press(press("p1", asked, "thread:dismiss"));
+		expect(s.d.edited.get(asked)?.content).toContain("却下済み");
+		expect(s.d.edited.get(asked)?.content).toContain("不要として閉じました");
+		expect(existsSync(grantPathOf(guardDirOf(s.stateDir), "p1"))).toBe(false);
+		expect(events(s)).toEqual(["requested", "dismissed"]);
+		expect(s.seats.get("p1")).toBeNull();
+		expect(s.o.opsOf("reply")).toEqual([]);
 	});
 
 	it("止めた操作を残したまま報告してきたら、完了にせず許可を待つ", async () => {
@@ -1342,5 +1358,68 @@ describe("Akarin の席", () => {
 		const again = await openSeatStore(stateDir);
 		expect(again.partnerOf("p1")).toBe("akarin");
 		expect(again.partnerOf("p2")).toBeNull();
+	});
+});
+
+describe("不要のボタン", () => {
+	/** 席に質問させ、不要のボタンが付いたメッセージの ID を返す。 */
+	const ask = async (s: Awaited<ReturnType<typeof setup>>) => {
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "question",
+				dispatchId: seat.dispatchId,
+				body: "定期の確認です。対応しますか？",
+			}),
+		);
+		const at = s.d.sent.findIndex((m) => m.buttons !== undefined);
+		expect(s.d.sent[at]?.buttons).toEqual(["thread:dismiss"]);
+		return `sent${at + 1}`;
+	};
+
+	it("持ち主が押すと席の Claude を通さずに席を閉じ、タグを完了にしてボタンを外す", async () => {
+		const s = await setup();
+		const asked = await ask(s);
+		const path = s.seats.get("p1")?.path;
+		await s.intake.press(press("p1", asked, "thread:dismiss"));
+		expect(s.seats.get("p1")).toBeNull();
+		expect(s.o.opsOf("removeWorktree")).toEqual([path]);
+		expect(s.o.opsOf("reply")).toEqual([]);
+		expect(s.d.tagsOf("p1")).toEqual(["tag-done"]);
+		expect(s.d.edited.get(asked)?.content).toBe(
+			"定期の確認です。対応しますか？\n\n不要として閉じました。",
+		);
+		expect(s.activity.map((a) => a.kind)).toEqual(["done"]);
+	});
+
+	it("持ち主以外が押しても何も起きない", async () => {
+		const s = await setup();
+		const asked = await ask(s);
+		await s.intake.press(press("p1", asked, "thread:dismiss", "someone"));
+		expect(s.seats.get("p1")).not.toBeNull();
+		expect(s.d.edited.has(asked)).toBe(false);
+	});
+
+	it("席の無い投稿では、タグを完了にしてボタンを外すだけ", async () => {
+		const s = await setup();
+		s.d.addThread("p2", "朝会で決めてほしいこと");
+		await s.intake.press(press("p2", "p2", "thread:dismiss"));
+		expect(s.d.tagsOf("p2")).toEqual(["tag-done"]);
+		expect(s.o.opsOf("stopSeat")).toEqual([]);
+		expect(s.activity).toEqual([]);
+	});
+
+	it("完了の報告には付けない", async () => {
+		const s = await setup();
+		const seat = await openPost(s);
+		await s.intake.onSeatMessage(
+			seatMessage({
+				type: "worker_done",
+				dispatchId: seat.dispatchId,
+				body: "直しました\n状態: 完了",
+				outcome: "succeeded",
+			}),
+		);
+		expect(s.d.sent.some((m) => m.buttons !== undefined)).toBe(false);
 	});
 });

@@ -187,6 +187,7 @@ export const fakeDiscord = () => {
 		editMessage: vi.fn(
 			async (channelId: string, messageId: string, content: string) => {
 				edited.set(messageId, { channelId, content });
+				if (botMessages.has(messageId)) botMessages.set(messageId, content);
 				return ok(undefined);
 			},
 		),
