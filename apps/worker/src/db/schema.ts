@@ -375,3 +375,28 @@ export const githubEvents = sqliteTable(
 		index("github_events_received").on(t.receivedAt),
 	],
 );
+
+/** 見張り。Working の見回りが、時間が来たものだけを調べて新着を知らせる。 */
+export const watches = sqliteTable(
+	"watches",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		entityId: text("entity_id")
+			.notNull()
+			.references(() => entities.id),
+		/** 何を探すか（条件を含む 1 行）。 */
+		query: text("query").notNull(),
+		/** どこを見るか。店の名前か URL の JSON 配列。空なら普通の検索。 */
+		sources: text("sources").notNull(),
+		intervalMinutes: integer("interval_minutes").notNull(),
+		untilAt: text("until_at"),
+		status: text("status", { enum: ["active", "stopped"] }).notNull(),
+		/** 前に知らせたものの key の JSON 配列。新しいものを後ろに足す。 */
+		seen: text("seen").notNull(),
+		lastCheckedAt: text("last_checked_at"),
+		createdAt: text("created_at").notNull(),
+		stoppedAt: text("stopped_at"),
+	},
+	(t) => [index("watches_entity").on(t.partnerId, t.entityId, t.status)],
+);

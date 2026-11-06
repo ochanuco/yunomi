@@ -163,6 +163,7 @@ const standupDeps = {
 	approvals,
 	ledger,
 	workForumChannelId: cfg.workForumChannelId,
+	workTextChannelId: cfg.workTextChannelId,
 	recordActivity: activityLog.record,
 	logger,
 };

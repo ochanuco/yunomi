@@ -50,6 +50,11 @@ import { otherPartners, partnerDiscord } from "../partner-discord.ts";
 import { defaultPartnerProfile, partnerProfile } from "../partners.ts";
 import { defaultVoiceOrgans, type VoiceOrgans } from "../voice-organs.ts";
 import {
+	createWatchRepo,
+	createWatchStore,
+	type WatchRepo,
+} from "../watches.ts";
+import {
 	createGoalStore,
 	createWorkNoteRepo,
 	type WorkNoteRepo,
@@ -117,6 +122,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #memory: MemoryRepo;
 	readonly #openLoops: OpenLoopRepo;
 	readonly #workNotes: WorkNoteRepo;
+	readonly #watches: WatchRepo;
 	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
 	readonly #conversationLog: ConversationLogWriter;
@@ -153,6 +159,7 @@ export class PartnerDO extends DurableObject<Env> {
 				memory: this.#memory,
 				openLoops: this.#openLoops,
 				goals: this.#workNotes,
+				watches: this.#watches,
 				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
 				onEngaged,
@@ -170,6 +177,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#memory = createMemoryRepo(db);
 		this.#openLoops = createOpenLoopRepo(db);
 		this.#workNotes = createWorkNoteRepo(db);
+		this.#watches = createWatchRepo(db);
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
 		this.#conversationLog = createConversationLogWriter(db);
@@ -186,6 +194,7 @@ export class PartnerDO extends DurableObject<Env> {
 					policy: this.profile.capability_defaults,
 					now: () => this.now(),
 					goals: createGoalStore(db),
+					watches: createWatchStore(db),
 				},
 			) ?? undefined;
 		ctx.blockConcurrencyWhile(async () => migrateDoStorage(ctx.storage.sql));

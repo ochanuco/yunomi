@@ -41,6 +41,7 @@ beforeEach(async () => {
 		"interest_states",
 		"opinion_states",
 		"work_notes",
+		"watches",
 		"interest_changes",
 		"audit_events",
 		"audit_daily_kpis",
@@ -107,6 +108,11 @@ const seedD1 = async (partner = PARTNER_ID) => {
 		VALUES ('w1', ?, 'e1', 'decided', '移行は来週に回す', '2026-10-06T00:00:00Z', NULL, NULL),
 		       ('w2', ?, 'e1', 'goal', '英語で発表する', '2026-10-07T00:00:00Z', 'open', NULL)`,
 		partner,
+		partner,
+	);
+	await run(
+		`INSERT INTO watches (id, partner_id, entity_id, query, sources, interval_minutes, until_at, status, seen, last_checked_at, created_at, stopped_at)
+		VALUES ('wt1', ?, 'e1', '中古の万年筆', '["https://shop.example/pens"]', 360, NULL, 'active', '["https://shop.example/pens/1"]', '2026-10-08T00:00:00Z', '2026-10-07T00:00:00Z', NULL)`,
 		partner,
 	);
 };
@@ -462,7 +468,7 @@ describe("restore", () => {
 		await seedD1();
 		await seedDo();
 		const current = await build();
-		const { work_notes: _omit, ...d1V1 } = current.d1;
+		const { work_notes: _omit, watches: _w, ...d1V1 } = current.d1;
 		const v1: Snapshot = { ...current, schema_version: 1, d1: d1V1 };
 		expect(parseSnapshot(v1).ok).toBe(true);
 
@@ -479,11 +485,12 @@ describe("restore", () => {
 		await seedD1();
 		await seedDo();
 		const current = await build();
+		const { watches: _w, ...d1V3 } = current.d1;
 		const v2: Snapshot = {
 			...current,
 			schema_version: 2,
 			d1: {
-				...current.d1,
+				...d1V3,
 				work_notes: current.d1.work_notes
 					.filter((n) => n.kind !== "goal")
 					.map(({ status: _s, closed_at: _c, ...n }) => ({
@@ -505,6 +512,23 @@ describe("restore", () => {
 				).all()
 			).results,
 		).toEqual([{ id: "w1", kind: "decided", status: null, closed_at: null }]);
+	});
+
+	it("見張りを持たない v3 の Snapshot も復元でき、見張りは残す", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		expect(current.d1.watches.map((w) => w.query)).toEqual(["中古の万年筆"]);
+		const { watches: _omit, ...d1V3 } = current.d1;
+		const v3: Snapshot = { ...current, schema_version: 3, d1: d1V3 };
+		expect(parseSnapshot(v3).ok).toBe(true);
+		expect(parseSnapshot({ ...current, schema_version: 3 }).ok).toBe(false);
+
+		const res = await restoreRequest(v3);
+		expect(res.status).toBe(200);
+		const body = v.parse(SnapshotRestoreResponseSchema, await res.json());
+		expect(body.counts).toMatchObject({ work_notes: 2, watches: 0 });
+		expect(await count("watches")).toBe(1);
 	});
 
 	it("restore を 1 行のログに残す", async () => {

@@ -156,9 +156,10 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 
 Working（仕事）の Yukarin は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。相手は `discord_user_id` で既存の entity を引き、Talking で話したことのない相手は 404（`unknown_entity`）にする。`entities` / `external_identities` には書かない。
 
-- `GET ?discord_user_id=...`: `facts`（続く事実）/ `episodes`（できごと。仕事の1行を含む）/ `open_loops`（未決）を、Talking の prompt と同じ選び方と順で返す。`goals` は open な目標（`id` / `summary` / `created_at`）を古い順に全件返す。時刻は `toModelJson` で `YYYY-MM-DD HH:mm JST` にする。
+- `GET ?discord_user_id=...`: `facts`（続く事実）/ `episodes`（できごと。仕事の1行を含む）/ `open_loops`（未決）を、Talking の prompt と同じ選び方と順で返す。`goals` は open な目標（`id` / `summary` / `created_at`）を古い順に全件返す。`watches` は動いている見張り（期限切れを除く）を古い順に全件、`due`（前に調べてから間隔が過ぎたか、まだ調べていない）と `seen`（前に知らせたものの key）付きで返す。時刻は `toModelJson` で `YYYY-MM-DD HH:mm JST` にする。
 - `POST { discord_user_id, kind: "decided" | "done" | "goal", summary }`: 決まったこと・終わったこと・目標を1行（改行なし、200 字まで）で `work_notes` に残す。目標は `status: "open"` で入り、同じ文面の open な目標があれば 409 `duplicate_goal`、open な目標が `OPEN_GOAL_LIMIT`（10）件あれば 409 `goal_limit`。
 - `PATCH { discord_user_id, id, status: "achieved" | "dropped" }`: open な目標を閉じ、`closed_at` を入れる。その人の open な目標に無い `id` は 404 `unknown_goal`。
+- `PATCH { discord_user_id, watch_id, seen }`: 見回りの席が見張りを調べ終えたことを残す。`last_checked_at` を今にし、`seen` の key（200 字まで）を重ねずに足す。覚えるのは新しい `WATCH_SEEN_LIMIT`（100）件まで。動いている見張りに無い `watch_id` は 404 `unknown_watch`。
 
 Talking の prompt では、`work_notes` の decided と done の新しい `WORK_NOTE_PROMPT_LIMIT`（10）件を `仕事で決めたこと` / `仕事で終えたこと` の出来事として、facts の出来事と合わせて新しい順に並べる。出来事と同じく 3 日以上たったものは「前に聞いた話」に回る。
 
@@ -170,6 +171,15 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 - 重複・上限・見つからない（`duplicate` / `limit` / `not_found`）は失敗にせず、結果の `status: "not_done"` と `reason` で返してモデルに言い分けさせる。D1 に届かないときだけ `ExternalServiceUnavailable`。
 - Audit の `toolCalls` の要約に目標の文面は入れない。
 - Working の席は `yunomi-memory` で同じ目標を読み書きし、朝会と見回りの材料にする（`apps/working/README.md`）。
+
+### 見張り
+
+オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは Working の見回りで（`apps/working/README.md`）、Worker は持つだけ。
+
+- 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（2 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
+- 動いている見張りは 1 人 `ACTIVE_WATCH_LIMIT`（10）件まで。同じ `query` の見張りは重ねない。重複・上限・見つからないは目標と同じく `status: "not_done"` と `reason` で返す。
+- オーナーが話し相手のターンだけ「見張り」の区画に、動いている見張りを id・場所・間隔・期限付きで出す。
+- 期限を過ぎた見張りは読み出しから外れるだけで、行は `active` のまま残る。
 
 ## GitHub の出来事（webhook）
 
@@ -222,9 +232,9 @@ Yukarin の長期記憶と現在値の時点コピー。日次バックアップ
 
 #### 中身
 
-JSON（`schema_version` 3、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
+JSON（`schema_version` 4、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
 
-- `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes`。`entities` と `external_identities` は partner を持たないので全行
+- `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` / `watches`。`entities` と `external_identities` は partner を持たないので全行
 - `do`: `state`（`partner_state`）と `relationships`（日次累積の `acc_*` を含む全列）
 
 含めない: `audit_events`・`audit_daily_kpis`・履歴（`state_transitions` / `relationship_events` / `interest_changes` / `opinion_changes`）、DO の `recent_messages`（会話本文）・`processed_events`・`channel_state`・`entity_cache`・`llm_health`、secret。会話要約は未実装で項目が無い。D1 の対象列は `src/snapshot.ts` の `D1_SNAPSHOT_TABLES` で、テストが実スキーマとの一致を確かめる。
@@ -250,7 +260,7 @@ owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 
 - `GET .../snapshots/:snapshotId`: 暗号化済みの blob（`application/octet-stream`）をそのまま返す。無ければ 404
 - `POST .../snapshots/restore`: body は復号済みの Snapshot JSON。`YUNOMI_ENV=production` では 403 `restore_disabled_in_production`。検証に失敗すれば 400、`partner_id` の不一致や DB の失敗は 422。成功すると `{ snapshot_id, source_env, counts }`
 
-restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。`schema_version` 1 と 2 の Snapshot も受け付ける。v1 は `work_notes` を持たないので、その restore では `work_notes` を消さずに残す。v2 の `work_notes` は目標の列（`status` / `closed_at`）を持たないので、null で入れる。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
+restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` / `watches` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。`schema_version` 1 から 3 の Snapshot も受け付ける。v1 は `work_notes` を持たないので、その restore では `work_notes` を消さずに残す。v2 の `work_notes` は目標の列（`status` / `closed_at`）を持たないので、null で入れる。v3 は `watches` を持たないので、その restore では `watches` を消さずに残す。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
 
 #### seed の運用
 

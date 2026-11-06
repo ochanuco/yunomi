@@ -234,7 +234,7 @@ export const TEST_AGE_RECIPIENT =
 
 /** 合成データのみ。 */
 export const syntheticSnapshot = (): Snapshot => ({
-	schema_version: 3,
+	schema_version: 4,
 	snapshot_id: "01990000-0000-7000-8000-000000000001",
 	partner_id: "yukarin",
 	env: "production",
@@ -257,6 +257,7 @@ export const syntheticSnapshot = (): Snapshot => ({
 		interest_states: [],
 		opinion_states: [],
 		work_notes: [],
+		watches: [],
 	},
 	do: { state: null, relationships: [] },
 });

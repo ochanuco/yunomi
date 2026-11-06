@@ -22,6 +22,7 @@ const materials = (
 ): StandupMaterials => ({
 	memory: null,
 	goals,
+	watches: [],
 	mac_state: { unavailable: "x" },
 	github: {
 		open_prs: [],

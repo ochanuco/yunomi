@@ -7,6 +7,11 @@ import { createMemoryRepo } from "./memory.ts";
 import { createOpenLoopRepo } from "./open-loops.ts";
 import { partnerProfile } from "./partners.ts";
 import {
+	createWatchRepo,
+	WATCH_SEEN_KEY_MAX_LENGTH,
+	WATCH_SEEN_LIMIT,
+} from "./watches.ts";
+import {
 	createWorkNoteRepo,
 	findDiscordEntity as findEntity,
 	goalClosings,
@@ -29,11 +34,29 @@ const writeSchema = v.object({
 	),
 });
 
-const closeSchema = v.object({
-	discord_user_id: v.pipe(v.string(), v.nonEmpty()),
-	id: v.pipe(v.string(), v.nonEmpty()),
-	status: v.picklist(goalClosings),
-});
+const patchSchema = v.union([
+	v.object({
+		discord_user_id: v.pipe(v.string(), v.nonEmpty()),
+		id: v.pipe(v.string(), v.nonEmpty()),
+		status: v.picklist(goalClosings),
+	}),
+	// 見回りの席が見張りを調べ終えたときに送る。seen は今回知らせたものの key。
+	v.object({
+		discord_user_id: v.pipe(v.string(), v.nonEmpty()),
+		watch_id: v.pipe(v.string(), v.nonEmpty()),
+		seen: v.pipe(
+			v.array(
+				v.pipe(
+					v.string(),
+					v.trim(),
+					v.nonEmpty(),
+					v.maxLength(WATCH_SEEN_KEY_MAX_LENGTH),
+				),
+			),
+			v.maxLength(WATCH_SEEN_LIMIT),
+		),
+	}),
+]);
 
 const json = (body: unknown, status = 200) =>
 	new Response(toModelJson(body), {
@@ -106,10 +129,11 @@ export async function handleWorkingMemory(
 		}
 		const entityId = await findEntity(db, discordUserId);
 		if (!entityId) return error(404, "unknown_entity");
-		const [memory, openLoops, goals] = await Promise.all([
+		const [memory, openLoops, goals, watches] = await Promise.all([
 			createMemoryRepo(db).topFacts(partnerId, entityId),
 			createOpenLoopRepo(db).topOpen(partnerId, entityId),
 			createWorkNoteRepo(db).openGoals(partnerId, entityId),
+			createWatchRepo(db).active(partnerId, entityId, new Date()),
 		]);
 		const line = (f: (typeof memory)[number]) => ({
 			predicate: f.predicate,
@@ -129,15 +153,36 @@ export async function handleWorkingMemory(
 				summary: g.summary,
 				created_at: g.createdAt,
 			})),
+			watches: watches.map((w) => ({
+				id: w.id,
+				query: w.query,
+				sources: w.sources,
+				interval_minutes: w.intervalMinutes,
+				until_at: w.untilAt,
+				last_checked_at: w.lastCheckedAt,
+				due: w.due,
+				seen: w.seen,
+			})),
 		});
 	}
 
 	const notes = createWorkNoteRepo(db);
 	if (request.method === "PATCH") {
-		const parsed = await readJson(request, closeSchema);
+		const parsed = await readJson(request, patchSchema);
 		if (!parsed.ok) return parsed.error;
 		const entityId = await findEntity(db, parsed.value.discord_user_id);
 		if (!entityId) return error(404, "unknown_entity");
+		if ("watch_id" in parsed.value) {
+			const recorded = await createWatchRepo(db).recordCheck({
+				partnerId,
+				entityId,
+				id: parsed.value.watch_id,
+				seen: parsed.value.seen,
+				now: new Date(),
+			});
+			if (!recorded) return error(404, "unknown_watch");
+			return json({ id: parsed.value.watch_id, checked: true });
+		}
 		const goal = await notes.closeGoal({
 			partnerId,
 			entityId,

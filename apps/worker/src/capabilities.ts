@@ -10,9 +10,11 @@ import {
 	createGooglePlacesAdapter,
 	createHomeAssistantAdapter,
 	createToolRegistry,
+	createWatchAdapter,
 	type GoalStore,
 	type PendingStore,
 	parseHomeEntityIds,
+	type WatchStore,
 } from "@yunomi/capabilities";
 import type { TurnCapabilities } from "./do/tool-loop.ts";
 
@@ -48,6 +50,8 @@ export type CapabilityDeps = {
 	now: () => Date;
 	/** オーナーの目標の置き場所。無ければ goal_add / goal_close を出さない。 */
 	goals?: GoalStore;
+	/** オーナーの見張りの置き場所。無ければ watch_add / watch_stop を出さない。 */
+	watches?: WatchStore;
 	/** テストが Google への通信を差し替える。既定は Worker の fetch。 */
 	fetch?: typeof fetch;
 };
@@ -132,6 +136,9 @@ export const defaultCapabilities = (
 	}
 	if (deps.goals && ownerId) {
 		adapters.push(createGoalAdapter({ store: deps.goals }));
+	}
+	if (deps.watches && ownerId) {
+		adapters.push(createWatchAdapter({ store: deps.watches }));
 	}
 	if (adapters.length === 0) return null;
 	const registry = createToolRegistry(adapters);

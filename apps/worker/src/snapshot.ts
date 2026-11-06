@@ -132,6 +132,23 @@ export const D1_SNAPSHOT_TABLES = {
 		scoped: true,
 		key: [],
 	},
+	watches: {
+		columns: [
+			"id",
+			"entity_id",
+			"query",
+			"sources",
+			"interval_minutes",
+			"until_at",
+			"status",
+			"seen",
+			"last_checked_at",
+			"created_at",
+			"stopped_at",
+		],
+		scoped: true,
+		key: [],
+	},
 } satisfies Record<string, D1Table>;
 
 type TableName = keyof typeof D1_SNAPSHOT_TABLES;
@@ -329,6 +346,7 @@ export const restoreSnapshot = async (
 		interest_states: snapshot.d1.interest_states.length,
 		opinion_states: snapshot.d1.opinion_states.length,
 		work_notes: "work_notes" in snapshot.d1 ? snapshot.d1.work_notes.length : 0,
+		watches: "watches" in snapshot.d1 ? snapshot.d1.watches.length : 0,
 		relationships: snapshot.do.relationships.length,
 	});
 };

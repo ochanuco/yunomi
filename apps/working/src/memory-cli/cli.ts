@@ -23,6 +23,8 @@ export const MEMORY_KINDS = ["decided", "done", "goal"] as const;
 export const GOAL_CLOSINGS = ["achieved", "dropped"] as const;
 /** Worker の WORK_NOTE_SUMMARY_MAX_LENGTH と揃える。 */
 export const SUMMARY_MAX_LENGTH = 200;
+/** Worker の WATCH_SEEN_KEY_MAX_LENGTH と揃える。 */
+export const SEEN_KEY_MAX_LENGTH = 200;
 
 export type CliOutput = { code: number; stdout: string; stderr: string };
 
@@ -30,6 +32,7 @@ const USAGE = `使い方:
   yunomi-memory read
   yunomi-memory write --kind decided|done|goal --summary "<1行の要約>"
   yunomi-memory close --id <目標の id> --status achieved|dropped
+  yunomi-memory watch-checked --id <見張りの id> [--seen "<知らせたものの key>"]...
 `;
 
 const fail = (code: number, message: string): CliOutput => ({
@@ -72,10 +75,21 @@ export const runMemoryCli = async (
 	doFetch: typeof fetch = fetch,
 ): Promise<CliOutput> => {
 	const [command, ...rest] = argv;
-	if (command !== "read" && command !== "write" && command !== "close") {
+	if (
+		command !== "read" &&
+		command !== "write" &&
+		command !== "close" &&
+		command !== "watch-checked"
+	) {
 		return fail(2, USAGE);
 	}
-	let values: { kind?: string; summary?: string; id?: string; status?: string };
+	let values: {
+		kind?: string;
+		summary?: string;
+		id?: string;
+		status?: string;
+		seen?: string[];
+	};
 	try {
 		values = parseArgs({
 			args: [...rest],
@@ -84,6 +98,7 @@ export const runMemoryCli = async (
 				summary: { type: "string" },
 				id: { type: "string" },
 				status: { type: "string" },
+				seen: { type: "string", multiple: true },
 			},
 			strict: true,
 			allowPositionals: false,
@@ -98,6 +113,7 @@ export const runMemoryCli = async (
 		read: [],
 		write: ["kind", "summary"],
 		close: ["id", "status"],
+		"watch-checked": ["id", "seen"],
 	};
 	if (given.some((k) => !allowed[command].includes(k))) return fail(2, USAGE);
 	if (command === "write") {
@@ -121,6 +137,18 @@ export const runMemoryCli = async (
 			return fail(2, `--status は achieved か dropped\n${USAGE}`);
 		}
 		values.id = (values.id ?? "").trim();
+	}
+	if (command === "watch-checked") {
+		if ((values.id ?? "").trim() === "") return fail(2, USAGE);
+		const seen = (values.seen ?? []).map((k) => k.trim());
+		if (seen.some((k) => k === "" || /[\r\n]/.test(k))) {
+			return fail(2, "--seen は改行を含まない 1 行で書く");
+		}
+		if (seen.some((k) => k.length > SEEN_KEY_MAX_LENGTH)) {
+			return fail(2, `--seen は ${SEEN_KEY_MAX_LENGTH} 字以内`);
+		}
+		values.id = (values.id ?? "").trim();
+		values.seen = seen;
 	}
 
 	const creds = readCredentials(env);
@@ -152,11 +180,17 @@ export const runMemoryCli = async (
 										kind: values.kind,
 										summary: values.summary,
 									}
-								: {
-										discord_user_id: creds.discord_user_id,
-										id: values.id,
-										status: values.status,
-									},
+								: command === "close"
+									? {
+											discord_user_id: creds.discord_user_id,
+											id: values.id,
+											status: values.status,
+										}
+									: {
+											discord_user_id: creds.discord_user_id,
+											watch_id: values.id,
+											seen: values.seen,
+										},
 						),
 						signal: AbortSignal.timeout(15_000),
 					});
@@ -173,6 +207,13 @@ export const runMemoryCli = async (
 		return fail(1, `記憶の口が ${res.status} を返した${code}`);
 	}
 	if (command === "read") return { code: 0, stdout: `${text}\n`, stderr: "" };
+	if (command === "watch-checked") {
+		return {
+			code: 0,
+			stdout: `調べ終えた: ${values.id}（知らせたもの ${values.seen?.length ?? 0} 件）\n`,
+			stderr: "",
+		};
+	}
 	if (command === "close") {
 		return {
 			code: 0,

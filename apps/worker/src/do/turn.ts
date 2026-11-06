@@ -45,6 +45,7 @@ import type { TurnAuditData } from "../audit.ts";
 import type { InterestOpinionRepo } from "../interest-opinion.ts";
 import type { MemoryRepo } from "../memory.ts";
 import type { OpenLoopRepo } from "../open-loops.ts";
+import type { WatchRepo } from "../watches.ts";
 import type { WorkNoteRepo } from "../work-notes.ts";
 import type { EntityResolver } from "./entities.ts";
 import type { HistoryWriter } from "./history.ts";
@@ -81,6 +82,8 @@ export type TurnDeps = {
 	openLoops: OpenLoopRepo;
 	/** オーナーの目標。オーナーが話し相手のターンだけ読む。 */
 	goals?: Pick<WorkNoteRepo, "openGoals">;
+	/** オーナーの見張り。オーナーが話し相手のターンだけ読む。 */
+	watches?: Pick<WatchRepo, "active">;
 	interestOpinion: InterestOpinionRepo;
 	/** 発声の身体の状態。声が無効な環境では unavailable。 */
 	bodyState: () => Promise<BodyState>;
@@ -402,6 +405,12 @@ export const runTurn = async (
 		speakerIsOwner && deps.goals
 			? await deps.goals.openGoals(partnerId, entityId).catch(() => null)
 			: null;
+	const watches =
+		speakerIsOwner && deps.watches
+			? await deps.watches
+					.active(partnerId, entityId, seededAt)
+					.catch(() => null)
+			: null;
 	const tools = deps.capabilities
 		? {
 				speakerIsOwner,
@@ -455,6 +464,7 @@ export const runTurn = async (
 		})),
 		openLoops,
 		...(goals === null ? {} : { goals }),
+		...(watches === null ? {} : { watches }),
 		now: seededAt,
 		tools,
 		channel: { name: null, presence: null },

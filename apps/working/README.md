@@ -172,6 +172,7 @@ yunomi-memory write --kind decided --summary "<1行の要約>"  # 決まった�
 yunomi-memory write --kind done --summary "<1行の要約>"     # 終わったこと
 yunomi-memory write --kind goal --summary "<1行の目標>"     # 持ち主の目標。id を返す
 yunomi-memory close --id <目標の id> --status achieved      # 目標を閉じる（やめたら dropped）
+yunomi-memory watch-checked --id <見張りの id> --seen "<key>"  # 見張りを調べ終えた。--seen は知らせたもの（0 件以上）
 ```
 
 - 呼ぶ先は Worker の `/v1/partners/<パートナー>/working/memory`。パートナーは環境変数 `YUNOMI_PARTNER`（Akarin の席の Codex がコマンドに渡す）、無ければ `yukarin`。受付が完了のときに残す 1 行も、担当のパートナーの記憶に書く。記憶の持ち主は `WORKING_OWNER_DISCORD_USER_IDS` の先頭の人。
@@ -197,6 +198,15 @@ Mac の Orca の worktree と agent の一覧を、`MAC_STATE_PORT`（既定は 
 5. 決めてほしいことが無ければ何も投稿しない。
 
 Renovate の PR は持ち主の許しで、朝会と見回りの席が片付ける。CI が通っていてマージできる（`mergeStateStatus` が `CLEAN`）ものはマージし、コンフリクトしているものは rebase のチェックボックスで Renovate に作り直させ、それでも直らなければ同じブランチでコンフリクトを解いて push する（次の回でマージする）。Renovate を入れる最初の PR（`renovate/configure`）と draft は触らない。マージが auto モードに止められたら、ほかの止めた操作と同じく許可を求める投稿になる。
+
+### 見張り
+
+持ち主が会話で頼んだ見張り（Worker の README の「見張り」）は、朝会と見回りの席が調べる。
+
+- 記憶の `watches` のうち `due`（前に調べてから間隔が過ぎた、まだ調べていない）のものだけを `due_watches` として席に渡す。見回りは GitHub に変わりが無くても、時間が来た見張りがあれば席を立てる。どちらも無い回は席を立てない。
+- 席は持ち主に確認せず、WebSearch と WebFetch で調べる（auto モードが通す読み取り）。URL の場所は検索よりそのページを直接読む。
+- 条件に合うもののうち `seen` に無いものだけを新着とし、`worker_done` の JSON の `notices` に 1 件 1 行で返す。受付は `notices` を `WORK_TEXT_CHANNEL_ID` のチャンネルにまとめて 1 件のメッセージで書く。新着が無ければ何も書かない。
+- 席は見張りを 1 件調べ終えるたびに `yunomi-memory watch-checked` で知らせたものの key を残す。残さなかった見張りは `due` のままなので、次の回で調べ直す。
 
 朝会と見回りの席には、目標に効く提案があれば決めてほしいこととして出すよう頼んである。材料に根拠があるときだけで、無い回は出さない。
 
