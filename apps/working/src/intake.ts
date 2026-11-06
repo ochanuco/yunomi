@@ -911,12 +911,14 @@ export const createIntake = (deps: IntakeDeps): Intake => {
 		await deps.remember(
 			taken.status === "完了"
 				? `仕事フォーラムの「${title}」を終えた`
-				: `仕事フォーラムの「${title}」を Mac に引き継いだ`,
+				: taken.status === "見張り中"
+					? `仕事フォーラムの「${title}」で見張りを始めた`
+					: `仕事フォーラムの「${title}」を Mac に引き継いだ`,
 			partnerOf(threadId),
 		);
 		await record(
 			threadId,
-			taken.status === "完了" ? "done" : "handoff",
+			taken.status === "引き継ぎ" ? "handoff" : "done",
 			[],
 			title,
 		);

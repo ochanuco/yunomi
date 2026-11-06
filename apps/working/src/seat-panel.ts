@@ -7,6 +7,7 @@ export const REACTION_OF: Readonly<Record<SeatLabel, string>> = {
 	完了: "✅",
 	決めてほしい: "❓",
 	引き継ぎ: "❓",
+	見張り中: "🔭",
 };
 
 /** 経過時間だけが変わったときに状態の欄を書き換える間隔。Discord の rate limit を食わないよう長めにとる。 */
