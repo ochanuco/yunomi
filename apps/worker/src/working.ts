@@ -39,6 +39,8 @@ const writeSchema = v.object({
 const watchAddSchema = v.object({
 	discord_user_id: v.pipe(v.string(), v.nonEmpty()),
 	watch: v.looseObject({}),
+	/** 登録した席の投稿。新着をそこに書く。 */
+	notify_thread_id: v.optional(v.pipe(v.string(), v.regex(/^\d{1,25}$/))),
 });
 
 const postSchema = v.union([writeSchema, watchAddSchema]);
@@ -176,6 +178,7 @@ export async function handleWorkingMemory(
 				last_checked_at: w.lastCheckedAt,
 				due: w.due,
 				seen: w.seen,
+				notify_thread_id: w.notifyThreadId,
 			})),
 		});
 	}
@@ -238,6 +241,7 @@ export async function handleWorkingMemory(
 			partnerId,
 			entityId,
 			...watch.value,
+			notifyThreadId: parsed.value.notify_thread_id ?? null,
 			now,
 		});
 		if (!added.ok) {

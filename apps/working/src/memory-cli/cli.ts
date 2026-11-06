@@ -1,6 +1,6 @@
 // コンテナでは node で直接動かすため、node の組み込み以外を import しない。
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 
 /** 受付が起動時に書く、記憶の口の接続情報。Claude CLI の環境変数には載せず、この CLI の中でだけ読む。 */
@@ -18,6 +18,21 @@ export const credentialsPathOf = (stateDir: string) =>
 	join(stateDir, CREDENTIALS_FILE);
 
 const PARTNER = /^[a-z]+$/;
+
+/**
+ * 席の中で呼ばれたら、その席の投稿の ID。見張りの新着をその投稿に書くのに使う。
+ * 席の作業場所は YUNOMI_SEATS_DIR の下の seat-<投稿の ID>（src/guard/env.ts の seatOf と同じ形）。
+ */
+export const seatThreadOf = (
+	seatsDir: string | undefined,
+	cwd: string,
+): string | null => {
+	if (!seatsDir) return null;
+	const rel = relative(seatsDir, cwd);
+	if (rel === "" || rel.startsWith("..") || rel.startsWith("/")) return null;
+	const m = /^seat-(\d{1,25})$/.exec(rel.split("/")[0] ?? "");
+	return m?.[1] ?? null;
+};
 
 export const MEMORY_KINDS = ["decided", "done", "goal"] as const;
 export const GOAL_CLOSINGS = ["achieved", "dropped"] as const;
@@ -75,6 +90,11 @@ const readCredentials = (
 	}
 };
 
+const threadField = (seatsDir: string | undefined, cwd: string) => {
+	const thread = seatThreadOf(seatsDir, cwd);
+	return thread === null ? {} : { notify_thread_id: thread };
+};
+
 /**
  * Working の記憶の口（Worker の /v1/partners/:id/working/memory）を読み書きする。
  * 接続情報は標準出力にも標準エラーにも出さない。Claude CLI の出力に載ると投稿に書かれるため。
@@ -83,6 +103,7 @@ export const runMemoryCli = async (
 	argv: readonly string[],
 	env: Record<string, string | undefined>,
 	doFetch: typeof fetch = fetch,
+	cwd: string = process.cwd(),
 ): Promise<CliOutput> => {
 	const [command, ...rest] = argv;
 	if (
@@ -253,7 +274,11 @@ export const runMemoryCli = async (
 										summary: values.summary,
 									}
 								: command === "watch-add"
-									? { discord_user_id: creds.discord_user_id, watch }
+									? {
+											discord_user_id: creds.discord_user_id,
+											watch,
+											...threadField(env.YUNOMI_SEATS_DIR, cwd),
+										}
 									: command === "watch-stop"
 										? {
 												discord_user_id: creds.discord_user_id,

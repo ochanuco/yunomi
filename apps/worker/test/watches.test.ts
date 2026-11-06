@@ -326,6 +326,24 @@ describe("Working の席が足す見張り", () => {
 		expect(await readWatches(owner.id)).toEqual([]);
 	});
 
+	it("登録した席の投稿を、新着を書く先として覚える", async () => {
+		const { owner } = await setup("seat-watch-thread");
+		const res = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: seatWatch,
+			notify_thread_id: "1234567890",
+		});
+		expect(res.status).toBe(201);
+		const [w] = await readWatches(owner.id);
+		expect(w).toMatchObject({ notify_thread_id: "1234567890" });
+		const bad = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: { ...seatWatch, query: "別の見張り" },
+			notify_thread_id: "../x",
+		});
+		expect(bad.status).toBe(400);
+	});
+
 	it("足した見張りが記憶に出て、止めると消える", async () => {
 		const { owner } = await setup("seat-watch-add");
 		const res = await seatRequest("POST", {
@@ -351,6 +369,7 @@ describe("Working の席が足す見張り", () => {
 			sources: seatWatch.sources,
 			interval_minutes: 360,
 			due: true,
+			notify_thread_id: null,
 		});
 
 		const dup = await seatRequest("POST", {
