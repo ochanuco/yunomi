@@ -16,6 +16,7 @@ import {
 } from "./attachments.ts";
 import { childEnv, createSummarizer } from "./claude-cli.ts";
 import { claudeConfigPathOf, trustWorkspace } from "./claude-trust.ts";
+import { syncCodexMcpServer } from "./codex-mcp.ts";
 import { trustCodexProject } from "./codex-trust.ts";
 import { loadConfig } from "./config.ts";
 import { createDiscordRest } from "./discord-rest.ts";
@@ -190,6 +191,22 @@ if (akarin) {
 		await realpath(cfg.seatsRepo),
 	);
 	if (added) logger.info("codex trusted seats repo");
+	const mcp = await syncCodexMcpServer(
+		join(cfg.codexHome, "config.toml"),
+		"playwright",
+		cfg.playwright && {
+			url: cfg.playwright.url,
+			headers: {
+				"CF-Access-Client-Id": cfg.playwright.clientId,
+				"CF-Access-Client-Secret": cfg.playwright.clientSecret,
+			},
+		},
+	);
+	if (mcp) {
+		logger.info("codex playwright mcp updated", {
+			enabled: cfg.playwright !== null,
+		});
+	}
 }
 
 if (!cfg.chimera) {

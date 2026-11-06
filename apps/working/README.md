@@ -153,6 +153,7 @@ hook は席の場所（`CLAUDE_PROJECT_DIR`）で、止めた操作の紐づけ�
 - `/etc/codex/requirements.toml`（root の持ち物）で、Claude CLI と同じ PreToolUse hook（`src/guard/hook.ts`）と SessionStart hook（`src/repo-map/hook.ts`）を managed hook として登録し、`allow_managed_hooks_only = true` で作業場所や `CODEX_HOME` の hook を読ませない。managed hook は信頼の確認なしで動く。
 - PreToolUse hook は、Claude の席と同じく秘密情報の読み出し（`~/.codex` の `auth.json` を含む）と、秘密情報や許可の記録の場所への書き込み（`apply_patch` でのファイルの書き換えを含む）を止める。止めた操作の許可の流れは Claude の席と同じ。Codex には auto モードの判定が無いので、取り消せない操作の前に聞くのは `WORKING_INSTRUCTIONS` の指示による。
 - Codex は CLAUDE_PROJECT_DIR を持たないので、hook は入力の `cwd` から席の投稿を引く。
+- 受付は起動のたびに、`CODEX_HOME/config.toml` の MCP サーバー `playwright`（代理操作するブラウザ）を書き直す。席の環境変数には秘密を渡さないので、Access のヘッダーは値のまま書く。`~/.codex` は hook が読み出しを止める。`PLAYWRIGHT_*` が欠けていれば表を消す。
 - 環境変数は Claude の席と同じく `seat-env.sh` が絞ったものだけを受け継ぐ（`CODEX_HOME` を足してある）。Codex は既定でコマンドに環境変数をそのまま渡すので、`GH_TOKEN` は `gh` と `git push` に届く。
 
 ### 席のビルドとテスト
@@ -282,6 +283,8 @@ CI の失敗、PR のレビュー、issue と PR のコメントがあると、�
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | いいえ | Working 用の Access service token。Worker の `accessCallers` で `working` に引かれる。席の Claude には渡さない |
 | `CHIMERA_URL` | いいえ | chimera の URL。`chimera:` の行の画像を取る |
 | `CHIMERA_ACCESS_CLIENT_ID` / `CHIMERA_ACCESS_CLIENT_SECRET` | いいえ | chimera の Access service token。受付だけが使い、席の Claude には渡さない |
+| `PLAYWRIGHT_MCP_URL` | いいえ | Playwright MCP の URL（`https://playwright.chanu.co/mcp`）。Akarin の席の Codex に MCP サーバー `playwright` として渡す |
+| `PLAYWRIGHT_ACCESS_CLIENT_ID` / `PLAYWRIGHT_ACCESS_CLIENT_SECRET` | いいえ | Playwright MCP の Cloudflare Access の service token。URL とそろったときだけ渡す |
 | `MEMORY_BIN` | いいえ | 朝会で記憶を読む CLI。既定は `yunomi-memory` |
 | `MAC_STATE_TOKEN` | いいえ | Mac と共有するトークン。設定したときだけ席の状態の受け口を開く |
 | `MAC_STATE_PORT` | いいえ | 席の状態の受け口のポート。既定は `8090` |
