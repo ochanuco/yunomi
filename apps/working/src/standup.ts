@@ -79,8 +79,13 @@ export type StandupDeps = {
 	/** 朝会・見回り・GitHub の知らせの席が止められた操作を、活動ログに 1 行残す。 */
 	recordActivity?: (entry: ActivityEntry) => Promise<void>;
 	now?: () => Date;
+	/** 見張りの知らせをやり直すまで待つ。テストで差し替える。 */
+	sleep?: (ms: number) => Promise<void>;
 	logger: Logger;
 };
+
+/** 見張りの新着は席が記憶に知らせ済みと残したあとに届くので、書けないと次の回には出ない。間をおいてやり直す。 */
+const NOTICE_RETRY_MS = [10_000, 60_000];
 
 const DECIDE_TAG = "決めてほしい";
 
@@ -271,15 +276,26 @@ export const postNotices = async (
 	notices: readonly string[],
 ): Promise<boolean> => {
 	if (notices.length === 0) return true;
-	const sent = await deps.discord.send(
-		deps.workTextChannelId,
-		notices.join("\n"),
-	);
-	if (!sent.ok) {
-		deps.logger.error("watch notice failed", { error: sent.error.type });
-		return false;
+	const sleep =
+		deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+	for (let attempt = 0; ; attempt++) {
+		const sent = await deps.discord.send(
+			deps.workTextChannelId,
+			notices.join("\n"),
+		);
+		if (sent.ok) return true;
+		const wait = NOTICE_RETRY_MS[attempt];
+		if (wait === undefined || !sent.error.retryable) {
+			deps.logger.error("watch notice failed", {
+				error: sent.error.type,
+				attempts: attempt + 1,
+				notices: notices.length,
+			});
+			return false;
+		}
+		deps.logger.warn("watch notice retry", { error: sent.error.type });
+		await sleep(wait);
 	}
-	return true;
 };
 
 /** 朝会か見回りの席の報告を読み、決めてほしいことを投稿にし、見張りの新着を知らせる。 */
