@@ -167,6 +167,15 @@ discord.once(Events.ClientReady, (c) => {
 				if (text === null) c.user.setPresence({ activities: [] });
 				else c.user.setActivity(text, { type: ActivityType.Custom });
 			},
+			setBio: async (text) => {
+				try {
+					await c.application.edit({ description: text });
+					return true;
+				} catch (e) {
+					logger.warn("usage bio update failed", { error: String(e) });
+					return false;
+				}
+			},
 			logger,
 		});
 	}
