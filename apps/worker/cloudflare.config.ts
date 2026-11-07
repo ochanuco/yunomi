@@ -35,9 +35,7 @@ export default defineConfig(({ mode }) => {
 				// Yukarin の bot の user id。メンション判定と自己発言の除外に使う。
 				PARTNER_DISCORD_USER_ID: bindings.text(r.partnerDiscordUserId),
 				// Akarin の bot の user id。未設定（空）なら、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を見分けない。
-				AKARIN_DISCORD_USER_ID: bindings.text(
-					process.env.AKARIN_DISCORD_USER_ID ?? "",
-				),
+				AKARIN_DISCORD_USER_ID: bindings.text(r.akarinDiscordUserId),
 				// Admin API を許可する owner の email。
 				OWNER_EMAILS: bindings.json(listFromEnv("OWNER_EMAILS")),
 				// github_read が repo を省略されたときに読む repo。

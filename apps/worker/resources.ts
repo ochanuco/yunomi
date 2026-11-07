@@ -4,6 +4,7 @@
 export const D1_PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000";
 
 // Yukarin bot の Discord user id（= Application ID）。local は dev bot をそのまま使う。
+// Akarin の bot（akarinDiscordUserId）は production にしかないので、ほかの mode は空にする。
 const DEV_BOT_USER_ID = "1558605895758389250";
 
 // age の recipient（公開鍵）。Worker は暗号化にしか使わず、復号鍵は持たない。
@@ -37,6 +38,7 @@ export const resources = {
 		...ACCESS_DEV,
 		d1Id: "df215ab3-5b7d-48c0-862b-f0057320e491",
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		akarinDiscordUserId: "",
 		discordSendFromWorker: "1",
 		voiceEnabled: "1",
 		voiceRealization: "shizuku",
@@ -57,6 +59,7 @@ export const resources = {
 		},
 		d1Id: "38337fba-69e0-4e55-94a3-c5daf93606d2",
 		partnerDiscordUserId: "1558613526585671773",
+		akarinDiscordUserId: "1568115419108081705",
 		discordSendFromWorker: "1",
 		voiceEnabled: "1",
 		voiceRealization: "yukari",
@@ -72,6 +75,7 @@ export const resources = {
 		...ACCESS_DEV,
 		d1Id: D1_PLACEHOLDER_ID,
 		partnerDiscordUserId: DEV_BOT_USER_ID,
+		akarinDiscordUserId: "",
 		discordSendFromWorker: "0",
 		voiceEnabled: "0",
 		voiceRealization: "yukari",

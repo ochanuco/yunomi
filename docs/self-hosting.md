@@ -90,6 +90,7 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `host` | Worker を置くホスト名（自分のゾーンのもの） |
 | `d1Id` | 1 で作った D1 の UUID |
 | `partnerDiscordUserId` | bot の Application ID |
+| `akarinDiscordUserId` | 2 人目のパートナー（Akarin）の bot の Application ID。Akarin を動かさないなら `""` |
 | `discordSendFromWorker` | `"1"` なら Worker が返事を送る（`DISCORD_BOT_TOKEN` が要る）。`"0"` なら Gateway が送る |
 | `voiceEnabled` | 音声を使わないなら `"0"` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
@@ -114,7 +115,6 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | 環境変数 | 値 |
 |---|---|
 | `OWNER_EMAILS` | 自分のメールアドレス（カンマ区切りで複数可）。必須 |
-| `AKARIN_DISCORD_USER_ID` | 2 人目のパートナー（Akarin）の bot の Application ID。Akarin を動かすときだけ |
 
 夜間バッチの cron は `17 19 * * *`（UTC、日本時間 4:17）です。
 
