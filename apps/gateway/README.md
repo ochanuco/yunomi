@@ -25,6 +25,8 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
 | `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。この中の発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。未設定ならすべての発言を Worker に送る |
+| `SEAT_STATUS_URL` | いいえ | mizuya の Working の、席の状態を渡す口の URL（例: `http://<docker01>:8191`）。未設定なら作業中の数と使用率を出さない |
+| `SEAT_STATUS_TOKEN` | `SEAT_STATUS_URL` と組 | 席の状態を渡す口と共有するトークン。`Authorization: Bearer` で送る |
 | `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
@@ -38,6 +40,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `DISCORD_TOKEN` | Akarin の bot の token（Yukarin とは別の bot） |
 | `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の gateway と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
 | `WORK_CATEGORY_IDS` | Yukarin の gateway と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
+| `SEAT_STATUS_URL` / `SEAT_STATUS_TOKEN` | Yukarin の gateway と同じ値。読むのは `PARTNER_ID` の席の分なので、Akarin の bot には Akarin の席（Codex）の数と使用率が出る |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` / `KUKICHA_URL` / `KUKICHA_TOKEN` / `OWNER_DISCORD_USER_ID` | Akarin はまだ声を持たないので渡さない |
 | `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
 
@@ -60,6 +63,8 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 
 - 自分の発言は中継しない。bot の発言は `author.is_bot=true` で送る。DM は対象外。VC のテキストチャット（GuildVoice）は通常のチャンネルと同じに中継し、作者が入っている VC を `author_voice_channel_id` に載せる（guild の voice state キャッシュから読む）。
 - 発言のチャンネルの親カテゴリ（スレッドなら親チャンネルのカテゴリ）が `WORK_CATEGORY_IDS` に含まれるときは、Worker に送らない。Talking は返事をしない。それ以外のカテゴリとカテゴリ外の発言は Worker に送る。
+- `SEAT_STATUS_URL` があれば、mizuya の Working の `/seat-status/<PARTNER_ID>` を 1 分おきに読み、自分の席の作業中の数と、席で動く CLI（Yukarin は Claude、Akarin は Codex）の使用率を bot のステータスに「作業中 2件 · 5h 30% · 週 12%」の形で出す。読めないときはステータスを消す。
+  - 使用率は application の説明文（プロフィールの自己紹介欄）にも、5 時間枠と週枠を 1 行ずつ、リセット時刻と書いた時刻を添えて書く。変わったときだけ、15 分に一度まで。Working が一時的に読めないだけでは消さない。
 - typing は出さない。Worker が REST で出す。
 - `ignore` は何もしない。`ack`（Worker が送信まで済ませた）は、`voice` があるときだけ VC を操作する。
 - `reply` と `ack` に `avatar: { emotion }` があれば、返事のテキストを送り終えたあとに、その感情の表情画像からランダムに 1 枚を同じチャンネルへ添付で貼る。分割された返事でも 1 回だけ。`reply` を途中までしか送れなかったときは貼らない。画像の無い感情は何もしない。
