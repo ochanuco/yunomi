@@ -69,7 +69,7 @@ describe("watch adapter", () => {
 	it("間隔・場所の数・期限の誤りは書かずに落とす", async () => {
 		const { adapter, calls } = setup();
 		for (const bad of [
-			{ ...input, interval_hours: 1 },
+			{ ...input, interval_hours: 0 },
 			{ ...input, interval_hours: 24 * 7 + 1 },
 			{ ...input, sources: ["a", "b", "c", "d", "e", "f"] },
 			{ ...input, until: "来週" },

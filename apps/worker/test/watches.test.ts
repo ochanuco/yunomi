@@ -407,7 +407,7 @@ describe("Working の席が足す見張り", () => {
 			{ ...seatWatch, query: "1行目\n2行目" },
 			{ ...seatWatch, query: "あ".repeat(201) },
 			{ ...seatWatch, sources: Array(6).fill("店") },
-			{ ...seatWatch, interval_hours: 1 },
+			{ ...seatWatch, interval_hours: 0 },
 			{ ...seatWatch, interval_hours: 1.5 },
 			{ ...seatWatch, until: "2020-01-01T00:00:00+09:00" },
 			{ ...seatWatch, until: "そのうち" },

@@ -199,9 +199,9 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 
 ### 見張り
 
-オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは mizuya の Working の見回りで、Worker は持つだけ。
+オーナーに頼まれた見張りは D1 の `watches` に持つ。1 件は、何を探すか（`query`、条件ごと 1 行）、どこを見るか（`sources`、店の名前か URL の配列。空なら普通の検索）、間隔（`interval_minutes`）、いつまで（`until_at`。null は期限なし）、前に知らせたもの（`seen`）、前に調べた時刻（`last_checked_at`）を持つ。調べて知らせるのは mizuya の Working で、受付が見張りごとに Dkron のジョブを置いて間隔どおりに席を立てる。Worker は持つだけ。
 
-- 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（2 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。仕事の席からは Working の記憶の口（`yunomi-memory watch-add` / `watch-stop`）で同じ検証と保存を通して登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
+- 会話からは道具 `watch_add`（`query` / `sources` / `interval_hours`（1 〜 168）/ `until`）と `watch_stop`（`id`）で登録・停止する。仕事の席からは Working の記憶の口（`yunomi-memory watch-add` / `watch-stop`）で同じ検証と保存を通して登録・停止する。category は `watch_write`（Yukarin と Akarin の profile で `auto`）。`OWNER_DISCORD_USER_ID` があれば `defaultCapabilities` が登録する。過去の期限は検証で落とす。
 - 動いている見張りは 1 人 `ACTIVE_WATCH_LIMIT`（10）件まで。同じ `query` の見張りは重ねない。重複・上限・見つからないは目標と同じく `status: "not_done"` と `reason` で返す。
 - オーナーが話し相手のターンだけ「見張り」の区画に、動いている見張りを id・場所・間隔・期限付きで出す。
 - 期限を過ぎた見張りは読み出しから外れるだけで、行は `active` のまま残る。
