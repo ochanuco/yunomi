@@ -3,6 +3,7 @@ import { err, newId, ok, type Result } from "@yunomi/core";
 import { and, asc, eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { externalIdentities, workNotes } from "./db/schema.ts";
+import type { IndexChangeListener } from "./memory-index/types.ts";
 
 export const workNoteKinds = ["decided", "done", "goal"] as const;
 
@@ -96,7 +97,12 @@ const toGoal = (r: { id: string; summary: string; createdAt: string }) => ({
 	createdAt: new Date(r.createdAt),
 });
 
-export const createWorkNoteRepo = (db: DrizzleD1Database): WorkNoteRepo => {
+export const createWorkNoteRepo = (
+	db: DrizzleD1Database,
+	onIndexChange: IndexChangeListener = () => {},
+): WorkNoteRepo => {
+	const noteAdded = (sourceId: string) =>
+		onIndexChange([{ kind: "work_note", sourceId }]);
 	const openGoalRows = (partnerId: string, entityId: string) =>
 		and(
 			eq(workNotes.partnerId, partnerId),
@@ -128,6 +134,7 @@ export const createWorkNoteRepo = (db: DrizzleD1Database): WorkNoteRepo => {
 				summary,
 				createdAt: now.toISOString(),
 			});
+			noteAdded(id);
 			return { id, kind, summary, createdAt: now };
 		},
 
@@ -149,6 +156,7 @@ export const createWorkNoteRepo = (db: DrizzleD1Database): WorkNoteRepo => {
 				createdAt: now.toISOString(),
 				status: "open",
 			});
+			noteAdded(id);
 			return ok({ id, summary, createdAt: now });
 		},
 
@@ -170,8 +178,11 @@ export const createWorkNoteRepo = (db: DrizzleD1Database): WorkNoteRepo => {
 };
 
 /** Talking の道具（goal_add / goal_close）が書く先。話し手の Discord user id から entity を引く。 */
-export const createGoalStore = (db: DrizzleD1Database): GoalStore => {
-	const repo = createWorkNoteRepo(db);
+export const createGoalStore = (
+	db: DrizzleD1Database,
+	onIndexChange?: IndexChangeListener,
+): GoalStore => {
+	const repo = createWorkNoteRepo(db, onIndexChange);
 	const withEntity = async <T>(
 		discordUserId: string,
 		f: (entityId: string) => Promise<Result<T, GoalStoreError>>,

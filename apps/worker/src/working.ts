@@ -5,6 +5,7 @@ import * as v from "valibot";
 import { authenticate } from "./auth/access.ts";
 import { accessEnv } from "./env.ts";
 import { createMemoryRepo } from "./memory.ts";
+import { vectorDepsFromEnv, vectorSyncListener } from "./memory-index/index.ts";
 import { createOpenLoopRepo } from "./open-loops.ts";
 import { partnerProfile } from "./partners.ts";
 import {
@@ -115,6 +116,7 @@ export async function handleWorkingMemory(
 	request: Request,
 	env: Env,
 	partnerId: string,
+	background: (task: Promise<void>) => void,
 ): Promise<Response> {
 	if (
 		request.method !== "GET" &&
@@ -183,7 +185,10 @@ export async function handleWorkingMemory(
 		});
 	}
 
-	const notes = createWorkNoteRepo(db);
+	const notes = createWorkNoteRepo(
+		db,
+		vectorSyncListener(db, vectorDepsFromEnv(env), background),
+	);
 	if (request.method === "PATCH") {
 		const parsed = await readJson(request, patchSchema);
 		if (!parsed.ok) return parsed.error;

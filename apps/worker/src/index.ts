@@ -44,7 +44,7 @@ const DISCORD_VOICE_CONNECTION_PATH =
 	/^\/v1\/partners\/([^/]+)\/discord\/voice-connection$/;
 
 export default {
-	async fetch(request, env): Promise<Response> {
+	async fetch(request, env, ctx): Promise<Response> {
 		const { pathname } = new URL(request.url);
 		if (request.method === "GET" && pathname === "/health") {
 			return health(env);
@@ -76,6 +76,7 @@ export default {
 				request,
 				env,
 				decodeURIComponent(workingPartnerId),
+				(task) => ctx.waitUntil(task),
 			);
 		}
 		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];

@@ -60,6 +60,34 @@ const api = (url: URL) => {
 };
 
 describe("run", () => {
+	it("memory-index rebuild は step ごとに next_cursor が尽きるまで POST する", async () => {
+		const bodies: unknown[] = [];
+		const h = harness(() => null, {
+			fetch: async (input, init) => {
+				const body = JSON.parse(String(init?.body)) as {
+					step: "chunks" | "vectors";
+					cursor: string | null;
+				};
+				bodies.push(body);
+				const next =
+					body.step === "chunks" && body.cursor === null ? "c1" : null;
+				return Response.json({
+					step: body.step,
+					processed: 2,
+					next_cursor: next,
+					skipped: null,
+				});
+			},
+		});
+		expect(await run(["memory-index", "rebuild"], h.deps)).toBe(0);
+		expect(bodies).toEqual([
+			{ step: "chunks", cursor: null },
+			{ step: "chunks", cursor: "c1" },
+			{ step: "vectors", cursor: null },
+		]);
+		expect(h.out).toEqual(["会話ログの塊: 4 件", "埋め込んだ文書: 2 件"]);
+	});
+
 	it("status は整形して出す", async () => {
 		const h = harness(api);
 		expect(await run(["status"], h.deps)).toBe(0);

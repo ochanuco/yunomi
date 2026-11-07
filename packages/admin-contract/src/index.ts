@@ -822,3 +822,34 @@ export const SnapshotRestoreResponseSchema: v.GenericSchema<SnapshotRestoreRespo
 			relationships: num,
 		}),
 	});
+
+/** 記憶の索引の一括投入。chunks で会話ログから塊を作り、vectors で全文書を埋め込み直す。 */
+export type MemoryIndexRebuildStep = "chunks" | "vectors";
+
+export type MemoryIndexRebuildRequest = {
+	step: MemoryIndexRebuildStep;
+	/** 前回の応答の next_cursor。最初は null。 */
+	cursor: string | null;
+};
+
+export type MemoryIndexRebuildResponse = {
+	step: MemoryIndexRebuildStep;
+	processed: number;
+	/** null なら、この step は終わり。 */
+	next_cursor: string | null;
+	/** owner_unknown: 持ち主の Discord user id が無い環境なので、会話ログを塊にしない。 */
+	skipped: "owner_unknown" | null;
+};
+
+const rebuildStep = v.picklist(["chunks", "vectors"]);
+
+export const MemoryIndexRebuildRequestSchema: v.GenericSchema<MemoryIndexRebuildRequest> =
+	v.object({ step: rebuildStep, cursor: v.nullable(str) });
+
+export const MemoryIndexRebuildResponseSchema: v.GenericSchema<MemoryIndexRebuildResponse> =
+	v.object({
+		step: rebuildStep,
+		processed: num,
+		next_cursor: v.nullable(str),
+		skipped: v.nullable(v.literal("owner_unknown")),
+	});

@@ -30,7 +30,7 @@ import {
 	type VoiceStateUpdate,
 	withSpeakQueue,
 } from "@yunomi/protocol";
-import { drizzle } from "drizzle-orm/d1";
+import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import { type AuditWriter, createAuditWriter } from "../audit-store.ts";
 import { defaultCapabilities } from "../capabilities.ts";
 import {
@@ -45,6 +45,14 @@ import {
 	type InterestOpinionRepo,
 } from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
+import {
+	type IndexChangeListener,
+	indexTurnConversation,
+	syncVectors,
+	type VectorDeps,
+	vectorDepsFromEnv,
+	vectorSyncListener,
+} from "../memory-index/index.ts";
 import { createOpenLoopRepo, type OpenLoopRepo } from "../open-loops.ts";
 import { otherPartners, partnerDiscord } from "../partner-discord.ts";
 import { defaultPartnerProfile, partnerProfile } from "../partners.ts";
@@ -126,10 +134,11 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
 	readonly #conversationLog: ConversationLogWriter;
+	readonly #db: DrizzleD1Database;
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	// 以下 6 つはテストが runInDurableObject で差し替える seam。
+	// 以下 8 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
 	/** 返事のメッセージの間を待つ。 */
 	sleep: (ms: number) => Promise<void> = (ms) =>
@@ -141,6 +150,10 @@ export class PartnerDO extends DurableObject<Env> {
 		defaultCommunication(env, this.profile.partner_id);
 	/** 発声の器官。null（声が無効、設定や secret が欠けている）のときは声にしない。 */
 	createVoiceOrgans: (env: Env) => VoiceOrgans | null = defaultVoiceOrgans;
+	/** 持ち主の Discord user id。持ち主との会話だけを索引に入れる。prod だけが secret で持つ。 */
+	ownerDiscordUserId: string | undefined;
+	/** 記憶の索引の埋め込みと Vectorize。null（local、テスト）なら Vectorize へ反映しない。 */
+	memoryVectors: VectorDeps | null;
 	/** 道具の部品。undefined（prod で secret が揃っていない、dev を含む）ならターンは道具なしで返事を作る。 */
 	capabilities: TurnCapabilities | undefined;
 	pipeline: Pipeline = (msg, onEngaged) =>
@@ -173,10 +186,18 @@ export class PartnerDO extends DurableObject<Env> {
 		this.profile = partnerProfile(ctx.id.name ?? "") ?? defaultPartnerProfile;
 		this.#store = new DoStore(ctx.storage.sql);
 		const db = drizzle(env.DB);
+		this.#db = db;
+		this.memoryVectors = vectorDepsFromEnv(env);
+		this.ownerDiscordUserId = env.OWNER_DISCORD_USER_ID;
+		// テストが memoryVectors を差し替えられるよう、呼ばれた時点の値を読む。
+		const onIndexChange: IndexChangeListener = (keys) =>
+			vectorSyncListener(db, this.memoryVectors, (t) => this.#background(t))(
+				keys,
+			);
 		this.#history = createHistoryWriter(db);
-		this.#memory = createMemoryRepo(db);
+		this.#memory = createMemoryRepo(db, onIndexChange);
 		this.#openLoops = createOpenLoopRepo(db);
-		this.#workNotes = createWorkNoteRepo(db);
+		this.#workNotes = createWorkNoteRepo(db, onIndexChange);
 		this.#watches = createWatchRepo(db);
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
@@ -193,7 +214,7 @@ export class PartnerDO extends DurableObject<Env> {
 					pending: createPendingStore(ctx.storage.sql),
 					policy: this.profile.capability_defaults,
 					now: () => this.now(),
-					goals: createGoalStore(db),
+					goals: createGoalStore(db, onIndexChange),
 					watches: createWatchStore(db),
 				},
 			) ?? undefined;
@@ -374,16 +395,42 @@ export class PartnerDO extends DurableObject<Env> {
 		const context = this.#store
 			.recentMessages(inbound.channelId, inbound.messageId)
 			.slice(-CONTEXT_BEFORE_COUNT);
+		const messages = [...context, toRecentMessage(inbound), ...replies];
 		this.#background(
-			this.#conversationLog.record(
-				{
-					partnerId: inbound.partnerId,
-					turnEventId: inbound.eventId,
-					now: this.now(),
-				},
-				[...context, toRecentMessage(inbound), ...replies],
-			),
+			this.#conversationLog
+				.record(
+					{
+						partnerId: inbound.partnerId,
+						turnEventId: inbound.eventId,
+						now: this.now(),
+					},
+					messages,
+				)
+				.then(() => this.#indexConversation(inbound, messages)),
 		);
+	}
+
+	// 持ち主との会話だけを索引に入れる。持ち主が分からない環境（dev）では入れない。
+	async #indexConversation(
+		inbound: InboundMessage,
+		messages: readonly LoggedMessage[],
+	): Promise<void> {
+		const ownerId = this.ownerDiscordUserId;
+		if (!ownerId || inbound.author.id !== ownerId) return;
+		const keys = await indexTurnConversation(this.#db, {
+			partnerId: inbound.partnerId,
+			channelId: inbound.channelId,
+			ownerId,
+			anchorMessageId: inbound.messageId,
+			messageIds: messages.map((m) => m.messageId),
+		});
+		if (!keys.ok) {
+			console.error("conversation index failed", keys.error);
+			return;
+		}
+		if (!this.memoryVectors) return;
+		const synced = await syncVectors(this.#db, this.memoryVectors, keys.value);
+		if (!synced.ok) console.error("memory index sync failed", synced.error);
 	}
 
 	// 声が使えるのは、発声の器官と意思疎通の口が両方あるときだけ。

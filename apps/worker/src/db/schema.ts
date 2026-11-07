@@ -403,3 +403,66 @@ export const watches = sqliteTable(
 	},
 	(t) => [index("watches_entity").on(t.partnerId, t.entityId, t.status)],
 );
+
+/**
+ * conversation_messages を索引に入れる単位。持ち主の発言 1 件（anchor）に、その直前の持ち主と Partner の発言と、
+ * 続く Partner の返事をまとめる。id は anchor の conversation_messages.id。
+ */
+export const conversationChunks = sqliteTable(
+	"conversation_chunks",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		body: text("body").notNull(),
+		startedAt: text("started_at").notNull(),
+		/** anchor の発言時刻。期間で絞るときの基準。 */
+		occurredAt: text("occurred_at").notNull(),
+		endedAt: text("ended_at").notNull(),
+	},
+	(t) => [
+		index("conversation_chunks_channel_time").on(
+			t.partnerId,
+			t.channelId,
+			t.occurredAt,
+		),
+	],
+);
+
+/** 塊がどの発言から作られたか。会話ログを消すとき、影響する塊を引くのに使う。 */
+export const conversationChunkMessages = sqliteTable(
+	"conversation_chunk_messages",
+	{
+		chunkId: text("chunk_id").notNull(),
+		messageId: text("message_id").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.chunkId, t.messageId] }),
+		index("conversation_chunk_messages_message").on(t.messageId),
+	],
+);
+
+/**
+ * キーワード検索（FTS5）の文書。facts・work_notes・conversation_chunks の trigger が書き、
+ * memory_search_fts が trigger でこの表に追従する（migration 0016）。アプリからは書かない。
+ * Vectorize の同期もこの表を正として行う。
+ */
+export const memorySearchDocs = sqliteTable(
+	"memory_search_docs",
+	{
+		// FTS5 の external content は整数の rowid で結び付くため、整数の主キーを持たせる。
+		id: integer("id").primaryKey({ autoIncrement: true }),
+		kind: text("kind", {
+			enum: ["fact", "work_note", "conversation"],
+		}).notNull(),
+		sourceId: text("source_id").notNull(),
+		partnerId: text("partner_id").notNull(),
+		body: text("body").notNull(),
+		/** facts は observed_at、work_notes は created_at、塊は anchor の occurred_at。 */
+		at: text("at").notNull(),
+	},
+	(t) => [
+		uniqueIndex("memory_search_docs_source").on(t.kind, t.sourceId),
+		index("memory_search_docs_partner").on(t.partnerId, t.id),
+	],
+);

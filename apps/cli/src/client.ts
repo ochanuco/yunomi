@@ -11,6 +11,9 @@ import {
 	type KpisResponse,
 	KpisResponseSchema,
 	type MemoryInclude,
+	type MemoryIndexRebuildRequest,
+	type MemoryIndexRebuildResponse,
+	MemoryIndexRebuildResponseSchema,
 	type MemoryKind,
 	type MemoryResponse,
 	MemoryResponseSchema,
@@ -71,6 +74,9 @@ export type AdminClient = {
 	deleteConversationLog(
 		req: ConversationLogDeleteRequest,
 	): Promise<ConversationLogDeleteResponse>;
+	rebuildMemoryIndex(
+		req: MemoryIndexRebuildRequest,
+	): Promise<MemoryIndexRebuildResponse>;
 };
 
 export const createClient = (
@@ -174,6 +180,13 @@ export const createClient = (
 			call(
 				"conversation-log/delete",
 				ConversationLogDeleteResponseSchema,
+				{},
+				{ method: "POST", body: JSON.stringify(req) },
+			),
+		rebuildMemoryIndex: (req) =>
+			call(
+				"memory-index",
+				MemoryIndexRebuildResponseSchema,
 				{},
 				{ method: "POST", body: JSON.stringify(req) },
 			),
