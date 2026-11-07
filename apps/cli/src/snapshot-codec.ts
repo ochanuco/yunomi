@@ -16,8 +16,11 @@ export const decryptSnapshot = async (
 		const decrypter = new Decrypter();
 		decrypter.addIdentity(identity);
 		const gzipped = await decrypter.decrypt(encrypted);
+		// decrypt は Uint8Array<ArrayBufferLike> を返し BlobPart に渡せないため、ArrayBuffer 上へコピーする
 		json = await new Response(
-			new Blob([gzipped]).stream().pipeThrough(new DecompressionStream("gzip")),
+			new Blob([new Uint8Array(gzipped)])
+				.stream()
+				.pipeThrough(new DecompressionStream("gzip")),
 		).text();
 	} catch (e) {
 		return {
