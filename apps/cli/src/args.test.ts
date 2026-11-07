@@ -132,3 +132,45 @@ describe("parseCli", () => {
 		expect(parseCli(argv).ok).toBe(false);
 	});
 });
+
+describe("maintenance conversation-log delete", () => {
+	const base = ["maintenance", "conversation-log", "delete"];
+
+	it("日付は JST の 0 時、日時はオフセットに従って UTC にする", () => {
+		expect(
+			ok([
+				...base,
+				"--from",
+				"2026-10-01",
+				"--to",
+				"2026-10-02T12:00:00+09:00",
+				"--channel",
+				"c1",
+				"--message-id",
+				"m1",
+				"--message-id",
+				"m2",
+				"--yes",
+			]).command,
+		).toEqual({
+			name: "conversation-log-delete",
+			from: "2026-09-30T15:00:00.000Z",
+			to: "2026-10-02T03:00:00.000Z",
+			channel: "c1",
+			messageIds: ["m1", "m2"],
+			dryRun: false,
+		});
+	});
+
+	it.each([
+		[["--yes"], "範囲"],
+		[["--channel", "c1"], "--yes"],
+		[["--from", "2026-10-01T00:00:00", "--dry-run"], "オフセット"],
+		[["--from", "2026-10-02", "--to", "2026-10-01", "--dry-run"], "前"],
+		[["--channel", "c1", "--dry-run", "--all"], "--all"],
+	])("%j は拒否する", (extra, message) => {
+		const r = parseCli([...base, ...extra]);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.message).toContain(message);
+	});
+});

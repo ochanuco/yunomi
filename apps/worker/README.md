@@ -205,6 +205,25 @@ LLM の応答は `interest_signals`（最大 2 件。`topic` / `direction` が `
 
 `scheduled` は削除の前に `audit_events` を生活日（JST 05:00 境界）単位で集計し、`audit_daily_kpis`（主キー `(partner_id, day)`）へ upsert する。集計に失敗したら削除しない。列は turns / replies / ignores / errors（`error_type` あり）/ degraded / fallback_used / reply ターンの latency p50・p95（nearest-rank、reply が無い日は null）/ input・output・cache_read・cache_write tokens の合計。進行中の生活日は含めず、直近 `KPI_RECOMPUTE_DAYS`（7）日分の確定済みの日を毎回再集計する。upsert なので何度走らせても同じ結果になり、cron の失敗で取りこぼした日も 7 日以内なら拾える。cron は 04:17 JST（生活日の境界の前）に走るため、ある生活日が集計されるのは翌日の cron になる。保持期間（30 日）内の過去分の遡及集計はしない。
 
+## 会話ログの保持と削除
+
+`conversation_messages` は返事をしたターンの会話本文を持つ。持ち主（`OWNER_DISCORD_USER_ID` と `author_id` が一致する発言）と Partner 自身の発言（`is_partner`）は無期限に残し、それ以外の発言は `occurred_at` が `CONVERSATION_RETENTION_DAYS`（90）日より前になると、毎日 04:17 JST の `scheduled` が audit 削除の後に消す。`OWNER_DISCORD_USER_ID` が無い環境（development）では消さない。
+
+行を消す処理は `src/conversation-log.ts` の `deleteConversationMessages` だけが持ち、消した行の id を返す。会話ログから作るものを追従させるときはこの id を使う。
+
+消した操作は `maintenance_events` に 1 行残す。持つのは `kind`（`conversation_log_retention` / `conversation_log_delete`）、`actor`（`cron` / `owner` / `ykm`）、`deleted_count`、`created_at` だけで、本文・条件・メッセージ ID は持たない。保持は無期限。cron は消した件数が 0 の日は書かない。
+
+`POST /admin/api/partners/:partnerId/conversation-log/delete` は owner と `ykm` だけが使える（`gateway` は 403）。
+
+| body の項目 | 意味 |
+| --- | --- |
+| `from` / `to` | オフセット付きの ISO 8601。`occurred_at` で比べ、`from` は含み `to` は含まない |
+| `channel_id` | チャンネル |
+| `message_ids` | `message_id` か `discord_message_id` が一致する行。1 から 40 件 |
+| `dry_run` | true なら消さず、件数だけを返す。`maintenance_events` にも書かない |
+
+指定した条件をすべて満たす行を消し、`{ dry_run, count }` を返す。条件が 1 つも無ければ 400 `empty_criteria`、`from` が `to` 以降なら 400 `invalid_range`、形が違えば 400 `validation_failed`。
+
 ## Admin API
 
 `/admin/api/partners/:partnerId/{status,relationships,memory,open-loops,interests,opinions,audit,kpis}` は読み取り専用（Snapshot は次節）。owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 401）。`memory` は `kind=facts|candidates`。Fact は既定で置き換え済み（`superseded_by` あり）と期限切れ（`valid_to` が現在以前）を除き、`include=all` で全件を返す。`open-loops?status=open|all`（既定 `open`）は Open Loop を新しい順に返し、`all` は resolved / dropped も含める。`interests`（score の降順）と `opinions`（プロファイルの定義順）は現在値で、行の無い topic は初期値を返し、各行に `source: "profile" | "learned"` が付く。`audit` は新しい順で `since` を取れる。`kpis?days=N`（既定 30、1 から 365）は現在の生活日から遡った N 日の確定済み KPI を新しい日から返す。一覧は `limit`（既定 50、最大 200）と、`created_at` と `id` から作る base64url の不透明な `cursor` でたどる。応答の型とスキーマは `@yunomi/admin-contract`。state と relationship の現在値は DO、それ以外は D1 から返す。

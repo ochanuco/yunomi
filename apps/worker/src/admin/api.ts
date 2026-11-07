@@ -18,6 +18,7 @@ import { accessEnv, partnerNamespace } from "../env.ts";
 import { createInterestOpinionRepo } from "../interest-opinion.ts";
 import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { partnerProfile } from "../partners.ts";
+import { handleConversationLogDelete } from "./conversation-log.ts";
 import { decodeCursor } from "./cursor.ts";
 import { createAdminQueries } from "./queries.ts";
 import { handleSnapshots } from "./snapshots.ts";
@@ -35,6 +36,10 @@ const ROUTE = new RegExp(
 
 const SNAPSHOT_ROUTE = new RegExp(
 	`^${ADMIN_API_PREFIX}/partners/([^/]+)/snapshots(?:/([^/]+))?$`,
+);
+
+const CONVERSATION_LOG_DELETE_ROUTE = new RegExp(
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/conversation-log/delete$`,
 );
 
 type Params = { limit: number; cursor: ReturnType<typeof decodeCursor> };
@@ -56,7 +61,7 @@ const parsePage = (url: URL): Params | Response => {
 
 /**
  * owner（Access の email）と service caller `ykm` だけが使える。
- * 読み取り専用だが、Snapshot の作成（POST）と development だけの restore は書き込む。
+ * 読み取り専用だが、Snapshot の作成（POST）、development だけの restore、会話ログの削除は書き込む。
  */
 export async function handleAdminApi(
 	request: Request,
@@ -75,6 +80,12 @@ export async function handleAdminApi(
 		const id = decodeURIComponent(snapshotMatch[1] ?? "");
 		if (!partnerProfile(id)) return fail(404, "unknown_partner");
 		return handleSnapshots(request, env, id, snapshotMatch[2] ?? "");
+	}
+	const deleteMatch = CONVERSATION_LOG_DELETE_ROUTE.exec(url.pathname);
+	if (deleteMatch) {
+		const id = decodeURIComponent(deleteMatch[1] ?? "");
+		if (!partnerProfile(id)) return fail(404, "unknown_partner");
+		return handleConversationLogDelete(request, env, id, principal, new Date());
 	}
 	const match = ROUTE.exec(url.pathname);
 	if (!match) return fail(404, "not_found");

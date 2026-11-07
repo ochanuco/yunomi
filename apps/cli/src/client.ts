@@ -3,6 +3,9 @@ import {
 	ApiErrorSchema,
 	type AuditResponse,
 	AuditResponseSchema,
+	type ConversationLogDeleteRequest,
+	type ConversationLogDeleteResponse,
+	ConversationLogDeleteResponseSchema,
 	type InterestsResponse,
 	InterestsResponseSchema,
 	type KpisResponse,
@@ -65,6 +68,9 @@ export type AdminClient = {
 	/** 暗号化されたまま取得する。 */
 	downloadSnapshot(id: string): Promise<Uint8Array>;
 	restoreSnapshot(snapshot: Snapshot): Promise<SnapshotRestoreResponse>;
+	deleteConversationLog(
+		req: ConversationLogDeleteRequest,
+	): Promise<ConversationLogDeleteResponse>;
 };
 
 export const createClient = (
@@ -163,6 +169,13 @@ export const createClient = (
 				SnapshotRestoreResponseSchema,
 				{},
 				{ method: "POST", body: JSON.stringify(snapshot) },
+			),
+		deleteConversationLog: (req) =>
+			call(
+				"conversation-log/delete",
+				ConversationLogDeleteResponseSchema,
+				{},
+				{ method: "POST", body: JSON.stringify(req) },
 			),
 	};
 };

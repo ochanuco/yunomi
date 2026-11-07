@@ -205,7 +205,7 @@ export const auditEvents = sqliteTable(
 	(t) => [index("audit_events_partner_created").on(t.partnerId, t.createdAt)],
 );
 
-// ゆかりさんが返事をしたターンの会話本文。長期保存で、削除処理は持たない。
+// ゆかりさんが返事をしたターンの会話本文。持ち主と Partner の発言は無期限、それ以外は 90 日で消す。
 export const conversationMessages = sqliteTable(
 	"conversation_messages",
 	{
@@ -236,6 +236,24 @@ export const conversationMessages = sqliteTable(
 			t.channelId,
 			t.occurredAt,
 		),
+	],
+);
+
+// 会話ログの削除など、記憶を消した操作の記録。消した本文や条件は持たず、件数だけを残す。保持は無期限。
+export const maintenanceEvents = sqliteTable(
+	"maintenance_events",
+	{
+		id: text("id").primaryKey(),
+		partnerId: text("partner_id").notNull(),
+		kind: text("kind", {
+			enum: ["conversation_log_delete", "conversation_log_retention"],
+		}).notNull(),
+		actor: text("actor", { enum: ["owner", "ykm", "cron"] }).notNull(),
+		deletedCount: integer("deleted_count").notNull(),
+		createdAt: text("created_at").notNull(),
+	},
+	(t) => [
+		index("maintenance_events_partner_created").on(t.partnerId, t.createdAt),
 	],
 );
 

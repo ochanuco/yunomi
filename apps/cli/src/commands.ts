@@ -164,6 +164,23 @@ const execute = async (
 		case "snapshot-seed":
 			await seed(command, global, deps);
 			return;
+		case "conversation-log-delete": {
+			const r = await client.deleteConversationLog({
+				from: command.from ?? undefined,
+				to: command.to ?? undefined,
+				channel_id: command.channel ?? undefined,
+				message_ids: command.messageIds.length ? command.messageIds : undefined,
+				dry_run: command.dryRun,
+			});
+			deps.out(
+				global.json
+					? JSON.stringify(r, null, 2)
+					: r.dry_run
+						? `消える件数: ${r.count}（dry-run なので消していない）`
+						: `消した件数: ${r.count}`,
+			);
+			return;
+		}
 	}
 };
 

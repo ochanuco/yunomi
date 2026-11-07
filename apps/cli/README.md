@@ -1,6 +1,6 @@
 # @yunomi/cli (`ykm`)
 
-Admin API（`/admin/api/...`）を叩いて、Yukarin の状態・記憶・判断履歴をターミナルで見て、Partner Snapshot を扱う。
+Admin API（`/admin/api/...`）を叩いて、Yukarin の状態・記憶・判断履歴をターミナルで見て、Partner Snapshot と会話ログを扱う。
 
 ```
 ykm status                                   State / Relationship / 件数
@@ -14,6 +14,8 @@ ykm snapshot list                            Snapshot の一覧（id、作成時
 ykm snapshot create                          Snapshot を今すぐ作成
 ykm snapshot pull <id> -o <file>             暗号化のまま保存
 ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し込む
+ykm maintenance conversation-log delete [--from D] [--to D] [--channel ID] [--message-id ID ...] (--dry-run | --yes)
+                                             会話ログの発言を消す
 ```
 
 共通オプション: `--env dev|prod`（既定 dev）、`--url`、`--partner`（既定 `yukarin`）、`--json`。`--json` は整形せず JSON を出す（`status` は `{status, relationships}`、`open-loops` は応答（`{items, next_cursor}`）、`interests` / `opinions` は応答（`{items}`）そのまま、`audit tail` は 1 行 1 件）。人間向けの出力は表で、時刻は JST。
@@ -78,3 +80,16 @@ YKM_DEV_ACCESS_CLIENT_SECRET=op://Personal/yunomi-dev-ykm/client_secret \
 
 - `ykm memory delete <fact-id>`: Fact を `valid_to` で失効させる（行は消さず、履歴に残す）。
 - `ykm memory candidates review <id> --promote|--reject`: pending / conflict の candidate を人が昇格・棄却する。
+
+## 会話ログの削除
+
+`ykm maintenance conversation-log delete` は、指定した条件をすべて満たす発言を `conversation_messages` から消す。条件は `--from` / `--to` / `--channel` / `--message-id`（繰り返し可、40 件まで）のどれか 1 つ以上が要る。
+
+- 日時は `YYYY-MM-DD`（JST のその日の 0 時）か、オフセット付きの日時（`2026-10-01T12:00:00+09:00`）。`--from` は含み `--to` は含まない
+- `--dry-run` は消える件数だけを出す。実際に消すには `--yes` を付ける
+- Worker は消した件数だけを `maintenance_events` に残す
+
+```
+ykm --env prod maintenance conversation-log delete --from 2026-10-01 --to 2026-10-08 --dry-run
+ykm --env prod maintenance conversation-log delete --from 2026-10-01 --to 2026-10-08 --yes
+```

@@ -8,7 +8,7 @@ yunomi は個人用の AI パートナーの実行環境で、このデプロイ
 
 - Gateway は、Discord サーバーのテキストチャンネルの発言を、仕事カテゴリ（`WORK_CATEGORY_IDS`）を除いてすべて Worker に送る。持ち主以外の人の発言も含む。`WORK_CATEGORY_IDS` が未設定だと仕事カテゴリも除外されず、Gateway は起動時に警告を出す。
 - VC では、持ち主（`OWNER_DISCORD_USER_ID`）の声だけを kukicha で文字にして Worker に送る。文字にした発言は、VC のテキストチャットにも書き込む。
-- 下の表の「削除手段」で D1 への SQL とあるものは、持ち主が Wrangler（`wrangler d1 execute`）で行を消す。`ykm` や Admin API には削除の操作はない。
+- 下の表の「削除手段」で D1 への SQL とあるものは、持ち主が Wrangler（`wrangler d1 execute`）で行を消す。`ykm` と Admin API で消せるのは会話ログ（`conversation_messages`）だけである。
 - D1 や DO から消した行も、消す前に作られた Snapshot には残る。Snapshot は 30 日で消える。
 
 ## D1
@@ -16,7 +16,8 @@ yunomi は個人用の AI パートナーの実行環境で、このデプロイ
 | テーブル | 内容 | 保持期間 | 削除手段 |
 | --- | --- | --- | --- |
 | `audit_events` | 1 ターンごとの判断の記録。受信した発言の本文（`inbound_content`）、返事をしたか、モデル、token 数、道具の呼び出しの概要。返事をしなかったターンと、持ち主以外の人の発言も入る | 30 日。日次 cron が作成から 30 日を過ぎた行を消す | 自動。個別には D1 への SQL |
-| `conversation_messages` | 返事をしたターンの会話の本文。受信した発言と、その前の文脈 10 件と、Partner の返事。発言者の Discord の ID と表示名を持つ。チャンネルにいた持ち主以外の人の発言も入る | 無期限 | D1 への SQL |
+| `conversation_messages` | 返事をしたターンの会話の本文。受信した発言と、その前の文脈 10 件と、Partner の返事。発言者の Discord の ID と表示名を持つ。チャンネルにいた持ち主以外の人の発言も入る | 持ち主と Partner 自身の発言は無期限。それ以外の人の発言は、日次 cron が発言から 90 日を過ぎた行を消す。`OWNER_DISCORD_USER_ID` が無い環境では消さない | 自動。個別には `ykm maintenance conversation-log delete`（期間・チャンネル・メッセージ ID で指定）か Admin API の `POST .../conversation-log/delete` |
+| `maintenance_events` | 記憶を消した操作の記録。種類、操作した主体（cron・持ち主・`ykm`）、消した件数、時刻。消した本文・条件・メッセージ ID は持たない | 無期限 | D1 への SQL |
 | `audit_daily_kpis` | `audit_events` を消す前に生活日ごとに集計した件数・遅延・token 数。本文は持たない | 無期限 | D1 への SQL |
 | `entities` | 発言した人の内部 ID と表示名 | 無期限 | D1 への SQL |
 | `external_identities` | Discord の user ID と内部 ID の対応 | 無期限 | D1 への SQL |

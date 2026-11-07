@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import {
+	CONVERSATION_LOG_DELETE_MAX_MESSAGE_IDS,
 	STATE_HISTORY_DEFAULT_DAYS,
 	STATE_HISTORY_MAX_DAYS,
 } from "@yunomi/admin-contract";
@@ -23,7 +24,16 @@ export type Command =
 	| { name: "snapshot-list" }
 	| { name: "snapshot-create" }
 	| { name: "snapshot-pull"; id: string; output: string }
-	| { name: "snapshot-seed"; id: string; from: "prod" | "dev"; to: "dev" };
+	| { name: "snapshot-seed"; id: string; from: "prod" | "dev"; to: "dev" }
+	| {
+			name: "conversation-log-delete";
+			/** UTC の ISO 8601。 */
+			from: string | null;
+			to: string | null;
+			channel: string | null;
+			messageIds: string[];
+			dryRun: boolean;
+	  };
 
 export type Global = {
 	env: "dev" | "prod";
@@ -63,6 +73,26 @@ const toHistoryDays = (raw: string | undefined) => {
 	return n;
 };
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+// オフセットの無い日時は、JST と UTC のどちらか読み手が迷うので受けない。
+const WITH_OFFSET =
+	/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** 日付だけなら JST のその日の 0 時。日時はオフセット付きで受け、UTC の ISO 8601 にする。 */
+export const toUtcInstant = (raw: string, flag: string): string => {
+	const t = DATE_ONLY.test(raw)
+		? Date.parse(`${raw}T00:00:00+09:00`)
+		: WITH_OFFSET.test(raw)
+			? Date.parse(raw)
+			: Number.NaN;
+	if (Number.isNaN(t)) {
+		throw new Error(
+			`${flag} は YYYY-MM-DD（JST）かオフセット付きの日時で指定する: ${raw}`,
+		);
+	}
+	return new Date(t).toISOString();
+};
+
 const toCount = (raw: string | undefined, fallback: number, flag: string) => {
 	if (raw === undefined) return fallback;
 	const n = Number(raw);
@@ -93,6 +123,10 @@ export const parseCli = (argv: string[]): ParseResult => {
 				output: { type: "string", short: "o" },
 				from: { type: "string" },
 				to: { type: "string" },
+				channel: { type: "string" },
+				"message-id": { type: "string", multiple: true },
+				"dry-run": { type: "boolean" },
+				yes: { type: "boolean", short: "y" },
 			},
 		});
 
@@ -250,13 +284,60 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (
+			first === "maintenance" &&
+			second === "conversation-log" &&
+			rest[0] === "delete"
+		) {
+			only(["from", "to", "channel", "message-id", "dry-run", "yes"]);
+			noExtra(rest.slice(1));
+			const from = values.from ? toUtcInstant(values.from, "--from") : null;
+			const to = values.to ? toUtcInstant(values.to, "--to") : null;
+			const messageIds = values["message-id"] ?? [];
+			if (
+				from === null &&
+				to === null &&
+				!values.channel &&
+				!messageIds.length
+			) {
+				throw new Error(
+					"--from / --to / --channel / --message-id のどれかで消す範囲を指定する",
+				);
+			}
+			if (from !== null && to !== null && from >= to) {
+				throw new Error("--from は --to より前にする");
+			}
+			if (messageIds.length > CONVERSATION_LOG_DELETE_MAX_MESSAGE_IDS) {
+				throw new Error(
+					`--message-id は一度に ${CONVERSATION_LOG_DELETE_MAX_MESSAGE_IDS} 件まで`,
+				);
+			}
+			const dryRun = values["dry-run"] ?? false;
+			if (!dryRun && !values.yes) {
+				throw new Error(
+					"消すときは --yes を付ける（件数だけ見るなら --dry-run）",
+				);
+			}
+			return {
+				ok: true,
+				command: {
+					name: "conversation-log-delete",
+					from,
+					to,
+					channel: values.channel ?? null,
+					messageIds,
+					dryRun,
+				},
+				global,
+			};
+		}
 		return fail(`不明なコマンド: ${[first, second].filter(Boolean).join(" ")}`);
 	} catch (e) {
 		return fail(e instanceof Error ? e.message : String(e));
 	}
 };
 
-export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う CLI
+export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot と会話ログを扱う CLI
 
 使い方:
   ykm status                              State / Relationship / 件数
@@ -278,6 +359,12 @@ export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot を扱う C
   ykm snapshot seed <id> --from prod --to dev
                                           元の env から取得し、YKM_AGE_IDENTITY で手元で復号して
                                           dev に restore する。--to は dev のみ
+  ykm maintenance conversation-log delete [--from D] [--to D] [--channel ID]
+      [--message-id ID ...] (--dry-run | --yes)
+                                          会話ログの発言を消す。条件はすべて満たすものだけが対象で、
+                                          どれか 1 つは必須。D は YYYY-MM-DD（JST の 0 時）か
+                                          オフセット付きの日時で、--from は含み --to は含まない。
+                                          --dry-run は件数だけを表示し、消すには --yes を付ける
 
 共通オプション:
   --env dev|prod   接続先環境（既定 dev）

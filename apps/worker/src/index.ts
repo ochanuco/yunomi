@@ -21,6 +21,8 @@ import { handleAdminApi } from "./admin/api.ts";
 import { ADMIN_BASE, serveAdminAsset } from "./admin/static.ts";
 import { purgeExpiredAudit } from "./audit-store.ts";
 import { authenticate, type Principal } from "./auth/access.ts";
+import type { CapabilityEnv } from "./capabilities.ts";
+import { purgeExpiredConversationMessages } from "./conversation-log.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
@@ -93,6 +95,13 @@ export default {
 		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
 		await purgeExpiredCandidates(db, now);
+		// OWNER_DISCORD_USER_ID は production だけが宣言する secret なので Env の型に無い。
+		// 持ち主が分からないまま消すと持ち主の発言まで消えるため、無ければ保持期間の削除をしない。
+		const ownerId = (env as Env & Pick<CapabilityEnv, "OWNER_DISCORD_USER_ID">)
+			.OWNER_DISCORD_USER_ID;
+		if (!ownerId) return;
+		for (const p of partnerProfiles)
+			await purgeExpiredConversationMessages(db, p.partner_id, ownerId, now);
 	},
 } satisfies ExportedHandler<Env>;
 
