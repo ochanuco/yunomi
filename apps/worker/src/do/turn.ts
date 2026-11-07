@@ -43,7 +43,8 @@ import { HAIKU, type ModelRouter, type RoutedResult } from "@yunomi/llm";
 import { type InboundMessage, toReplyResponse } from "@yunomi/protocol";
 import type { TurnAuditData } from "../audit.ts";
 import type { InterestOpinionRepo } from "../interest-opinion.ts";
-import type { MemoryRepo } from "../memory.ts";
+import type { MemoryRepo, PromptFact } from "../memory.ts";
+import type { RecalledMemory, Recaller } from "../memory-index/index.ts";
 import type { OpenLoopRepo } from "../open-loops.ts";
 import type { WatchRepo } from "../watches.ts";
 import type { WorkNoteRepo } from "../work-notes.ts";
@@ -60,6 +61,10 @@ const MAX_OUTPUT_TOKENS = 3000;
 const GATE_MAX_OUTPUT_TOKENS = 300;
 // チャンネルの処理は直列なので、遅い判定でほかの発言を待たせない。
 export const GATE_TIMEOUT_MS = 8000;
+/** 連想を待つ上限。過ぎたら連想なしで返事を作る。 */
+export const RECALL_TIMEOUT_MS = 3000;
+/** 手がかりにする直近の発言の数（受信した発言を含む）。 */
+export const RECALL_CUE_MESSAGES = 3;
 
 /** 同じ Discord にいる、自分以外のパートナー。 */
 export type OtherPartner = {
@@ -93,6 +98,90 @@ export type TurnDeps = {
 	onEngaged?: () => void;
 	/** 設定されているときだけ、ターンが LLM の tool use のループを回す。 */
 	capabilities?: TurnCapabilities;
+	/** 連想。未指定なら連想なしで返事を作る。 */
+	recall?: Recaller;
+	/** 持ち主の Discord user id。会話の塊を連想に使うのは、持ち主が話し相手のターンだけ。 */
+	ownerUserId?: string;
+};
+
+type RecallOutcome = {
+	memories: RecalledMemory[];
+	audit: NonNullable<TurnAuditData["recall"]>;
+};
+
+/**
+ * 返事をするターンの連想。失敗しても時間がかかりすぎても、ターンは落とさず連想なしで続ける。
+ * 差し込む記憶の想起の記録は応答を待たせない。
+ */
+const recallFor = async (
+	deps: TurnDeps,
+	msg: InboundMessage,
+	q: {
+		entityId: string;
+		facts: readonly PromptFact[];
+		recent: readonly { content: string; occurredAt: string; isBot: boolean }[];
+		now: Date;
+	},
+): Promise<RecallOutcome | null> => {
+	const recaller = deps.recall;
+	if (!recaller) return null;
+	const cue = [
+		...q.recent
+			.filter((m) => !m.isBot)
+			.slice(-(RECALL_CUE_MESSAGES - 1))
+			.map((m) => withPartnerNames(deps, m.content)),
+		withPartnerNames(deps, msg.content),
+	];
+	const oldest = q.recent[0];
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<"timeout">((resolve) => {
+		timer = setTimeout(() => resolve("timeout"), RECALL_TIMEOUT_MS);
+	});
+	try {
+		const r = await Promise.race([
+			recaller.recall({
+				partnerId: deps.profile.partner_id,
+				entityId: q.entityId,
+				includeConversation:
+					deps.ownerUserId !== undefined && msg.author.id === deps.ownerUserId,
+				cue,
+				now: q.now,
+				exclude: q.facts.map((f) => f.source),
+				...(oldest ? { conversationBefore: new Date(oldest.occurredAt) } : {}),
+			}),
+			timeout,
+		]);
+		if (r === "timeout") {
+			return { memories: [], audit: { keys: [], error: "timeout" } };
+		}
+		if (!r.ok) {
+			return { memories: [], audit: { keys: [], error: r.error.type } };
+		}
+		const memories = r.value.memories;
+		if (memories.length > 0) {
+			deps.background(
+				recaller
+					.markRecalled(
+						memories.map((m) => m.key),
+						q.now,
+					)
+					.then((marked) => {
+						if (!marked.ok) console.error("recall mark failed", marked.error);
+					}),
+			);
+		}
+		return {
+			memories,
+			audit: {
+				keys: memories.map((m) => `${m.key.kind}:${m.key.sourceId}`),
+				error: null,
+			},
+		};
+	} catch {
+		return { memories: [], audit: { keys: [], error: "unexpected" } };
+	} finally {
+		clearTimeout(timer);
+	}
 };
 
 const isContinuation = (deps: TurnDeps, msg: InboundMessage): boolean => {
@@ -425,6 +514,12 @@ export const runTurn = async (
 
 	const connection = store.getVoiceConnection();
 	const recent = store.recentMessages(msg.channelId, msg.messageId);
+	const recalled = await recallFor(deps, msg, {
+		entityId,
+		facts,
+		recent,
+		now: seededAt,
+	});
 	const othersInLog = otherPartnersInLog(deps, recent, msg);
 	const prompt = new PromptBuilder().build({
 		profile,
@@ -448,6 +543,14 @@ export const runTurn = async (
 			kind: f.kind,
 			observedAt: f.observedAt,
 		})),
+		...(recalled?.memories.length
+			? {
+					recalled: recalled.memories.map((r) => ({
+						text: r.text,
+						at: r.at,
+					})),
+				}
+			: {}),
 		interests: [...current.interests]
 			.sort((a, b) => b.score - a.score)
 			.map((i) => ({
@@ -714,6 +817,7 @@ export const runTurn = async (
 		latencyMs,
 		toolCalls,
 		degradedTransition: health.recovered ? ("recovered" as const) : null,
+		recall: recalled?.audit ?? null,
 	};
 	if (!replying) {
 		return ignoreOutcome(msg, "llm", common);

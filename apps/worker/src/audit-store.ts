@@ -61,6 +61,7 @@ export const toAuditRow = (
 			interestOpinion: audit.interestOpinion,
 			toolCalls: audit.toolCalls,
 			face: audit.face,
+			recall: audit.recall ?? null,
 			degradedTransition: audit.degradedTransition,
 		}),
 		occurredAt: ctx.occurredAt.toISOString(),

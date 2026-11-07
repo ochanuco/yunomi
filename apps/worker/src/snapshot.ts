@@ -49,6 +49,8 @@ export const D1_SNAPSHOT_TABLES = {
 			"valid_to",
 			"decay_policy",
 			"superseded_by",
+			"recall_count",
+			"last_recalled_at",
 		],
 		scoped: true,
 		key: [],
@@ -128,6 +130,8 @@ export const D1_SNAPSHOT_TABLES = {
 			"created_at",
 			"status",
 			"closed_at",
+			"recall_count",
+			"last_recalled_at",
 		],
 		scoped: true,
 		key: [],
@@ -262,16 +266,17 @@ const insertStatement = (
 	partnerId: string,
 ) => {
 	const def = D1_SNAPSHOT_TABLES[table];
+	// 古い版の Snapshot に無い列は入れず、D1 の既定値に任せる。null だと NOT NULL の列で落ちる。
+	const present = def.columns.filter((c) => row[c] !== undefined);
 	const columns: string[] = def.scoped
-		? ["partner_id", ...def.columns]
-		: [...def.columns];
-	// 古い版の Snapshot に無い列は null で入れる（D1 は undefined を bind できない）。
+		? ["partner_id", ...present]
+		: [...present];
 	const values = def.scoped
-		? [partnerId, ...def.columns.map((c) => row[c] ?? null)]
-		: def.columns.map((c) => row[c] ?? null);
+		? [partnerId, ...present.map((c) => row[c])]
+		: present.map((c) => row[c]);
 	const insert = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`;
 	const key: string[] = def.key;
-	const updates = def.columns.filter((c) => !key.includes(c));
+	const updates = present.filter((c) => !key.includes(c));
 	// entities は他の履歴テーブルから参照されるため、消さずに upsert する。
 	const sql = def.scoped
 		? insert

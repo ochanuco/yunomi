@@ -14,6 +14,13 @@ export {
 	rebuildChannelChunks,
 } from "./chunks.ts";
 export { searchKeywords } from "./keyword.ts";
+export { parsePeriod, type RecallPeriod } from "./period.ts";
+export {
+	createRecaller,
+	type RecalledMemory,
+	type Recaller,
+	type RecallRequest,
+} from "./recall.ts";
 export type * from "./types.ts";
 export {
 	searchVectors,

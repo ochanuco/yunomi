@@ -97,6 +97,9 @@ export const facts = sqliteTable(
 		validTo: text("valid_to"),
 		decayPolicy: text("decay_policy").notNull().default("standard"),
 		supersededBy: text("superseded_by"),
+		/** 連想で Prompt に差し込んだ回数と最後の時刻。observed_at は書き換えない。 */
+		recallCount: integer("recall_count").notNull().default(0),
+		lastRecalledAt: text("last_recalled_at"),
 	},
 	(t) => [
 		index("facts_retrieval").on(
@@ -373,6 +376,9 @@ export const workNotes = sqliteTable(
 		/** goal だけが持つ。decided と done は null。 */
 		status: text("status", { enum: ["open", "achieved", "dropped"] }),
 		closedAt: text("closed_at"),
+		/** 連想で Prompt に差し込んだ回数と最後の時刻。created_at は書き換えない。 */
+		recallCount: integer("recall_count").notNull().default(0),
+		lastRecalledAt: text("last_recalled_at"),
 	},
 	(t) => [index("work_notes_entity").on(t.partnerId, t.entityId, t.createdAt)],
 );
@@ -419,6 +425,9 @@ export const conversationChunks = sqliteTable(
 		/** anchor の発言時刻。期間で絞るときの基準。 */
 		occurredAt: text("occurred_at").notNull(),
 		endedAt: text("ended_at").notNull(),
+		/** 連想で Prompt に差し込んだ回数と最後の時刻。occurred_at は書き換えない。 */
+		recallCount: integer("recall_count").notNull().default(0),
+		lastRecalledAt: text("last_recalled_at"),
 	},
 	(t) => [
 		index("conversation_chunks_channel_time").on(

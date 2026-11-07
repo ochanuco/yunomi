@@ -17,20 +17,20 @@ yunomi は個人用の AI パートナーの実行環境で、このデプロイ
 | --- | --- | --- | --- |
 | `audit_events` | 1 ターンごとの判断の記録。受信した発言の本文（`inbound_content`）、返事をしたか、モデル、token 数、道具の呼び出しの概要。返事をしなかったターンと、持ち主以外の人の発言も入る | 30 日。日次 cron が作成から 30 日を過ぎた行を消す | 自動。個別には D1 への SQL |
 | `conversation_messages` | 返事をしたターンの会話の本文。受信した発言と、その前の文脈 10 件と、Partner の返事。発言者の Discord の ID と表示名を持つ。チャンネルにいた持ち主以外の人の発言も入る | 持ち主と Partner 自身の発言は無期限。それ以外の人の発言は、日次 cron が発言から 90 日を過ぎた行を消す。`OWNER_DISCORD_USER_ID` が無い環境では消さない | 自動。個別には `ykm maintenance conversation-log delete`（期間・チャンネル・メッセージ ID で指定）か Admin API の `POST .../conversation-log/delete` |
-| `conversation_chunks`、`conversation_chunk_messages` | 記憶の索引に入れる会話の塊。持ち主の発言と、その前 30 分以内の持ち主と Partner の発言（最大 4 件）、続く Partner の返事の本文をまとめたものと、元の `conversation_messages` の ID。持ち主以外の人の発言は入れない。`OWNER_DISCORD_USER_ID` が無い環境では作らない | 元の発言が残る間。会話ログを消すと、塊を消すか残りの発言で作り直す | 会話ログの削除に追従する |
+| `conversation_chunks`、`conversation_chunk_messages` | 記憶の索引に入れる会話の塊。持ち主の発言と、その前 30 分以内の持ち主と Partner の発言（最大 4 件）、続く Partner の返事の本文をまとめたものと、元の `conversation_messages` の ID。持ち主以外の人の発言は入れない。連想で思い出した回数と最後の時刻も持つ。`OWNER_DISCORD_USER_ID` が無い環境では作らない | 元の発言が残る間。会話ログを消すと、塊を消すか残りの発言で作り直す | 会話ログの削除に追従する |
 | `memory_search_docs`、`memory_search_fts` | キーワード検索（FTS5）の索引。現行の `facts`、`work_notes`、会話の塊の本文と、元の行の ID、partner、時刻 | 元の行が索引の対象である間。事実が置き換わるか期限が付くと外れる | 元の表の変更に trigger で追従する |
 | `maintenance_events` | 記憶を消した操作の記録。種類、操作した主体（cron・持ち主・`ykm`）、消した件数、時刻。消した本文・条件・メッセージ ID は持たない | 無期限 | D1 への SQL |
 | `audit_daily_kpis` | `audit_events` を消す前に生活日ごとに集計した件数・遅延・token 数。本文は持たない | 無期限 | D1 への SQL |
 | `entities` | 発言した人の内部 ID と表示名 | 無期限 | D1 への SQL |
 | `external_identities` | Discord の user ID と内部 ID の対応 | 無期限 | D1 への SQL |
-| `facts` | 会話から覚えた事実と出来事（呼び名、好み、予定、行った所など）。置き換わった事実も履歴として残る | 無期限 | D1 への SQL。Snapshot の復元でも置き換わる |
+| `facts` | 会話から覚えた事実と出来事（呼び名、好み、予定、行った所など）。置き換わった事実も履歴として残る。連想で思い出した回数と最後の時刻も持つ | 無期限 | D1 への SQL。Snapshot の復元でも置き換わる |
 | `memory_candidates` | 事実にする前の候補と、昇格・却下・衝突の判定結果 | 30 日。日次 cron が `expires_at` を過ぎた行を消す | 自動。個別には D1 への SQL |
 | `open_loops` | 会話で出た、あとで気にかける事柄の 1 行の要約 | 無期限。解決しても行は残る | D1 への SQL |
 | `relationship_events` | 人ごとの親しさ・信頼の変化と、その理由の 1 行 | 無期限 | D1 への SQL |
 | `state_transitions` | Partner の気分・元気の変化の履歴 | 無期限 | D1 への SQL |
 | `interest_states`、`opinion_states` | Partner の興味と意見の現在値と、その理由 | 無期限 | D1 への SQL |
 | `interest_changes`、`opinion_changes` | 興味と意見の変化の履歴と、きっかけになったメッセージの ID | 無期限 | D1 への SQL |
-| `work_notes` | Working（mizuya）が残した、決まったこと・終わったこと・目標の 1 行 | 無期限 | D1 への SQL |
+| `work_notes` | Working（mizuya）が残した、決まったこと・終わったこと・目標の 1 行。連想で思い出した回数と最後の時刻も持つ | 無期限 | D1 への SQL |
 | `watches` | 見張りの条件、見る先、前に知らせたものの key | 無期限。止めても行は残る | D1 への SQL |
 | `partners` | Partner の ID | 無期限 | D1 への SQL |
 

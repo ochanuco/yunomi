@@ -170,6 +170,18 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 - local mode は Vectorize と Workers AI の binding を持たず、FTS5 だけが動く。
 - 既存データは `ykm memory-index rebuild`（`POST /admin/api/partners/:id/memory-index`）で入れる。会話ログを 1 チャンネルずつ塊にし、続けて `memory_search_docs` を 50 件ずつ埋め込む。何度実行してもよい。
 
+### 連想
+
+返事に進むと決まったターン（メンション、名前で呼ばれた、継続の窓の中、Haiku の判定が入ると決めた割り込み）でだけ、`src/memory-index/recall.ts` が索引を引いて Prompt の「ふと思い出したこと」に差し込む。返事に進まないターンでは埋め込みを呼ばない。
+
+- 手がかりは直近の発言 2 件（bot を除く）と受信した発言。意味検索にはそれをつないだ文を、キーワード検索には漢字・カタカナ・ASCII の英数字が 3 文字以上続く語を渡す。
+- 発言にある期間の表現（「去年の春」「先月」「3 日前」「GW」「この前の連休」など）は `src/memory-index/period.ts` の規則で JST の期間に直し、両方の検索の絞り込みにする。新しい発言から読み、最初に見つかった期間を使う。LLM は呼ばない。連休は土日・国民の祝日（振替休日と国民の休日を含む）・12/29〜1/3 が 3 日以上続く期間とする。
+- 意味検索は cosine 類似度 0.6 以上のものだけを数え、キーワード検索の結果と RRF（k = 60）でまとめる。並べ方は `recallScore` だけで決まる。
+- 固定の枠（`topFacts`）にある記憶は除き、最大 5 件を出す。facts と work_notes は話し相手のもの、会話の塊は持ち主が話し相手のターンで直近ログより前のものだけ。塊は頭の 300 文字を渡す。
+- 差し込んだ記憶は、元の行（`facts`・`work_notes`・`conversation_chunks`）の `recall_count` を 1 増やし、`last_recalled_at` に時刻を入れる。応答は待たせない。
+- 埋め込み・Vectorize・D1 が失敗するか 3 秒を過ぎたら、連想なしで返事を作る。audit の `recall` に差し込んだ記憶の `<kind>:<行 id>` と、失敗の種類を残す。
+- Vectorize を持たない環境（local、テスト）はキーワード検索だけで引く。
+
 ## Working の記憶
 
 mizuya の Working は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。要求と応答の形は [docs/working-memory-api.md](../../docs/working-memory-api.md) にある。
@@ -252,7 +264,7 @@ Yukarin の長期記憶と現在値の時点コピー。日次バックアップ
 
 #### 中身
 
-JSON（`schema_version` 4、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
+JSON（`schema_version` 6、`@yunomi/admin-contract` の `SnapshotSchema`）。`snapshot_id`（UUID v7）/ `partner_id` / `env` / `created_at` に加えて次を持つ。行は `partner_id` を持たない。
 
 - `d1`: `entities` / `external_identities` / `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` / `watches`。`entities` と `external_identities` は partner を持たないので全行
 - `do`: `state`（`partner_state`）と `relationships`（日次累積の `acc_*` を含む全列）
@@ -280,7 +292,7 @@ owner と `ykm` だけが使える（`gateway` は 403、JWT なしや不正は 
 - `GET .../snapshots/:snapshotId`: 暗号化済みの blob（`application/octet-stream`）をそのまま返す。無ければ 404
 - `POST .../snapshots/restore`: body は復号済みの Snapshot JSON。`YUNOMI_ENV=production` では 403 `restore_disabled_in_production`。検証に失敗すれば 400、`partner_id` の不一致や DB の失敗は 422。成功すると `{ snapshot_id, source_env, counts }`
 
-restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` / `watches` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。`schema_version` 1 から 3 の Snapshot も受け付ける。v1 は `work_notes` を持たないので、その restore では `work_notes` を消さずに残す。v2 の `work_notes` は目標の列（`status` / `closed_at`）を持たないので、null で入れる。v3 は `watches` を持たないので、その restore では `watches` を消さずに残す。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
+restore は対象 partner の `facts` / `memory_candidates` / `open_loops` / `interest_states` / `opinion_states` / `work_notes` / `watches` を削除して Snapshot の行で入れ直し（`D1Database.batch`、失敗すれば全体を戻す）、DO の `partner_state` / `relationships` を transaction で置き換える（`entity_cache` は捨てる）。`entities` と `external_identities` は履歴テーブルから参照されるため、消さずに upsert する。D1 と DO をまたぐ atomic はなく、D1 を先に書く。途中で止まったら同じ Snapshot でもう一度 restore する。`schema_version` 1 から 5 の Snapshot も受け付ける。v1 は `work_notes` を持たないので、その restore では `work_notes` を消さずに残す。v2 の `work_notes` は目標の列（`status` / `closed_at`）を持たないので、null で入れる。v3 は `watches` を持たないので、その restore では `watches` を消さずに残す。v5 までの `facts` と `work_notes` は想起の記録（`recall_count` / `last_recalled_at`）を持たないので、0 と null で入れる。audit・KPI・履歴と `recent_messages` は触らない。restore は Discord や外部サービスを呼ばない（テストで `fetch` の未呼び出しを確認）。1 回ごとに `{"event":"snapshot_restore", snapshot_id, source_env, counts}` を `console.log` に 1 行残す。
 
 #### seed の運用
 
