@@ -1,9 +1,11 @@
 import type { BodyState } from "@yunomi/core";
 import { describe, expect, it } from "vitest";
 import {
+	elapsedText,
 	estimateTokens,
 	type MemoryFact,
 	PromptBuilder,
+	roughDate,
 	type ToolsContext,
 	toPromptMessage,
 } from "./prompt-builder.ts";
@@ -35,9 +37,9 @@ describe("PromptBuilder", () => {
 			expect(block?.text).toBe(
 				[
 					"## ふと思い出したこと",
-					"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。",
-					"- 趣味 カヌー（4/29）",
-					"- 持ち主: 秋葉原に行った（1/1）",
+					"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。覚えているのはここに書いてあることだけで、それ以上の細部は覚えていない。",
+					"- 趣味 カヌー（今年の 4/29、6 か月くらい前）",
+					"- 持ち主: 秋葉原に行った（今年の 1/1、10 か月くらい前）",
 					"  ゆかり: いいですね",
 				].join("\n"),
 			);
@@ -50,7 +52,59 @@ describe("PromptBuilder", () => {
 			input.recalled = [
 				{ text: "旅行 金沢", at: new Date("2025-04-10T03:00:00Z") },
 			];
-			expect(systemText(input)).toContain("- 旅行 金沢（2025/4/10）");
+			expect(systemText(input)).toContain(
+				"- 旅行 金沢（2025/4/10、1 年くらい前）",
+			);
+		});
+
+		it("うろ覚えの記憶は別の見出しで、日付を粗くして出す", () => {
+			const input = baseInput();
+			input.now = new Date("2026-11-07T03:00:00Z");
+			input.recalled = [
+				{ text: "趣味 カヌー", at: new Date("2026-10-29T03:00:00Z") },
+				{
+					text: "旅行 金沢",
+					at: new Date("2025-10-10T03:00:00Z"),
+					vague: true,
+				},
+			];
+			expect(systemText(input)).toContain(
+				[
+					"- 趣味 カヌー（今年の 10/29、9 日前）",
+					"",
+					"## うろ覚えのこと",
+					"いまの話から浮かんだが、だいぶ前のことで、いつだったかも中身もはっきりしない記憶。自信はない。ここに書いてあるより先のことは思い出せない。",
+					"- 旅行 金沢（去年の秋ごろ）",
+				].join("\n"),
+			);
+		});
+
+		it("うろ覚えの日付は年と季節までにする", () => {
+			const now = new Date("2026-11-07T03:00:00Z");
+			expect(roughDate(new Date("2026-04-10T03:00:00Z"), now)).toBe(
+				"今年の春ごろ",
+			);
+			expect(roughDate(new Date("2025-08-10T03:00:00Z"), now)).toBe(
+				"去年の夏ごろ",
+			);
+			// JST では 2026 年 1 月
+			expect(roughDate(new Date("2025-12-31T16:00:00Z"), now)).toBe(
+				"今年の冬ごろ",
+			);
+			expect(roughDate(new Date("2023-05-01T03:00:00Z"), now)).toBe(
+				"3 年くらい前",
+			);
+		});
+
+		it("経過は近いほど細かく、遠いほど粗く数える", () => {
+			const now = new Date("2026-11-07T03:00:00Z");
+			const ago = (days: number) =>
+				elapsedText(new Date(now.getTime() - days * 86_400_000), now);
+			expect(ago(1)).toBe("昨日");
+			expect(ago(10)).toBe("10 日前");
+			expect(ago(25)).toBe("4 週間くらい前");
+			expect(ago(100)).toBe("3 か月くらい前");
+			expect(ago(800)).toBe("2 年くらい前");
 		});
 
 		it("無ければ区画を出さない", () => {
@@ -546,6 +600,16 @@ describe("PromptBuilder", () => {
 					"- alice plans_to_have_lunch_in 京都（10/11、6 日前）",
 				].join("\n"),
 			);
+		});
+
+		it("うろ覚えの出来事は日付を粗くし、うろ覚えと添える", () => {
+			const text = memory(NOW, [
+				{
+					...episode("went_to", "2025-10-11T03:00:00Z"),
+					vague: true,
+				},
+			]);
+			expect(text).toContain("- alice went_to 京都（去年の秋ごろ、うろ覚え）");
 		});
 
 		it("2 日と 3 日の境目で区画が変わる", () => {

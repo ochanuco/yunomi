@@ -295,6 +295,7 @@ describe("Talking の記憶に混ぜる件数と順", () => {
 		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
 			PARTNER_ID,
 			entityId,
+			new Date("2026-11-07T03:00:00Z"),
 		);
 		expect(WORK_NOTE_PROMPT_LIMIT).toBe(10);
 		expect(PROMPT_FACT_LIMIT).toBe(30);
@@ -302,13 +303,13 @@ describe("Talking の記憶に混ぜる件数と順", () => {
 		expect(facts.map((f) => [f.kind, f.predicate, f.object])).toEqual([
 			["lasting", "呼び名", "v"],
 			// 作業11〜作業2 の 10 件。作業0・作業1 は上限で落ちる。
-			...[11, 10, 9, 8, 7, 6, 5].map((i) => [
+			// 出来事は R の順で、facts の出来事は work_notes より定着が浅いので、日付が近くても後ろに来る。
+			...[11, 10, 9, 8, 7, 6, 5, 4, 3, 2].map((i) => [
 				"episode",
 				"仕事で終えたこと",
 				`作業${i}`,
 			]),
 			["episode", "行った所", "v"],
-			...[4, 3, 2].map((i) => ["episode", "仕事で終えたこと", `作業${i}`]),
 		]);
 	});
 });

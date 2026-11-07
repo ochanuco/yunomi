@@ -3,9 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PromptInput } from "@yunomi/conversation";
 import {
+	isVague,
 	type PartnerProfile,
 	resolveInterests,
 	resolveOpinions,
+	retention,
 } from "@yunomi/core";
 import * as v from "valibot";
 import { parse } from "yaml";
@@ -62,6 +64,13 @@ export const expectationsSchema = v.object({
 const recalledSchema = v.object({
 	text: v.pipe(v.string(), v.minLength(1)),
 	days_ago: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	/** 保持率 R の計算に使う記憶の種類。会話の塊が既定。 */
+	kind: v.optional(
+		v.picklist(["lasting", "episode", "work_note", "conversation"]),
+		"conversation",
+	),
+	importance: v.optional(unit),
+	recall_count: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0)), 0),
 });
 
 export const scenarioSchema = v.object({
@@ -158,9 +167,22 @@ export const toPromptInput = (
 	memory: [],
 	...(scenario.recalled.length > 0
 		? {
+				// Worker と同じ係数で R を求め、うろ覚えかどうかを決める。最後に触れたのは days_ago とみなす。
 				recalled: scenario.recalled.map((r) => ({
 					text: r.text,
 					at: recalledAt(r, now),
+					vague: isVague(
+						retention(
+							{
+								kind: r.kind,
+								importance: r.importance ?? null,
+								recallCount: r.recall_count,
+								restateCount: 0,
+								touchedAt: recalledAt(r, now),
+							},
+							now,
+						),
+					),
 				})),
 			}
 		: {}),

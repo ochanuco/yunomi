@@ -1,0 +1,1 @@
+ALTER TABLE `facts` ADD `restate_count` integer DEFAULT 0 NOT NULL;

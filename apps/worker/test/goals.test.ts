@@ -243,6 +243,7 @@ describe("Working の記憶の口の目標", () => {
 		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
 			PARTNER_ID,
 			entity?.entity_id as string,
+			new Date(),
 		);
 		expect(facts).toEqual([]);
 	});

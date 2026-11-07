@@ -4,7 +4,7 @@ recent: []
 message: { speaker: alice, text: "ゆかりん、前に紅葉見に行った話したの覚えてる？", mentions_partner: true }
 recalled:
   - { text: "alice: 嵐山に紅葉を見に行ったら、渡月橋がすごい人で全然進めなかった\nゆかり: それは大変でしたね", days_ago: 25 }
-  - { text: "alice 好きな飲み物 ほうじ茶", days_ago: 60 }
+  - { text: "alice 好きな飲み物 ほうじ茶", days_ago: 60, kind: lasting }
 relationship: { familiarity: 0.6, trust: 0.6 }
 state: { mood: 0.2, energy: 0.6 }
 expectations:

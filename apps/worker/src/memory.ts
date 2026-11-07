@@ -1,14 +1,20 @@
 import {
 	CANDIDATE_TTL_MS,
+	DECAY_POLICY,
 	decidePromotion,
+	FORGETTING,
+	isVague,
+	lastTouched,
 	type MemoryKind,
 	type MemoryObject,
 	type MemorySource,
 	newId,
 	normalizeObject,
 	normalizePredicate,
+	type RetentionInput,
+	retention,
 } from "@yunomi/core";
-import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
 import type { IndexChangeListener, IndexKey } from "./memory-index/types.ts";
@@ -21,12 +27,10 @@ import {
 
 export const PROMPT_FACT_LIMIT = 30;
 export const PROMPT_EPISODE_LIMIT = 30;
-
-/** facts.decay_policy。lasting は standard、episode は episodic に残す。 */
-const DECAY_POLICY = {
-	lasting: "standard",
-	episode: "episodic",
-} as const satisfies Record<MemoryKind, string>;
+/**
+ * 固定の枠を R の順に選ぶために読む行数の上限。R は SQL で並べられないので、最後に触れた順に多めに読んでから並べ替える。
+ */
+export const PROMPT_POOL_LIMIT = 200;
 
 export type CandidateInput = {
 	subject: string;
@@ -62,6 +66,8 @@ export type PromptFact = {
 	/** datetime の値は Date で渡す。 */
 	object: string | Date;
 	observedAt: Date;
+	/** R が低く、日付を粗くして渡す記憶。 */
+	vague: boolean;
 };
 
 const SPEAKER_WORDS = new Set(["user", "speaker"]);
@@ -79,10 +85,14 @@ export type MemoryRepo = {
 		candidates: CandidateInput[],
 	): Promise<CandidateOutcome[]>;
 	/**
-	 * 続く事実（重要度順）のあとに出来事（新しい順）を並べて返す。
-	 * 出来事には Working が残した1行（work_notes の decided と done）も混ぜ、facts の出来事と合わせて新しい順にする。
+	 * 続く事実のあとに出来事を並べて返す。どちらも保持率 R の高い順に選ぶ。
+	 * 出来事には Working が残した1行（work_notes の decided と done）も混ぜ、facts の出来事と合わせて R の順にする。
 	 */
-	topFacts(partnerId: string, entityId: string): Promise<PromptFact[]>;
+	topFacts(
+		partnerId: string,
+		entityId: string,
+		now: Date,
+	): Promise<PromptFact[]>;
 };
 
 export const createMemoryRepo = (
@@ -195,7 +205,11 @@ export const createMemoryRepo = (
 					await db.batch([
 						db
 							.update(facts)
-							.set({ observedAt: at, decayPolicy: DECAY_POLICY[c.kind] })
+							.set({
+								observedAt: at,
+								decayPolicy: DECAY_POLICY[c.kind],
+								restateCount: sql`${facts.restateCount} + 1`,
+							})
 							.where(eq(facts.id, decision.factId)),
 						candidateRow("promoted", null),
 					]);
@@ -242,7 +256,7 @@ export const createMemoryRepo = (
 			return out;
 		},
 
-		async topFacts(partnerId, entityId) {
+		async topFacts(partnerId, entityId, now) {
 			const current = and(
 				eq(facts.partnerId, partnerId),
 				eq(facts.subjectEntityId, entityId),
@@ -256,27 +270,33 @@ export const createMemoryRepo = (
 				objectValue: facts.objectValue,
 				objectDisplay: facts.objectDisplay,
 				observedAt: facts.observedAt,
+				importance: facts.importance,
+				recallCount: facts.recallCount,
+				lastRecalledAt: facts.lastRecalledAt,
+				restateCount: facts.restateCount,
 			};
-			// episodic 以外の値は standard として扱う。
+			const factTouched = sql`max(${facts.observedAt}, coalesce(${facts.lastRecalledAt}, ''))`;
 			const [lasting, episodes, notes] = await db.batch([
 				db
 					.select(columns)
 					.from(facts)
 					.where(and(current, ne(facts.decayPolicy, DECAY_POLICY.episode)))
-					.orderBy(desc(facts.importance), desc(facts.observedAt))
-					.limit(PROMPT_FACT_LIMIT),
+					.orderBy(desc(factTouched))
+					.limit(PROMPT_POOL_LIMIT),
 				db
 					.select(columns)
 					.from(facts)
 					.where(and(current, eq(facts.decayPolicy, DECAY_POLICY.episode)))
-					.orderBy(desc(facts.observedAt))
-					.limit(PROMPT_EPISODE_LIMIT),
+					.orderBy(desc(factTouched))
+					.limit(PROMPT_POOL_LIMIT),
 				db
 					.select({
 						id: workNotes.id,
 						kind: workNotes.kind,
 						summary: workNotes.summary,
 						createdAt: workNotes.createdAt,
+						recallCount: workNotes.recallCount,
+						lastRecalledAt: workNotes.lastRecalledAt,
 					})
 					.from(workNotes)
 					.where(
@@ -287,37 +307,91 @@ export const createMemoryRepo = (
 							inArray(workNotes.kind, [...workEpisodeKinds]),
 						),
 					)
-					.orderBy(desc(workNotes.createdAt), desc(workNotes.id))
-					.limit(WORK_NOTE_PROMPT_LIMIT),
+					.orderBy(
+						desc(
+							sql`max(${workNotes.createdAt}, coalesce(${workNotes.lastRecalledAt}, ''))`,
+						),
+						desc(workNotes.id),
+					)
+					.limit(PROMPT_POOL_LIMIT),
 			]);
+			type Scored = { fact: PromptFact; r: number; importance: number };
+			const scored = (
+				fact: Omit<PromptFact, "vague">,
+				input: Omit<RetentionInput, "touchedAt">,
+				seenAt: string,
+				lastRecalledAt: string | null,
+			): Scored => {
+				const r = retention(
+					{ ...input, touchedAt: lastTouched(seenAt, lastRecalledAt) },
+					now,
+				);
+				return {
+					fact: { ...fact, vague: isVague(r) },
+					r,
+					importance: input.importance ?? FORGETTING.defaultImportance,
+				};
+			};
 			const promptFact =
 				(kind: MemoryKind) =>
-				(r: (typeof lasting)[number]): PromptFact => ({
-					source: { kind: "fact", sourceId: r.id },
-					kind,
-					predicate: r.predicate,
-					object:
-						r.objectDisplay ??
-						(r.objectType === "datetime"
-							? new Date(r.objectValue)
-							: r.objectValue),
-					observedAt: new Date(r.observedAt),
-				});
-			const workEpisodes = notes.map(
-				(n): PromptFact => ({
-					source: { kind: "work_note", sourceId: n.id },
-					kind: "episode",
-					predicate: WORK_NOTE_PREDICATE[n.kind as WorkEpisodeKind],
-					object: n.summary,
-					observedAt: new Date(n.createdAt),
-				}),
-			);
-			return [
-				...lasting.map(promptFact("lasting")),
-				...[...episodes.map(promptFact("episode")), ...workEpisodes].sort(
-					(a, b) => b.observedAt.getTime() - a.observedAt.getTime(),
+				(r: (typeof lasting)[number]): Scored =>
+					scored(
+						{
+							source: { kind: "fact", sourceId: r.id },
+							kind,
+							predicate: r.predicate,
+							object:
+								r.objectDisplay ??
+								(r.objectType === "datetime"
+									? new Date(r.objectValue)
+									: r.objectValue),
+							observedAt: new Date(r.observedAt),
+						},
+						{
+							kind,
+							importance: r.importance,
+							recallCount: r.recallCount,
+							restateCount: r.restateCount,
+						},
+						r.observedAt,
+						r.lastRecalledAt,
+					);
+			const workEpisodes = notes.map((n) =>
+				scored(
+					{
+						source: { kind: "work_note", sourceId: n.id },
+						kind: "episode",
+						predicate: WORK_NOTE_PREDICATE[n.kind as WorkEpisodeKind],
+						object: n.summary,
+						observedAt: new Date(n.createdAt),
+					},
+					{
+						kind: "work_note",
+						importance: null,
+						recallCount: n.recallCount,
+						restateCount: 0,
+					},
+					n.createdAt,
+					n.lastRecalledAt,
 				),
-			];
+			);
+			const byRetention = (items: Scored[]) =>
+				items.sort(
+					(a, b) =>
+						// 聞いたばかりで R が並んだときは、重要なものを上にする。
+						b.r - a.r ||
+						b.importance - a.importance ||
+						b.fact.observedAt.getTime() - a.fact.observedAt.getTime(),
+				);
+			const top = (items: Scored[], limit: number) =>
+				byRetention(items).slice(0, limit);
+			return [
+				...top(lasting.map(promptFact("lasting")), PROMPT_FACT_LIMIT),
+				...byRetention([
+					...top(episodes.map(promptFact("episode")), PROMPT_EPISODE_LIMIT),
+					...top(workEpisodes, WORK_NOTE_PROMPT_LIMIT),
+				]),
+			].map((s) => s.fact);
 		},
 	};
 };

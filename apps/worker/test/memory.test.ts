@@ -164,6 +164,11 @@ describe("Fact memory", () => {
 		const rows = await factsOf(await entityOf(a));
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.observed_at).toBe("2026-10-12T03:00:00.000Z");
+		expect(
+			await env.DB.prepare("SELECT restate_count FROM facts WHERE id = ?")
+				.bind(rows[0]?.id)
+				.first("restate_count"),
+		).toBe(1);
 	});
 
 	it("kind を decay_policy に写して Fact に残す", async () => {
@@ -352,6 +357,7 @@ describe("Fact memory", () => {
 });
 
 describe("topFacts", () => {
+	const TOP_FACTS_NOW = new Date("2026-11-07T03:00:00Z");
 	const insertFact = (
 		entityId: string,
 		predicate: string,
@@ -375,7 +381,7 @@ describe("topFacts", () => {
 			)
 			.run();
 
-	it("続く事実を重要度順、出来事を新しい順に並べ、出来事は上限までにする", async () => {
+	it("同じ日に覚えたものは、続く事実を重要度順、出来事を新しい順に並べ、出来事は上限までにする", async () => {
 		const entityId = crypto.randomUUID();
 		await env.DB.prepare(
 			"INSERT INTO entities (id, kind, display_name, created_at) VALUES (?, 'person', 'top-facts', '2026-10-01T00:00:00Z')",
@@ -420,6 +426,7 @@ describe("topFacts", () => {
 		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
 			"p-top-facts",
 			entityId,
+			TOP_FACTS_NOW,
 		);
 
 		expect(facts.map((f) => [f.kind, f.predicate])).toEqual([
@@ -435,6 +442,44 @@ describe("topFacts", () => {
 			object: "v-episode-03",
 			observedAt: new Date("2026-10-03T00:00:00.000Z"),
 		});
+	});
+
+	it("重要度が高くても長く触れていない事実より、思い出したばかりの事実を上にし、R が低い記憶に印を付ける", async () => {
+		const entityId = crypto.randomUUID();
+		await env.DB.prepare(
+			"INSERT INTO entities (id, kind, display_name, created_at) VALUES (?, 'person', 'top-facts-r', '2026-10-01T00:00:00Z')",
+		)
+			.bind(entityId)
+			.run();
+		await insertFact(
+			entityId,
+			"old-important",
+			0.9,
+			"2025-06-01T00:00:00Z",
+			"standard",
+		);
+		await insertFact(
+			entityId,
+			"recalled-minor",
+			0.2,
+			"2025-06-01T00:00:00Z",
+			"standard",
+		);
+		await env.DB.prepare(
+			"UPDATE facts SET recall_count = 2, last_recalled_at = '2026-11-05T00:00:00.000Z' WHERE subject_entity_id = ? AND predicate = 'recalled-minor'",
+		)
+			.bind(entityId)
+			.run();
+
+		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
+			"p-top-facts",
+			entityId,
+			TOP_FACTS_NOW,
+		);
+		expect(facts.map((f) => [f.predicate, f.vague])).toEqual([
+			["recalled-minor", false],
+			["old-important", true],
+		]);
 	});
 
 	it("datetime の値は Date にして渡す", async () => {
@@ -454,6 +499,7 @@ describe("topFacts", () => {
 		const facts = await createMemoryRepo(drizzle(env.DB)).topFacts(
 			"p-top-facts-dt",
 			entityId,
+			TOP_FACTS_NOW,
 		);
 
 		expect(facts.map((f) => f.object)).toEqual([

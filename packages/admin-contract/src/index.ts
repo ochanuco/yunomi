@@ -567,7 +567,7 @@ export const ConversationLogDeleteResponseSchema: v.GenericSchema<ConversationLo
  * 会話本文（recent_messages）、audit、KPI、履歴テーブル、secret は含めない。
  * 行は partner_id を持たない（Snapshot 全体の partner_id に従う）。
  */
-export const SNAPSHOT_SCHEMA_VERSION = 6;
+export const SNAPSHOT_SCHEMA_VERSION = 7;
 
 /** R2 の customMetadata。一覧はこの値から組み立てる。 */
 export type SnapshotSummary = {
@@ -752,6 +752,7 @@ const watchV4 = {
  * v1 は work_notes を持たない。v2 の work_notes は目標（goal と status、closed_at）を持たない。
  * v3 は watches を持たない。v4 の watches は新着を書く投稿（notify_thread_id）を持たない。
  * v5 の facts と work_notes は想起の記録（recall_count、last_recalled_at）を持たない。
+ * v6 の facts は同じ話を再び出した回数（restate_count）を持たない。
  */
 export const SnapshotSchema = v.variant("schema_version", [
 	v.strictObject({
@@ -793,11 +794,25 @@ export const SnapshotSchema = v.variant("schema_version", [
 		}),
 	}),
 	v.strictObject({
-		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+		schema_version: v.literal(6),
 		...snapshotHeader,
 		d1: v.strictObject({
 			...snapshotD1V1,
 			facts: v.array(v.strictObject({ ...factV1, ...recallV6 })),
+			work_notes: v.array(v.strictObject({ ...workNoteV3, ...recallV6 })),
+			watches: v.array(
+				v.strictObject({ ...watchV4, notify_thread_id: nullable(str) }),
+			),
+		}),
+	}),
+	v.strictObject({
+		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+		...snapshotHeader,
+		d1: v.strictObject({
+			...snapshotD1V1,
+			facts: v.array(
+				v.strictObject({ ...factV1, ...recallV6, restate_count: int }),
+			),
 			work_notes: v.array(v.strictObject({ ...workNoteV3, ...recallV6 })),
 			watches: v.array(
 				v.strictObject({ ...watchV4, notify_thread_id: nullable(str) }),

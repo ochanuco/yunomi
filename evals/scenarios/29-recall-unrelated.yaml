@@ -4,7 +4,7 @@ recent: []
 message: { speaker: alice, text: "ゆかりん、新しいキーボード買おうか迷ってるんだけど、どう思う？", mentions_partner: true }
 recalled:
   - { text: "alice: 高尾山の下りで足をくじいて、しばらく湿布を貼ってた", days_ago: 120 }
-  - { text: "alice 趣味 写真", days_ago: 200 }
+  - { text: "alice 趣味 写真", days_ago: 200, kind: lasting }
 relationship: { familiarity: 0.6, trust: 0.6 }
 state: { mood: 0.2, energy: 0.6 }
 expectations:

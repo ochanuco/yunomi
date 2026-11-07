@@ -491,7 +491,10 @@ describe("Tier 2 runner（Fake provider）", () => {
 			env: "development",
 			profile: yukarinProfile,
 			profileVersion: "test",
-			scenarios: pick(["recall-faded-memory"]),
+			scenarios: pick(["recall-faded-memory"]).map((s) => ({
+				...s,
+				skip: "まだ回せない",
+			})),
 			samples: 1,
 		});
 		expect(skipped.scenarios).toEqual([]);
@@ -506,7 +509,10 @@ describe("Tier 2 runner（Fake provider）", () => {
 			env: "development",
 			profile: yukarinProfile,
 			profileVersion: "test",
-			scenarios: pick(["recall-faded-memory"]),
+			scenarios: pick(["recall-faded-memory"]).map((s) => ({
+				...s,
+				skip: "まだ回せない",
+			})),
 			samples: 1,
 			runSkipped: true,
 		});

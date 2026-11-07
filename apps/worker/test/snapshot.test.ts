@@ -165,10 +165,18 @@ const build = async (): Promise<CurrentSnapshot> => {
 	return r.value;
 };
 
+/** v6 までの Snapshot は facts に同じ話を再び出した回数を持たない。 */
+const withoutRestate = (d1: CurrentSnapshot["d1"]) => ({
+	...d1,
+	facts: d1.facts.map(({ restate_count: _r, ...f }) => f),
+});
+
 /** v5 までの Snapshot は facts と work_notes に想起の記録を持たない。 */
 const withoutRecall = (d1: CurrentSnapshot["d1"]) => ({
 	...d1,
-	facts: d1.facts.map(({ recall_count: _c, last_recalled_at: _l, ...f }) => f),
+	facts: d1.facts.map(
+		({ recall_count: _c, last_recalled_at: _l, restate_count: _r, ...f }) => f,
+	),
 	work_notes: d1.work_notes.map(
 		({ recall_count: _c, last_recalled_at: _l, ...n }) => n,
 	),
@@ -565,6 +573,25 @@ describe("restore", () => {
 				).all()
 			).results,
 		).toEqual([{ recall_count: 0, last_recalled_at: null }]);
+	});
+
+	it("同じ話を再び出した回数を持たない v6 の Snapshot も復元でき、回数は 0 で入る", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		const v6: Snapshot = {
+			...current,
+			schema_version: 6,
+			d1: withoutRestate(current.d1),
+		};
+		expect(parseSnapshot(v6).ok).toBe(true);
+		expect(parseSnapshot({ ...current, schema_version: 6 }).ok).toBe(false);
+
+		const res = await restoreRequest(v6);
+		expect(res.status).toBe(200);
+		expect(
+			(await env.DB.prepare("SELECT restate_count FROM facts").all()).results,
+		).toEqual([{ restate_count: 0 }]);
 	});
 
 	it("restore を 1 行のログに残す", async () => {
