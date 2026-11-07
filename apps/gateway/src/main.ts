@@ -1,5 +1,5 @@
 import { generateDependencyReport } from "@discordjs/voice";
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
 import { loadConfig } from "./config.ts";
 import {
@@ -15,8 +15,10 @@ import { DEFAULT_HEARTBEAT_PATH, startHeartbeat } from "./heartbeat.ts";
 import { createKukichaClient } from "./kukicha-client.ts";
 import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
+import { createSeatStatusClient } from "./seat-status-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
 import { createVoiceStateHandler } from "./voice-state.ts";
+import { startWorkActivity } from "./work-activity.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
 const config = loadConfig(process.env);
@@ -145,6 +147,28 @@ discord.once(Events.ClientReady, (c) => {
 		path: process.env.HEARTBEAT_FILE ?? DEFAULT_HEARTBEAT_PATH,
 		isReady: () => discord.isReady(),
 	});
+	if (cfg.seatStatus) {
+		startWorkActivity({
+			seatStatus: createSeatStatusClient({
+				...cfg.seatStatus,
+				partnerId: cfg.partnerId,
+			}),
+			setActivity: (text) => {
+				if (text === null) c.user.setPresence({ activities: [] });
+				else c.user.setActivity(text, { type: ActivityType.Custom });
+			},
+			setBio: async (text) => {
+				try {
+					await c.application.edit({ description: text });
+					return true;
+				} catch (e) {
+					logger.warn("usage bio update failed", { error: String(e) });
+					return false;
+				}
+			},
+			logger,
+		});
+	}
 });
 
 discord.on(Events.MessageCreate, (message) => {

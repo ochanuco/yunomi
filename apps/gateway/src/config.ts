@@ -25,6 +25,8 @@ const envSchema = v.pipe(
 		AVATAR_DIR: v.optional(nonEmpty),
 		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
+		SEAT_STATUS_URL: v.optional(v.pipe(v.string(), v.url())),
+		SEAT_STATUS_TOKEN: v.optional(nonEmpty),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -39,6 +41,10 @@ const envSchema = v.pipe(
 	v.check(
 		(e) => Boolean(e.KUKICHA_URL) === Boolean(e.KUKICHA_TOKEN),
 		"KUKICHA_URL と KUKICHA_TOKEN は両方指定する",
+	),
+	v.check(
+		(e) => Boolean(e.SEAT_STATUS_URL) === Boolean(e.SEAT_STATUS_TOKEN),
+		"SEAT_STATUS_URL と SEAT_STATUS_TOKEN は両方指定する",
 	),
 );
 
@@ -61,6 +67,8 @@ export type GatewayConfig = {
 	ownerUserId: string | null;
 	/** この Discord カテゴリの発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。 */
 	workCategoryIds: ReadonlySet<string>;
+	/** mizuya の Working の、席の状態を渡す口。未設定なら作業中の数と使用率を出さない。 */
+	seatStatus: { url: string; token: string } | null;
 	logLevel: LogLevel;
 };
 
@@ -103,6 +111,10 @@ export const loadConfig = (
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
 		avatarDir: e.AVATAR_DIR ?? null,
 		ownerUserId: e.OWNER_DISCORD_USER_ID ?? null,
+		seatStatus:
+			e.SEAT_STATUS_URL && e.SEAT_STATUS_TOKEN
+				? { url: e.SEAT_STATUS_URL, token: e.SEAT_STATUS_TOKEN }
+				: null,
 		workCategoryIds: new Set(
 			(e.WORK_CATEGORY_IDS ?? "")
 				.split(",")

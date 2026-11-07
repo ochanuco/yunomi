@@ -19,6 +19,7 @@ describe("loadConfig", () => {
 				avatarDir: null,
 				ownerUserId: null,
 				workCategoryIds: new Set(),
+				seatStatus: null,
 				logLevel: "info",
 			},
 		});
@@ -97,5 +98,20 @@ describe("loadConfig", () => {
 	it("仕事カテゴリはカンマ区切りで読む", () => {
 		const r = loadConfig({ ...base, WORK_CATEGORY_IDS: "10, 20,," });
 		expect(r.ok && r.value.workCategoryIds).toEqual(new Set(["10", "20"]));
+	});
+
+	it("席の状態を渡す口は URL とトークンをそろえて読む", () => {
+		const r = loadConfig({
+			...base,
+			SEAT_STATUS_URL: "http://working.example:8191",
+			SEAT_STATUS_TOKEN: "seat",
+		});
+		expect(r.ok && r.value.seatStatus).toEqual({
+			url: "http://working.example:8191",
+			token: "seat",
+		});
+		expect(
+			loadConfig({ ...base, SEAT_STATUS_URL: "http://working.example" }).ok,
+		).toBe(false);
 	});
 });
