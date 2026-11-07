@@ -39,7 +39,7 @@
 | パートナー | bot の user id | bot の token |
 | --- | --- | --- |
 | `yukarin` | `PARTNER_DISCORD_USER_ID`（text。`resources.ts`） | `DISCORD_BOT_TOKEN`（secret） |
-| `akarin` | `AKARIN_DISCORD_USER_ID`（text。デプロイ時の環境変数。未設定なら空） | `AKARIN_DISCORD_BOT_TOKEN`（secret。production だけ宣言） |
+| `akarin` | `AKARIN_DISCORD_USER_ID`（text。`resources.ts`。production だけ値を持ち、ほかは空） | `AKARIN_DISCORD_BOT_TOKEN`（secret。production だけ宣言） |
 
 token は返事の送信（下記）と添付の読み取りに、そのパートナーの bot のものを使う。token の無いパートナーは Gateway に `reply` を返す。
 
@@ -355,8 +355,8 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
 
 #### 事前に人手で用意するもの
 
-- GitHub Environment `dev` と、その secret `OP_SA_DEPLOY`（vault `yunomi-dev` を読む 1Password Service Account の token）
-- 1Password vault `yunomi-dev` の item `yunomi-deploy-dev`（`credential`、Cloudflare API token）と `anthropic-api-key`（`credential`）。参照は `.github/deploy/dev.env.op`
+- GitHub Environment `dev` と、その secret `OP_SA_DEPLOY`（vault `gh-deploy` を読む 1Password Service Account の token）
+- 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token）と `yunomi-dev-worker`。`OWNER_EMAILS` は prod の `yunomi-worker` から読む。参照は `.github/deploy/dev.env.op`
 - dev の D1 を作り、`resources.ts` の `development.d1Id` を実 UUID にする
 - R2 bucket `yunomi-dev-snapshots` を作る
 
@@ -369,7 +369,7 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
 #### 事前に人手で用意するもの
 
 - GitHub Environment `production`（承認なし）と `production-approval`（Required reviewers だけを持ち、secret は持たない）。secret `OP_SA_DEPLOY` は vault `gh-deploy` だけを読む 1Password Service Account `github-deploy` の token（ochanuco の repo の本番デプロイで共用）
-- 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token、全 repo で共用）と `yunomi-anthropic-api-key`。参照は `.github/deploy/production.env.op`
+- 1Password vault `gh-deploy` の item `cloudflare-workers`（Cloudflare API token、全 repo で共用）と `yunomi-worker`。参照は `.github/deploy/production.env.op`
 - prod の D1 を作り、`resources.ts` の `production.d1Id` を実 UUID にする
 - R2 bucket `yunomi-snapshots` を作る
 
@@ -381,5 +381,5 @@ ANTHROPIC_API_KEY=... pnpm --filter @yunomi/worker check:llm-schema
 - Discord bot: 別アプリ・別 token（Gateway の `.env.dev` / `.env.prod`）
 - Anthropic API key: 別 key（既定モデルは prod が Sonnet）
 - Cloudflare Access: app・AUD・service token を別にする（`cloudflare.config.ts` の `ACCESS_AUD_*` / `ACCESS_CALLERS_*`）。dev の token で prod に入れない
-- 1Password: vault `yunomi-dev` / `gh-deploy`（prod は ochanuco の repo 共用）、Service Account も別
+- 1Password: どちらも vault `gh-deploy` で、item を `yunomi-dev-worker` と `yunomi-worker` に分ける
 - GitHub Environment: `dev`（承認なし）/ `production`（承認なし）/ `production-approval`（承認必須。plan が危ないと判定したときだけ使う）

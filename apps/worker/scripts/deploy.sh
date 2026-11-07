@@ -51,11 +51,6 @@ if [ "$send_from_worker" = 1 ] && [ -z "${DISCORD_BOT_TOKEN:-}" ]; then
   warnings+=("DISCORD_BOT_TOKEN が未設定。$mode.discordSendFromWorker が 1 なので、Worker secret に無ければ返事を送れない。")
 fi
 
-# AKARIN_DISCORD_USER_ID は var なのでデプロイのたびに上書きされる。dev は Akarin の bot を持たない
-if [ "$mode" = production ] && [ -z "${AKARIN_DISCORD_USER_ID:-}" ]; then
-  warnings+=("AKARIN_DISCORD_USER_ID が未設定。Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を第三者の発言として見分けない。")
-fi
-
 for w in "${warnings[@]+"${warnings[@]}"}"; do
   echo "warning: $w" >&2
 done
