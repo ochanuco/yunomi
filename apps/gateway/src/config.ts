@@ -124,3 +124,18 @@ export const loadConfig = (
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };
+
+/**
+ * 起動は止めないが、意図しない動きになる設定の組み合わせ。
+ * WORK_CATEGORY_IDS は dev のように仕事カテゴリのないサーバーでは空が正しいため、必須にはしない。
+ */
+export const configWarnings = (cfg: GatewayConfig): string[] => [
+	...(cfg.kukicha && !cfg.ownerUserId
+		? ["KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening"]
+		: []),
+	...(cfg.workCategoryIds.size === 0
+		? [
+				"WORK_CATEGORY_IDS is not set; messages in work categories are sent to the Worker",
+			]
+		: []),
+];

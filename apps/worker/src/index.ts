@@ -24,6 +24,7 @@ import { authenticate, type Principal } from "./auth/access.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
+import { purgeExpiredCandidates } from "./memory.ts";
 import {
 	defaultPartnerProfile,
 	partnerProfile,
@@ -91,6 +92,7 @@ export default {
 		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
 		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
+		await purgeExpiredCandidates(db, now);
 	},
 } satisfies ExportedHandler<Env>;
 

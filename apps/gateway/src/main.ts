@@ -1,7 +1,7 @@
 import { generateDependencyReport } from "@discordjs/voice";
 import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
-import { loadConfig } from "./config.ts";
+import { configWarnings, loadConfig } from "./config.ts";
 import {
 	countHumans,
 	isRelayable,
@@ -29,11 +29,7 @@ if (!config.ok) {
 }
 const cfg = config.value;
 const logger = createLogger(cfg.logLevel);
-if (cfg.kukicha && !cfg.ownerUserId) {
-	logger.warn(
-		"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
-	);
-}
+for (const warning of configWarnings(cfg)) logger.warn(warning);
 
 const avatarDir = cfg.avatarDir ?? DEFAULT_AVATAR_DIR;
 const avatars = await loadAvatarStock(avatarDir);
