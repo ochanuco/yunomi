@@ -7,8 +7,13 @@ import {
 	validationFailed,
 } from "@yunomi/core";
 import type { CapabilityAdapter, CapabilityResponse } from "../contract.ts";
-import { watchAdd, watchStop } from "../definitions/watch.ts";
+import {
+	WATCH_INTERVAL_DEFAULT_HOURS,
+	watchAdd,
+	watchStop,
+} from "../definitions/watch.ts";
 import { parseToolInput } from "../input.ts";
+import { checkWatchSchedule } from "../watch-schedule.ts";
 
 export type WatchStoreError =
 	| { type: "duplicate" }
@@ -23,7 +28,9 @@ export type WatchStore = {
 		discordUserId: string;
 		query: string;
 		sources: readonly string[];
-		intervalMinutes: number;
+		/** schedule の見張りでは null。 */
+		intervalMinutes: number | null;
+		schedule: string | null;
 		untilAt: Date | null;
 		now: Date;
 	}): Promise<Result<{ id: string }, WatchStoreError>>;
@@ -46,7 +53,10 @@ const NOTE: Record<Exclude<WatchStoreError["type"], "unavailable">, string> = {
 export type WatchToAdd = {
 	query: string;
 	sources: string[];
-	intervalMinutes: number;
+	/** schedule の見張りでは null。 */
+	intervalMinutes: number | null;
+	/** 日本時間で読む 5 項目の cron 式。間隔の見張りでは null。 */
+	schedule: string | null;
 	untilAt: Date | null;
 };
 
@@ -57,17 +67,35 @@ export const parseWatchAdd = (
 ): Result<WatchToAdd, DomainError> => {
 	const input = parseToolInput(watchAdd, raw);
 	if (!input.ok) return input;
-	const untilAt =
-		input.value.until === null ? null : new Date(input.value.until);
+	const { interval_hours, schedule, until } = input.value;
+	const untilAt = until === null ? null : new Date(until);
 	if (untilAt !== null && untilAt.getTime() <= now.getTime()) {
 		return err(validationFailed({ issues: ["until: 過去の日時"] }));
 	}
-	return ok({
+	const base = {
 		query: input.value.query,
 		sources: input.value.sources,
-		intervalMinutes: input.value.interval_hours * 60,
 		untilAt,
-	});
+	};
+	if (schedule == null) {
+		return ok({
+			...base,
+			intervalMinutes: (interval_hours ?? WATCH_INTERVAL_DEFAULT_HOURS) * 60,
+			schedule: null,
+		});
+	}
+	if (interval_hours != null) {
+		return err(
+			validationFailed({
+				issues: ["schedule: interval_hours と一緒には指定できない"],
+			}),
+		);
+	}
+	const checked = checkWatchSchedule(schedule, now);
+	if (!checked.ok) {
+		return err(validationFailed({ issues: [`schedule: ${checked.error}`] }));
+	}
+	return ok({ ...base, intervalMinutes: null, schedule: checked.value });
 };
 
 const outcome = (
@@ -104,7 +132,7 @@ export const createWatchAdapter = (deps: {
 				data: {
 					status: "added",
 					id: r.value.id,
-					note: "登録した間隔で調べ始める。新着が無ければ知らせない。",
+					note: "登録した間隔か時刻で調べ始める。新着が無ければ知らせない。",
 				},
 				summary: "見張りを 1 件登録した",
 			});

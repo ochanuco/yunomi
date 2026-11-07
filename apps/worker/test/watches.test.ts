@@ -72,7 +72,8 @@ type MemoryWatch = {
 	id: string;
 	query: string;
 	sources: string[];
-	interval_minutes: number;
+	interval_minutes: number | null;
+	schedule: string | null;
 	until_at: string | null;
 	last_checked_at: string | null;
 	due: boolean;
@@ -130,6 +131,7 @@ describe("見張りの道具", () => {
 			query: "RTX3090 の中古、24GB",
 			sources: ["https://shop.example/gpu"],
 			interval_minutes: 360,
+			schedule: null,
 			until_at: "2026-12-31 23:59 JST",
 			last_checked_at: null,
 			due: true,
@@ -141,6 +143,38 @@ describe("見張りの道具", () => {
 		await say("何を見張ってるんだっけ");
 		expect(block(fake.stepRequests[asked], "## 見張り")).toContain(
 			`- [${w?.id}] RTX3090 の中古、24GB（https://shop.example/gpu、6 時間おき、2026-12-31 23:59 JST まで）`,
+		);
+	});
+
+	it("会話で cron 式の見張りを登録すると、「見張り」に式が出る", async () => {
+		const { owner, fake, say } = await setup("watch-add-schedule");
+		fake.enqueueStep(
+			toolUse([
+				{
+					name: "watch_add",
+					input: {
+						...addInput,
+						interval_hours: null,
+						schedule: "0 9-18 * * 1-5",
+						until: null,
+					},
+				},
+			]),
+			final("平日の昼だけ見ますね"),
+		);
+		const res = await say("平日の日中だけ見張って");
+		expect(res.audit.toolCalls[0]?.outcome).toBe("ok");
+		const [w] = await readWatches(owner.id);
+		expect(w).toMatchObject({
+			interval_minutes: null,
+			schedule: "0 9-18 * * 1-5",
+		});
+
+		fake.enqueueStep(final("はい"));
+		const asked = fake.stepRequests.length;
+		await say("何を見張ってるんだっけ");
+		expect(block(fake.stepRequests[asked], "## 見張り")).toContain(
+			`- [${w?.id}] RTX3090 の中古、24GB（https://shop.example/gpu、cron「0 9-18 * * 1-5」の時刻）`,
 		);
 	});
 
@@ -192,6 +226,7 @@ describe("見張りの記録", () => {
 			query: "中古の万年筆",
 			sources: [],
 			intervalMinutes: 360,
+			schedule: null,
 			untilAt: null,
 			now: T0,
 		});
@@ -210,6 +245,52 @@ describe("見張りの記録", () => {
 		expect(again?.due).toBe(true);
 	});
 
+	it("cron 式の見張りは、前に調べてから発火の時刻を過ぎたときだけ due になる", async () => {
+		const { entityId } = await setup("watch-schedule-due");
+		const repo = createWatchRepo(drizzle(env.DB));
+		const added = await repo.add({
+			partnerId: PARTNER_ID,
+			entityId,
+			query: "平日の日中だけ",
+			sources: [],
+			intervalMinutes: null,
+			schedule: "0 9-18 * * 1-5",
+			untilAt: null,
+			now: T0,
+		});
+		const id = added.ok ? added.value.id : "";
+		const dueAt = async (at: string) =>
+			(await repo.active(PARTNER_ID, entityId, new Date(at)))[0]?.due;
+		expect(await dueAt("2026-11-09T00:30:00Z")).toBe(true);
+
+		// 月曜 9:10 JST に調べた
+		await repo.recordCheck({
+			partnerId: PARTNER_ID,
+			entityId,
+			id,
+			seen: [],
+			now: new Date("2026-11-09T00:10:00Z"),
+		});
+		expect(await dueAt("2026-11-09T00:59:59Z")).toBe(false);
+		expect(await dueAt("2026-11-09T01:00:00Z")).toBe(true);
+
+		// 金曜 18:30 JST に調べたら、次は月曜 9 時まで来ない
+		await repo.recordCheck({
+			partnerId: PARTNER_ID,
+			entityId,
+			id,
+			seen: [],
+			now: new Date("2026-11-13T09:30:00Z"),
+		});
+		expect(await dueAt("2026-11-15T12:00:00Z")).toBe(false);
+		expect(await dueAt("2026-11-16T00:00:00Z")).toBe(true);
+		const [w] = await repo.active(PARTNER_ID, entityId, T0);
+		expect(w).toMatchObject({
+			intervalMinutes: null,
+			schedule: "0 9-18 * * 1-5",
+		});
+	});
+
 	it(`知らせたものは新しい ${WATCH_SEEN_LIMIT} 件だけ覚える`, async () => {
 		const { entityId } = await setup("watch-seen-cap");
 		const repo = createWatchRepo(drizzle(env.DB));
@@ -219,6 +300,7 @@ describe("見張りの記録", () => {
 			query: "q",
 			sources: [],
 			intervalMinutes: 120,
+			schedule: null,
 			untilAt: null,
 			now: T0,
 		});
@@ -249,6 +331,7 @@ describe("見張りの記録", () => {
 				query,
 				sources: [],
 				intervalMinutes: 1440,
+				schedule: null,
 				untilAt,
 				now: T0,
 			});
@@ -355,12 +438,14 @@ describe("Working の席が足す見張り", () => {
 			id: string;
 			query: string;
 			sources: string[];
-			interval_minutes: number;
+			interval_minutes: number | null;
+			schedule: string | null;
 		};
 		expect(added).toMatchObject({
 			query: seatWatch.query,
 			sources: seatWatch.sources,
 			interval_minutes: 360,
+			schedule: null,
 		});
 		const [w] = await readWatches(owner.id);
 		expect(w).toMatchObject({
@@ -368,6 +453,7 @@ describe("Working の席が足す見張り", () => {
 			query: seatWatch.query,
 			sources: seatWatch.sources,
 			interval_minutes: 360,
+			schedule: null,
 			due: true,
 			notify_thread_id: null,
 		});
@@ -401,6 +487,38 @@ describe("Working の席が足す見張り", () => {
 		expect(await again.json()).toEqual({ error: "unknown_watch" });
 	});
 
+	it("cron 式の見張りを足すと、間隔は null で記憶に出る。間隔も cron 式も無ければ 24 時間おき", async () => {
+		const { owner } = await setup("seat-watch-schedule");
+		const { interval_hours: _i, ...noInterval } = seatWatch;
+		const res = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: { ...noInterval, schedule: " 0  9-18 * * 1-5 " },
+		});
+		expect(res.status).toBe(201);
+		expect(await res.json()).toMatchObject({
+			interval_minutes: null,
+			schedule: "0 9-18 * * 1-5",
+		});
+		const plain = await seatRequest("POST", {
+			discord_user_id: owner.id,
+			watch: { ...noInterval, query: "間隔の指定なし" },
+		});
+		expect(await plain.json()).toMatchObject({
+			interval_minutes: 1440,
+			schedule: null,
+		});
+		expect(
+			(await readWatches(owner.id)).map((w) => [
+				w.interval_minutes,
+				w.schedule,
+				w.due,
+			]),
+		).toEqual([
+			[null, "0 9-18 * * 1-5", true],
+			[1440, null, true],
+		]);
+	});
+
 	it("Talking の watch_add と同じ検証で弾き、何も残さない", async () => {
 		const { owner } = await setup("seat-watch-validate");
 		for (const watch of [
@@ -409,6 +527,9 @@ describe("Working の席が足す見張り", () => {
 			{ ...seatWatch, sources: Array(6).fill("店") },
 			{ ...seatWatch, interval_hours: 0 },
 			{ ...seatWatch, interval_hours: 1.5 },
+			{ ...seatWatch, schedule: "0 9 * * *" },
+			{ ...seatWatch, interval_hours: undefined, schedule: "*/10 * * * *" },
+			{ ...seatWatch, interval_hours: undefined, schedule: "0 0 9 * * *" },
 			{ ...seatWatch, until: "2020-01-01T00:00:00+09:00" },
 			{ ...seatWatch, until: "そのうち" },
 			{ query: "期限の項目が無い", sources: [], interval_hours: 24 },

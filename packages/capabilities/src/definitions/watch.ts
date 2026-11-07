@@ -8,6 +8,8 @@ export const WATCH_SOURCES_MAX = 5;
 // Working の受付が見張りごとに Dkron のジョブを置くので、1 時間単位まで守れる。
 export const WATCH_INTERVAL_MIN_HOURS = 1;
 export const WATCH_INTERVAL_MAX_HOURS = 24 * 7;
+export const WATCH_INTERVAL_DEFAULT_HOURS = 24;
+export const WATCH_SCHEDULE_MAX_LENGTH = 100;
 
 const oneLine = (max: number, description: string) =>
 	v.pipe(
@@ -36,13 +38,24 @@ const watchAddInput = v.object({
 			`どこを見るか（${WATCH_SOURCES_MAX} 件まで）。指定がなければ空配列で、普通の検索で探す`,
 		),
 	),
+	// 記憶の口からは項目ごと省けるよう nullish にする。道具の JSON Schema では全項目が必須になり、使わない方は null で来る。
 	interval_hours: v.pipe(
-		v.number(),
-		v.integer(),
-		v.minValue(WATCH_INTERVAL_MIN_HOURS),
-		v.maxValue(WATCH_INTERVAL_MAX_HOURS),
+		v.nullish(
+			v.pipe(
+				v.number(),
+				v.integer(),
+				v.minValue(WATCH_INTERVAL_MIN_HOURS),
+				v.maxValue(WATCH_INTERVAL_MAX_HOURS),
+			),
+		),
 		v.description(
-			`何時間おきに調べるか（${WATCH_INTERVAL_MIN_HOURS} 〜 ${WATCH_INTERVAL_MAX_HOURS}）。指定がなければ 24`,
+			`何時間おきに調べるか（${WATCH_INTERVAL_MIN_HOURS} 〜 ${WATCH_INTERVAL_MAX_HOURS}）。schedule を使うときは null。どちらも null なら ${WATCH_INTERVAL_DEFAULT_HOURS} 時間おき`,
+		),
+	),
+	schedule: v.pipe(
+		v.nullish(oneLine(WATCH_SCHEDULE_MAX_LENGTH, "cron 式")),
+		v.description(
+			"曜日や時間帯を決めて調べるときの cron 式。5 項目（分 時 日 月 曜日）で、日本時間で読む。曜日は 0 と 7 が日曜、1-5 が平日。例「0 9-18 * * 1-5」（平日 9〜18 時の毎正時）、「*/30 9-21 * * *」（毎日 9〜21 時の 30 分おき）、「0 8,20 * * 0,6」（土日の 8 時と 20 時）。30 分より詰めた式は通らない。interval_hours を使うときは null",
 		),
 	),
 	until: v.pipe(
@@ -63,7 +76,7 @@ export type WatchAddInput = v.InferOutput<typeof watchAddInput>;
 export const watchAdd: ToolDefinition<WatchAddInput> = {
 	name: "watch_add",
 	description:
-		"オーナーに頼まれた見張りを 1 件登録する。仕事の席が間隔ごとに調べ、条件に合う新着だけを 1 行で知らせる。同じ出品は二度知らせない。同じ見張りがもうあるときや、数の上限に達しているときは登録できない。",
+		"オーナーに頼まれた見張りを 1 件登録する。仕事の席が間隔（interval_hours）か決めた時刻（schedule）ごとに調べ、条件に合う新着だけを 1 行で知らせる。間隔と時刻はどちらか一方だけ指定する。同じ出品は二度知らせない。同じ見張りがもうあるときや、数の上限に達しているときは登録できない。",
 	category: "watch_write",
 	input: watchAddInput,
 };

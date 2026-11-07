@@ -46,7 +46,8 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
   "goals": [{ "id": "...", "summary": "...", "created_at": "..." }],
   "watches": [{
     "id": "...", "query": "...", "sources": ["..."],
-    "interval_minutes": 360, "until_at": "... | null", "last_checked_at": "... | null",
+    "interval_minutes": "360 | null", "schedule": "0 9-18 * * 1-5 | null",
+    "until_at": "... | null", "last_checked_at": "... | null",
     "due": true, "seen": ["..."], "notify_thread_id": "... | null"
   }]
 }
@@ -54,7 +55,7 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
 
 - `facts` は続く事実、`episodes` はできごと（仕事で残した 1 行を含む）。どちらも保持率（忘却曲線の R）の高い順。
 - `goals` は open な目標を古い順に全件。
-- `watches` は動いている見張り（期限切れを除く）を古い順に全件。`due` は前に調べてから間隔が過ぎたか、まだ調べていないか。`seen` は前に知らせたものの key。`notify_thread_id` は新着を書く Discord の投稿。
+- `watches` は動いている見張り（期限切れを除く）を古い順に全件。見張りは間隔（`interval_minutes`）か cron 式（`schedule`、日本時間で読む 5 項目）のどちらか一方を持ち、もう一方は null。`due` はまだ調べていないか、間隔の見張りなら前に調べてから間隔が過ぎたか、cron 式の見張りなら前に調べてから発火の時刻を 1 回以上過ぎたか。`seen` は前に知らせたものの key。`notify_thread_id` は新着を書く Discord の投稿。
 
 ## POST: 残す
 
@@ -74,14 +75,14 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
 ```json
 {
   "discord_user_id": "...",
-  "watch": { "query": "...", "sources": ["..."], "interval_hours": 6, "until": "2026-12-31T23:59:00+09:00" },
+  "watch": { "query": "...", "sources": ["..."], "interval_hours": 6, "schedule": null, "until": "2026-12-31T23:59:00+09:00" },
   "notify_thread_id": "<数字だけ。省略可>"
 }
 ```
 
-- `watch` は Talking の道具 `watch_add` と同じ検証を通す。`query` は改行なしの 200 字まで、`sources` は 1 件 300 字まで 5 件まで（省くと普通の検索）、`interval_hours` は 1 〜 168 の整数（省くと 24）、`until` はタイムゾーン付きの ISO 8601（省くと期限なし、過去は不可）。通らなければ 400 `validation_failed`。
+- `watch` は Talking の道具 `watch_add` と同じ検証を通す。`query` は改行なしの 200 字まで、`sources` は 1 件 300 字まで 5 件まで（省くと普通の検索）、`interval_hours` は 1 〜 168 の整数、`schedule` は日本時間で読む 5 項目（分 時 日 月 曜日）の cron 式で、数字と `* , - /` だけ（秒の項目、`@daily` のような別名、曜日や月の名前は不可。曜日の 0 と 7 は日曜）。`interval_hours` と `schedule` はどちらか一方だけ（両方あれば 400、どちらも省くか null なら 24 時間おき）。発火の間隔が 30 分より短くなる式も 400。`until` はタイムゾーン付きの ISO 8601（省くと期限なし、過去は不可）。通らなければ 400 `validation_failed`。
 - 同じ `query` の見張りがあれば 409 `duplicate_watch`、動いている見張りが 10 件あれば 409 `watch_limit`。
-- 201 で `{ id, query, sources, interval_minutes, until_at }` を返す。
+- 201 で `{ id, query, sources, interval_minutes, schedule, until_at }` を返す。`schedule` の見張りでは `interval_minutes` が null、間隔の見張りでは `schedule` が null。`schedule` は項目の間の空白を 1 つにそろえて返す。
 
 ## PATCH: 閉じる・止める・調べ終える
 
