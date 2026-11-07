@@ -51,7 +51,10 @@ export type RateKey =
 	| "opinion_shift_rate"
 	| "interest_up_rate"
 	| "misattributed_overheard_rate"
-	| "overheard_acknowledged_rate";
+	| "overheard_acknowledged_rate"
+	| "recalled_used_rate"
+	| "recalled_hedged_rate"
+	| "unrelated_past_rate";
 
 export type Metrics = {
 	samples_ok: number;
@@ -87,6 +90,8 @@ export type Tier2Report = {
 		scenario_count: number;
 	};
 	scenarios: ScenarioReport[];
+	/** skip を書いたシナリオのうち、回さなかったもの。 */
+	skipped: { id: string; reason: string }[];
 	overall: Metrics;
 	violations: Violation[];
 };
@@ -163,6 +168,18 @@ export const computeMetrics = (
 		overheard_acknowledged_rate: rate(
 			judgedFlags(samples, (j) => j.acknowledges_overheard),
 		),
+		recalled_used_rate: rate(
+			judgedFlags(samples, (j) => j.uses_recalled_memory),
+		),
+		// 記憶に触れなかった返事を分母に入れると、言い切ったのか触れなかったのかが混ざる。
+		recalled_hedged_rate: rate(
+			samples.flatMap((s) =>
+				s.judge?.uses_recalled_memory ? [s.judge.hedges_recalled_memory] : [],
+			),
+		),
+		unrelated_past_rate: rate(
+			judgedFlags(samples, (j) => j.brings_up_unrelated_past),
+		),
 	};
 };
 
@@ -207,7 +224,9 @@ export const checkViolations = (
 			| "memory_candidate_rate"
 			| "opinion_shift_rate"
 			| "interest_up_rate"
-			| "overheard_acknowledged_rate",
+			| "overheard_acknowledged_rate"
+			| "recalled_used_rate"
+			| "recalled_hedged_rate",
 		range: { min: number; max: number } | undefined,
 	) => {
 		const ci = m[key];
@@ -220,6 +239,8 @@ export const checkViolations = (
 	inRange("opinion_shift_rate", e.opinion_shift_rate);
 	inRange("interest_up_rate", e.interest_up_rate);
 	inRange("overheard_acknowledged_rate", e.overheard_acknowledged_rate);
+	inRange("recalled_used_rate", e.recalled_used_rate);
+	inRange("recalled_hedged_rate", e.recalled_hedged_rate);
 
 	const maxRate = (key: RateKey, max: number) => {
 		const ci = m[key];
@@ -236,6 +257,9 @@ export const checkViolations = (
 	if (e.joke_cooldown_respected) maxRate("cooling_down_joke_rate", 0);
 	if (e.must_not_misattribute_overheard) {
 		maxRate("misattributed_overheard_rate", 0);
+	}
+	if (e.unrelated_past_rate_max !== undefined) {
+		maxRate("unrelated_past_rate", e.unrelated_past_rate_max);
 	}
 	maxRate("fanon_overuse_rate", 0.3);
 	maxRate("meta_talk_rate", 0.2);
@@ -262,6 +286,8 @@ export type Tier2Options = {
 	profileVersion: string;
 	scenarios: Scenario[];
 	samples: number;
+	/** true なら skip を書いたシナリオも回す。 */
+	runSkipped?: boolean;
 	now?: () => Date;
 	onProgress?: (msg: string) => void;
 };
@@ -276,7 +302,17 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 	const interestTopics = new Set(opts.profile.interests.map((i) => i.topic));
 	const opinionTopics = new Set(opts.profile.opinions.map((o) => o.topic));
 
-	for (const scenario of opts.scenarios) {
+	const skipped = opts.runSkipped
+		? []
+		: opts.scenarios.flatMap((s) =>
+				s.skip === undefined ? [] : [{ id: s.id, reason: s.skip }],
+			);
+	for (const s of skipped) opts.onProgress?.(`${s.id}: skip（${s.reason}）`);
+	const targets = opts.runSkipped
+		? opts.scenarios
+		: opts.scenarios.filter((s) => s.skip === undefined);
+
+	for (const scenario of targets) {
 		// judge にも同じ時刻を渡す。渡さないと、返事が触れた正しい時刻を作り話と判定する。
 		const now = opts.now?.() ?? new Date();
 		const input = toPromptInput(scenario, opts.profile, now);
@@ -377,9 +413,10 @@ export const runTier2 = async (opts: Tier2Options): Promise<Tier2Report> => {
 			turn_model: router.primary,
 			judge_model: SONNET,
 			profile_version: opts.profileVersion,
-			scenario_count: opts.scenarios.length,
+			scenario_count: targets.length,
 		},
 		scenarios: reports,
+		skipped,
 		overall: computeMetrics(all, allErrors),
 		violations: reports.flatMap((r) => r.violations),
 	};
@@ -404,6 +441,9 @@ export const formatSummary = (report: Tier2Report): string => {
 		"mem-cand",
 		"op-shift",
 		"int-up",
+		"recall",
+		"hedge",
+		"old-talk",
 		"viol",
 	];
 	const row = (id: string, m: Metrics, viol: number) => [
@@ -423,6 +463,9 @@ export const formatSummary = (report: Tier2Report): string => {
 		rateCell(m.memory_candidate_rate),
 		rateCell(m.opinion_shift_rate),
 		rateCell(m.interest_up_rate),
+		rateCell(m.recalled_used_rate),
+		rateCell(m.recalled_hedged_rate),
+		rateCell(m.unrelated_past_rate),
 		String(viol),
 	];
 	const rows = [
@@ -443,6 +486,10 @@ export const formatSummary = (report: Tier2Report): string => {
 		`tier2 partner=${report.meta.partner_id} env=${report.meta.env} turn=${report.meta.turn_model} judge=${report.meta.judge_model} samples=${report.meta.samples_per_scenario}`,
 		...lines,
 	];
+	if (report.skipped.length > 0) {
+		out.push("", "skipped:");
+		for (const x of report.skipped) out.push(`- ${x.id}: ${x.reason}`);
+	}
 	if (report.violations.length > 0) {
 		out.push("", "violations:");
 		for (const x of report.violations) {
