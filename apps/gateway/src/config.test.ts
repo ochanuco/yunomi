@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "./config.ts";
+import { configWarnings, loadConfig } from "./config.ts";
 
 const base = { DISCORD_TOKEN: "t", YUNOMI_URL: "http://localhost:8787/" };
 
@@ -113,5 +113,37 @@ describe("loadConfig", () => {
 		expect(
 			loadConfig({ ...base, SEAT_STATUS_URL: "http://working.example" }).ok,
 		).toBe(false);
+	});
+});
+
+describe("configWarnings", () => {
+	const load = (env: Record<string, string>) => {
+		const r = loadConfig({ ...base, ...env });
+		if (!r.ok) throw new Error(r.error.join());
+		return r.value;
+	};
+
+	it("WORK_CATEGORY_IDS が未設定なら、仕事カテゴリが除外されないことを警告する", () => {
+		expect(configWarnings(load({}))).toEqual([
+			"WORK_CATEGORY_IDS is not set; messages in work categories are sent to the Worker",
+		]);
+	});
+
+	it("仕事カテゴリがあり耳の設定が揃っていれば警告しない", () => {
+		expect(configWarnings(load({ WORK_CATEGORY_IDS: "1,2" }))).toEqual([]);
+	});
+
+	it("kukicha があって持ち主が未設定なら、聞かないことを警告する", () => {
+		expect(
+			configWarnings(
+				load({
+					WORK_CATEGORY_IDS: "1",
+					KUKICHA_URL: "http://kukicha:8191",
+					KUKICHA_TOKEN: "k",
+				}),
+			),
+		).toEqual([
+			"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
+		]);
 	});
 });

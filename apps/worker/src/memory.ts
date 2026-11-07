@@ -8,7 +8,7 @@ import {
 	normalizeObject,
 	normalizePredicate,
 } from "@yunomi/core";
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
 import {
@@ -305,4 +305,16 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 			];
 		},
 	};
+};
+
+/** 昇格した内容は facts に残り、昇格の判定も候補の行を読み返さないので、期限を過ぎた行は status によらず消してよい。 */
+export const purgeExpiredCandidates = async (
+	db: DrizzleD1Database,
+	now: Date,
+): Promise<number> => {
+	const res = await db
+		.delete(memoryCandidates)
+		.where(lt(memoryCandidates.expiresAt, now.toISOString()))
+		.run();
+	return res.meta.changes;
 };

@@ -26,6 +26,7 @@ import { purgeExpiredConversationMessages } from "./conversation-log.ts";
 import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
+import { purgeExpiredCandidates } from "./memory.ts";
 import {
 	defaultPartnerProfile,
 	partnerProfile,
@@ -93,6 +94,7 @@ export default {
 		// 集計に失敗したら削除しない。削除済みの行は再集計できない。
 		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
+		await purgeExpiredCandidates(db, now);
 		// OWNER_DISCORD_USER_ID は production だけが宣言する secret なので Env の型に無い。
 		// 持ち主が分からないまま消すと持ち主の発言まで消えるため、無ければ保持期間の削除をしない。
 		const ownerId = (env as Env & Pick<CapabilityEnv, "OWNER_DISCORD_USER_ID">)
