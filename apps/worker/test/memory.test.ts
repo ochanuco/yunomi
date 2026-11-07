@@ -4,6 +4,7 @@ import type { TurnResponse } from "@yunomi/conversation";
 import { FakeLLMProvider, HAIKU, ModelRouter } from "@yunomi/llm";
 import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
+import worker from "../src/index.ts";
 import {
 	createMemoryRepo,
 	PROMPT_EPISODE_LIMIT,
@@ -458,5 +459,52 @@ describe("topFacts", () => {
 		expect(facts.map((f) => f.object)).toEqual([
 			new Date("2026-10-18T03:00:00.000Z"),
 		]);
+	});
+});
+
+describe("memory_candidates の期限切れ", () => {
+	const NOW = new Date("2026-11-07T19:17:00.000Z");
+	const insertCandidate = (id: string, status: string, expiresAt: string) =>
+		env.DB.prepare(
+			`INSERT INTO memory_candidates
+				(id, partner_id, subject_entity_id, subject_text, predicate, object_type, object_value,
+				confidence, importance, source, status, conflict_fact_id, expires_at, created_at, source_event_id)
+			VALUES (?, 'candidate-cron', NULL, 'user', '好きな飲み物', 'string', '緑茶',
+				0.9, 0.7, 'user_statement', ?, NULL, ?, '2026-10-01T00:00:00.000Z', 'evt')`,
+		)
+			.bind(id, status, expiresAt)
+			.run();
+
+	it("cron は expires_at を過ぎた行を status によらず消し、期限内の行を残す", async () => {
+		await insertCandidate(
+			"expired-pending",
+			"pending",
+			"2026-11-07T19:16:59.999Z",
+		);
+		await insertCandidate(
+			"expired-promoted",
+			"promoted",
+			"2026-11-01T00:00:00.000Z",
+		);
+		await insertCandidate(
+			"live-pending",
+			"pending",
+			"2026-11-07T19:17:00.000Z",
+		);
+		await insertCandidate(
+			"live-conflict",
+			"conflict",
+			"2026-12-01T00:00:00.000Z",
+		);
+
+		await worker.scheduled(
+			{ scheduledTime: NOW.getTime(), cron: "17 19 * * *", noRetry() {} },
+			env,
+		);
+
+		const { results } = await env.DB.prepare(
+			"SELECT id FROM memory_candidates WHERE partner_id = 'candidate-cron' ORDER BY id",
+		).all<{ id: string }>();
+		expect(results.map((r) => r.id)).toEqual(["live-conflict", "live-pending"]);
 	});
 });

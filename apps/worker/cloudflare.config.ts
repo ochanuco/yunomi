@@ -92,7 +92,7 @@ export default defineConfig(({ mode }) => {
 					exportName: "PartnerDO",
 				}),
 			},
-			// 04:17 JST。Snapshot の作成と期限切れ削除、日次 KPI 集計、詳細 audit の保持期間切れ削除。
+			// 04:17 JST。Snapshot の作成と期限切れ削除、日次 KPI 集計、詳細 audit と期限切れの記憶候補の削除。
 			triggers: [triggers.scheduled({ schedule: "17 19 * * *" })],
 			exports: {
 				PartnerDO: exports.durableObject({ storage: "sqlite" }),
