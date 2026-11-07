@@ -52,7 +52,7 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
 }
 ```
 
-- `facts` は続く事実、`episodes` はできごと（仕事で残した 1 行を含む）。
+- `facts` は続く事実、`episodes` はできごと（仕事で残した 1 行を含む）。どちらも保持率（忘却曲線の R）の高い順。
 - `goals` は open な目標を古い順に全件。
 - `watches` は動いている見張り（期限切れを除く）を古い順に全件。`due` は前に調べてから間隔が過ぎたか、まだ調べていないか。`seen` は前に知らせたものの key。`notify_thread_id` は新着を書く Discord の投稿。
 
@@ -67,7 +67,7 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
 - `summary` は改行なし、前後の空白を除いて 200 字まで。Talking の記憶では 1 件が 1 行に並ぶため。
 - 201 で `{ id, kind, summary, created_at }` を返す。
 - `goal` は open で入る。同じ文面の open な目標があれば 409 `duplicate_goal`、open な目標が 10 件あれば 409 `goal_limit`。
-- `decided` と `done` は、Talking の prompt で新しい 10 件が「仕事で決めたこと」「仕事で終えたこと」の出来事として出る。
+- `decided` と `done` は、Talking の prompt で保持率（忘却曲線の R）の高い 10 件が「仕事で決めたこと」「仕事で終えたこと」の出来事として出る。
 
 ### 見張り
 

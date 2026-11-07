@@ -148,7 +148,7 @@ export async function handleWorkingMemory(
 		const entityId = await findEntity(db, discordUserId);
 		if (!entityId) return error(404, "unknown_entity");
 		const [memory, openLoops, goals, watches] = await Promise.all([
-			createMemoryRepo(db).topFacts(partnerId, entityId),
+			createMemoryRepo(db).topFacts(partnerId, entityId, new Date()),
 			createOpenLoopRepo(db).topOpen(partnerId, entityId),
 			createWorkNoteRepo(db).openGoals(partnerId, entityId),
 			createWatchRepo(db).active(partnerId, entityId, new Date()),

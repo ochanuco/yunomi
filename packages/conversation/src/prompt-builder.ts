@@ -23,6 +23,8 @@ export type MemoryFact = {
 	object: string | Date;
 	kind: MemoryKind;
 	observedAt: Date;
+	/** 保持率が低い記憶。出来事の日付を粗くし、うろ覚えと添える。 */
+	vague?: boolean;
 };
 
 /** 連想で浮かんだ記憶。固定の枠とは別に出す。 */
@@ -30,6 +32,8 @@ export type RecalledLine = {
 	/** 日時は JST に直してある 1 行。会話の塊は「名前: 本文」が改行で続く。 */
 	text: string;
 	at: Date;
+	/** 保持率が低い記憶。日付を粗くし、うろ覚えの区画に分けて出す。細部は渡す側で落としてある。 */
+	vague?: boolean;
 };
 
 export type OpenLoopLine = {
@@ -282,11 +286,40 @@ const daysSinceHeard = (f: MemoryFact, now: Date): number =>
 const isStaleEpisode = (f: MemoryFact, now: Date): boolean =>
 	f.kind === "episode" && daysSinceHeard(f, now) >= EPISODE_STALE_DAYS;
 
+const SEASONS = [
+	"冬",
+	"冬",
+	"春",
+	"春",
+	"春",
+	"夏",
+	"夏",
+	"夏",
+	"秋",
+	"秋",
+	"秋",
+	"冬",
+] as const;
+
+/** うろ覚えの記憶の日付。「去年の秋ごろ」くらいの粗さにし、日にちは出さない。 */
+export const roughDate = (at: Date, now: Date): string => {
+	const a = toJstDate(at);
+	const years = Math.max(
+		0,
+		toJstDate(now).getUTCFullYear() - a.getUTCFullYear(),
+	);
+	const season = SEASONS[a.getUTCMonth()];
+	if (years === 0) return `今年の${season}ごろ`;
+	if (years === 1) return `去年の${season}ごろ`;
+	return `${years} 年くらい前`;
+};
+
 const memoryLine = (f: MemoryFact, now: Date): string => {
 	const object =
 		f.object instanceof Date ? formatJstForPrompt(f.object) : f.object;
 	const line = `- ${f.subject} ${f.predicate} ${object}`;
 	if (f.kind === "lasting") return line;
+	if (f.vague) return `${line}（${roughDate(f.observedAt, now)}、うろ覚え）`;
 	const heard = toJstDate(f.observedAt);
 	const date = `${heard.getUTCMonth() + 1}/${heard.getUTCDate()}`;
 	const days = daysSinceHeard(f, now);
@@ -310,26 +343,55 @@ const memoryBlock = (facts: MemoryFact[], now: Date): string => {
 	].join("\n");
 };
 
+/**
+ * 経過の感覚。月日だけを渡すと、モデルは数週間前の記憶を「去年」と言うことがある。
+ * 一年を過ぎたら日付の方が伝わるので、年で数える。
+ */
+export const elapsedText = (at: Date, now: Date): string => {
+	const days = Math.max(0, jstDayNumber(now) - jstDayNumber(at));
+	if (days < RELATIVE_DAYS.length) return RELATIVE_DAYS[days] ?? "";
+	if (days < 14) return `${days} 日前`;
+	if (days < 60) return `${Math.round(days / 7)} 週間くらい前`;
+	if (days < 365) return `${Math.round(days / 30)} か月くらい前`;
+	return `${Math.floor(days / 365)} 年くらい前`;
+};
+
 const recalledLine = (r: RecalledLine, now: Date): string => {
 	const at = toJstDate(r.at);
 	const year =
 		at.getUTCFullYear() === toJstDate(now).getUTCFullYear()
 			? ""
 			: `${at.getUTCFullYear()}/`;
+	const date = r.vague
+		? roughDate(r.at, now)
+		: `${year}${at.getUTCMonth() + 1}/${at.getUTCDate()}、${elapsedText(r.at, now)}`;
 	const [first = "", ...rest] = r.text.split("\n");
-	return [
-		`- ${first}（${year}${at.getUTCMonth() + 1}/${at.getUTCDate()}）`,
-		...rest.map((l) => `  ${l}`),
-	].join("\n");
+	return [`- ${first}（${date}）`, ...rest.map((l) => `  ${l}`)].join("\n");
 };
 
 // 固定の枠の「自分からは持ち出さない」は当てない。いまの話題から浮かんだ記憶なので、触れても唐突にならない。
-const recalledBlock = (recalled: RecalledLine[], now: Date): string =>
-	[
-		"## ふと思い出したこと",
-		"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。",
-		...recalled.map((r) => recalledLine(r, now)),
+// うろ覚えの記憶は区画を分け、確かさの違いを見出しと説明で伝える。言い方の規則は足さない。
+const recalledBlock = (recalled: RecalledLine[], now: Date): string => {
+	const clear = recalled.filter((r) => !r.vague);
+	const vague = recalled.filter((r) => r.vague);
+	return [
+		...(clear.length
+			? [
+					"## ふと思い出したこと",
+					"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。覚えているのはここに書いてあることだけで、それ以上の細部は覚えていない。",
+					...clear.map((r) => recalledLine(r, now)),
+				]
+			: []),
+		...(clear.length && vague.length ? [""] : []),
+		...(vague.length
+			? [
+					"## うろ覚えのこと",
+					"いまの話から浮かんだが、だいぶ前のことで、いつだったかも中身もはっきりしない記憶。自信はない。ここに書いてあるより先のことは思い出せない。",
+					...vague.map((r) => recalledLine(r, now)),
+				]
+			: []),
 	].join("\n");
+};
 
 const openLoopBlock = (loops: OpenLoopLine[]): string =>
 	[

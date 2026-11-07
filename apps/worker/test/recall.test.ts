@@ -229,7 +229,7 @@ describe("createRecaller", () => {
 				conversationBefore: new Date("2026-11-07T02:00:00Z"),
 			}),
 		);
-		expect(recalled.ok && recalled.value.memories).toEqual([
+		expect(recalled.ok && recalled.value.memories).toMatchObject([
 			{
 				key: { kind: "conversation", sourceId: old },
 				text: "持ち主: 秋葉原でグラフィックボードを探した\nゆかり: 見つかりました？",
@@ -287,6 +287,74 @@ describe("createRecaller", () => {
 			request(me, ["なにか"]),
 		);
 		expect(r.ok).toBe(false);
+	});
+
+	it("関連の強さに保持率を掛けて並べ、思い出したばかりの記憶を上にする", async () => {
+		const me = await newEntity();
+		// 語が多く一致する方がキーワード検索では上に来る
+		const strong = await insertFact(me, "旅行", "屋久島の縄文杉トレッキング", {
+			observedAt: "2025-08-01T00:00:00.000Z",
+		});
+		const weak = await insertFact(me, "予定", "屋久島の宿", {
+			observedAt: "2025-08-01T00:00:00.000Z",
+		});
+		const cue = ["屋久島の縄文杉トレッキング"];
+		expect(await ids(request(me, cue))).toEqual([strong, weak]);
+		await keywordOnly.markRecalled(
+			[{ kind: "fact", sourceId: weak }],
+			new Date("2026-11-06T00:00:00Z"),
+		);
+		const r = await keywordOnly.recall(request(me, cue));
+		expect(
+			r.ok && r.value.memories.map((m) => [m.key.sourceId, m.vague]),
+		).toEqual([
+			[weak, false],
+			[strong, true],
+		]);
+	});
+
+	it("うろ覚えの会話の塊は頭の数行だけを渡す", async () => {
+		const me = await newEntity();
+		const body = [
+			"持ち主: 天体望遠鏡を組み立てた",
+			"ゆかり: 何が見えました？",
+			"持ち主: 土星の輪っかが見えた",
+			"ゆかり: いいですね",
+		].join("\n");
+		const id = await insertChunk(body, "2025-02-01T00:00:00.000Z");
+		const r = await keywordOnly.recall(
+			request(me, ["天体望遠鏡"], { includeConversation: true }),
+		);
+		expect(r.ok && r.value.memories).toMatchObject([
+			{
+				key: { kind: "conversation", sourceId: id },
+				text: "持ち主: 天体望遠鏡を組み立てた\nゆかり: 何が見えました？…",
+				vague: true,
+			},
+		]);
+	});
+
+	it("想起の記録では索引の行を入れ直さない", async () => {
+		const me = await newEntity();
+		const id = await insertFact(me, "趣味", "盆栽の手入れ");
+		const chunk = await insertChunk("持ち主: 盆栽を買った", NOW.toISOString());
+		const docIds = () =>
+			env.DB.prepare(
+				"SELECT id FROM memory_search_docs WHERE source_id IN (?, ?) ORDER BY id",
+			)
+				.bind(id, chunk)
+				.all<{ id: number }>()
+				.then((r) => r.results.map((d) => d.id));
+		const before = await docIds();
+		expect(before).toHaveLength(2);
+		await keywordOnly.markRecalled(
+			[
+				{ kind: "fact", sourceId: id },
+				{ kind: "conversation", sourceId: chunk },
+			],
+			NOW,
+		);
+		expect(await docIds()).toEqual(before);
 	});
 
 	it("markRecalled は回数と時刻を進め、索引からは外さない", async () => {
@@ -355,6 +423,11 @@ describe("返事のターンの連想", () => {
 		}
 		const outside = await insertFact(entityId, "昔の趣味", "カヌー教室", {
 			importance: 0.1,
+			observedAt: "2026-09-20T00:00:00.000Z",
+		});
+		// 長く触れていない記憶は、うろ覚えとして日付を粗くして出す
+		const faded = await insertFact(entityId, "習い事", "カヌー教室の体験会", {
+			importance: 0.1,
 			observedAt: "2025-05-03T00:00:00.000Z",
 		});
 
@@ -367,14 +440,17 @@ describe("返事のターンの連想", () => {
 		const prompt = systemPrompt(fake);
 		expect(prompt).toContain("## ふと思い出したこと");
 		expect(prompt).toContain("自分から触れてよい");
-		expect(prompt).toContain("- 昔の趣味 カヌー教室（2025/5/3）");
-		expect(prompt.split("## ふと思い出したこと")[1]).not.toContain(
-			"自分からは持ち出さない",
-		);
+		const [clear = "", vague = ""] = (
+			prompt.split("## ふと思い出したこと")[1] ?? ""
+		).split("## うろ覚えのこと");
+		expect(clear).toContain("- 昔の趣味 カヌー教室（9/20、3 週間くらい前）");
+		expect(clear).not.toContain("自分からは持ち出さない");
+		expect(vague).toContain("自信はない");
+		expect(vague).toContain("- 習い事 カヌー教室の体験会（去年の春ごろ）");
 		expect(
 			JSON.parse((await auditFor(related.eventId))[0]?.detail_json ?? "")
 				.recall,
-		).toEqual({ keys: [`fact:${outside}`], error: null });
+		).toEqual({ keys: [`fact:${outside}`, `fact:${faded}`], error: null });
 		expect((await recallCountOf(outside))?.recall_count).toBe(1);
 
 		// 直近ログも手がかりになるので、関係しない発言は別のチャンネルで確かめる

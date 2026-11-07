@@ -476,7 +476,9 @@ export const runTurn = async (
 		seedRelationship(deps, entityId, seededAt);
 
 	// 記憶の取得に失敗しても会話は続ける（記憶なしで応答する）。
-	const facts = await deps.memory.topFacts(partnerId, entityId).catch(() => []);
+	const facts = await deps.memory
+		.topFacts(partnerId, entityId, seededAt)
+		.catch(() => []);
 	const openLoops = await deps.openLoops
 		.topOpen(partnerId, entityId)
 		.catch(() => []);
@@ -542,12 +544,14 @@ export const runTurn = async (
 			object: f.object,
 			kind: f.kind,
 			observedAt: f.observedAt,
+			vague: f.vague,
 		})),
 		...(recalled?.memories.length
 			? {
 					recalled: recalled.memories.map((r) => ({
 						text: r.text,
 						at: r.at,
+						vague: r.vague,
 					})),
 				}
 			: {}),

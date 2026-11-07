@@ -6,6 +6,13 @@ import { WORK_NOTE_PREDICATE, type WorkEpisodeKind } from "../work-notes.ts";
 import { type KeywordHit, MIN_TERM_LENGTH, searchKeywords } from "./keyword.ts";
 import { type RecallPeriod, recallPeriod } from "./period.ts";
 import {
+	factRetentionKind,
+	isVague,
+	lastTouched,
+	type RetentionInput,
+	retention,
+} from "./retention.ts";
+import {
 	chunked,
 	D1_PARAM_CHUNK,
 	errorMessage,
@@ -27,6 +34,8 @@ export const RRF_K = 60;
 export const VECTOR_MIN_SCORE = 0.6;
 /** 会話の塊は長いので、Prompt には頭だけを渡す。 */
 export const RECALL_TEXT_MAX_LENGTH = 300;
+/** うろ覚えの会話の塊は細部を落とし、頭のこの行数だけを渡す。 */
+export const RECALL_VAGUE_CHUNK_LINES = 2;
 /** キーワード検索に渡す語の上限。長い発言で MATCH 式が膨らまないようにする。 */
 const KEYWORD_TERM_LIMIT = 12;
 
@@ -68,19 +77,9 @@ export const fuseHits = (
 	return [...out.values()];
 };
 
-/**
- * 並べ方の基準。連想の順位はこの値だけで決める。
- * 忘却曲線（RC05）は、ここで保持率 R を掛ける。
- */
-export const recallScore = (c: RecallCandidate): number => c.fused;
-
-export const rankCandidates = (
-	candidates: readonly RecallCandidate[],
-): RecallCandidate[] =>
-	[...candidates].sort(
-		(a, b) =>
-			recallScore(b) - recallScore(a) || keyOf(a).localeCompare(keyOf(b)),
-	);
+/** 並べ方の基準。連想の順位はこの値だけで決める。関連の強さに保持率 R を掛ける。 */
+export const recallScore = (fused: number, retention: number): number =>
+	fused * retention;
 
 /**
  * キーワード検索の語を取り出す。日本語は語の区切りが無いので、漢字・カタカナ・ASCII の英数字の連なりを語とみなし、
@@ -124,6 +123,9 @@ export type RecalledMemory = {
 	text: string;
 	/** facts は observed_at、work_notes は created_at、塊は anchor の発言時刻。 */
 	at: Date;
+	retention: number;
+	/** R が低く、日付を粗くし細部を落として渡す記憶。text は既に細部を落としてある。 */
+	vague: boolean;
 };
 
 export type RecallResult = {
@@ -145,6 +147,13 @@ const truncate = (text: string): string =>
 		? `${[...text].slice(0, RECALL_TEXT_MAX_LENGTH).join("")}…`
 		: text;
 
+const firstLines = (text: string): string => {
+	const lines = text.split("\n");
+	return lines.length > RECALL_VAGUE_CHUNK_LINES
+		? `${lines.slice(0, RECALL_VAGUE_CHUNK_LINES).join("\n")}…`
+		: text;
+};
+
 const idsOf = (candidates: readonly IndexKey[], kind: IndexKind) =>
 	candidates.filter((c) => c.kind === kind).map((c) => c.sourceId);
 
@@ -155,8 +164,27 @@ const loadMemories = async (
 	candidates: readonly IndexKey[],
 ): Promise<Map<string, RecalledMemory>> => {
 	const out = new Map<string, RecalledMemory>();
-	const put = (key: IndexKey, text: string, at: string) =>
-		out.set(keyOf(key), { key, text: truncate(text), at: new Date(at) });
+	const put = (
+		key: IndexKey,
+		text: string,
+		at: string,
+		r: Omit<RetentionInput, "touchedAt"> & { lastRecalledAt: string | null },
+	) => {
+		const value = retention(
+			{ ...r, touchedAt: lastTouched(at, r.lastRecalledAt) },
+			q.now,
+		);
+		const vague = isVague(value);
+		out.set(keyOf(key), {
+			key,
+			text: truncate(
+				vague && key.kind === "conversation" ? firstLines(text) : text,
+			),
+			at: new Date(at),
+			retention: value,
+			vague,
+		});
+	};
 
 	const factIds = idsOf(candidates, "fact");
 	if (factIds.length > 0) {
@@ -168,6 +196,11 @@ const loadMemories = async (
 				objectValue: facts.objectValue,
 				objectDisplay: facts.objectDisplay,
 				observedAt: facts.observedAt,
+				importance: facts.importance,
+				decayPolicy: facts.decayPolicy,
+				recallCount: facts.recallCount,
+				lastRecalledAt: facts.lastRecalledAt,
+				restateCount: facts.restateCount,
 			})
 			.from(facts)
 			.where(
@@ -189,6 +222,13 @@ const loadMemories = async (
 				{ kind: "fact", sourceId: r.id },
 				`${r.predicate} ${object}`,
 				r.observedAt,
+				{
+					kind: factRetentionKind(r.decayPolicy),
+					importance: r.importance,
+					recallCount: r.recallCount,
+					restateCount: r.restateCount,
+					lastRecalledAt: r.lastRecalledAt,
+				},
 			);
 		}
 	}
@@ -202,6 +242,8 @@ const loadMemories = async (
 				summary: workNotes.summary,
 				status: workNotes.status,
 				createdAt: workNotes.createdAt,
+				recallCount: workNotes.recallCount,
+				lastRecalledAt: workNotes.lastRecalledAt,
 			})
 			.from(workNotes)
 			.where(
@@ -224,6 +266,13 @@ const loadMemories = async (
 				{ kind: "work_note", sourceId: r.id },
 				`${label} ${r.summary}`,
 				r.createdAt,
+				{
+					kind: "work_note",
+					importance: null,
+					recallCount: r.recallCount,
+					restateCount: 0,
+					lastRecalledAt: r.lastRecalledAt,
+				},
 			);
 		}
 	}
@@ -235,6 +284,8 @@ const loadMemories = async (
 				id: conversationChunks.id,
 				body: conversationChunks.body,
 				occurredAt: conversationChunks.occurredAt,
+				recallCount: conversationChunks.recallCount,
+				lastRecalledAt: conversationChunks.lastRecalledAt,
 			})
 			.from(conversationChunks)
 			.where(
@@ -250,7 +301,13 @@ const loadMemories = async (
 			) {
 				continue;
 			}
-			put({ kind: "conversation", sourceId: r.id }, r.body, r.occurredAt);
+			put({ kind: "conversation", sourceId: r.id }, r.body, r.occurredAt, {
+				kind: "conversation",
+				importance: null,
+				recallCount: r.recallCount,
+				restateCount: 0,
+				lastRecalledAt: r.lastRecalledAt,
+			});
 		}
 	}
 	return out;
@@ -287,19 +344,27 @@ export const createRecaller = (
 		if (!keywordHits.ok) return keywordHits;
 
 		const excluded = new Set(q.exclude.map(keyOf));
-		const ranked = rankCandidates(
-			fuseHits(vectorHits.value, keywordHits.value),
-		).filter((c) => !excluded.has(keyOf(c)));
-		if (ranked.length === 0) return ok({ memories: [], period });
+		const candidates = fuseHits(vectorHits.value, keywordHits.value).filter(
+			(c) => !excluded.has(keyOf(c)),
+		);
+		if (candidates.length === 0) return ok({ memories: [], period });
 		let loaded: Map<string, RecalledMemory>;
 		try {
-			loaded = await loadMemories(db, q, ranked);
+			loaded = await loadMemories(db, q, candidates);
 		} catch (e) {
 			return err({ type: "storage_failed", message: errorMessage(e) });
 		}
-		const memories = ranked
-			.flatMap((c) => loaded.get(keyOf(c)) ?? [])
-			.slice(0, RECALL_LIMIT);
+		const memories = candidates
+			.flatMap((c) => {
+				const m = loaded.get(keyOf(c));
+				return m ? [{ m, score: recallScore(c.fused, m.retention) }] : [];
+			})
+			.sort(
+				(a, b) =>
+					b.score - a.score || keyOf(a.m.key).localeCompare(keyOf(b.m.key)),
+			)
+			.slice(0, RECALL_LIMIT)
+			.map(({ m }) => m);
 		return ok({ memories, period });
 	},
 

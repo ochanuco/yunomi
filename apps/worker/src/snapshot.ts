@@ -51,6 +51,7 @@ export const D1_SNAPSHOT_TABLES = {
 			"superseded_by",
 			"recall_count",
 			"last_recalled_at",
+			"restate_count",
 		],
 		scoped: true,
 		key: [],

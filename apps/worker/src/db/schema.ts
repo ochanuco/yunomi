@@ -100,6 +100,8 @@ export const facts = sqliteTable(
 		/** 連想で Prompt に差し込んだ回数と最後の時刻。observed_at は書き換えない。 */
 		recallCount: integer("recall_count").notNull().default(0),
 		lastRecalledAt: text("last_recalled_at"),
+		/** 持ち主が同じ話を再び出して observed_at を進めた回数。忘却曲線の定着を伸ばす。 */
+		restateCount: integer("restate_count").notNull().default(0),
 	},
 	(t) => [
 		index("facts_retrieval").on(
