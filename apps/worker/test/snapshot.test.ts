@@ -165,6 +165,15 @@ const build = async (): Promise<CurrentSnapshot> => {
 	return r.value;
 };
 
+/** v5 までの Snapshot は facts と work_notes に想起の記録を持たない。 */
+const withoutRecall = (d1: CurrentSnapshot["d1"]) => ({
+	...d1,
+	facts: d1.facts.map(({ recall_count: _c, last_recalled_at: _l, ...f }) => f),
+	work_notes: d1.work_notes.map(
+		({ recall_count: _c, last_recalled_at: _l, ...n }) => n,
+	),
+});
+
 const decrypt = async (bytes: Uint8Array): Promise<unknown> => {
 	const d = new Decrypter();
 	d.addIdentity(TEST_AGE_IDENTITY);
@@ -468,7 +477,11 @@ describe("restore", () => {
 		await seedD1();
 		await seedDo();
 		const current = await build();
-		const { work_notes: _omit, watches: _w, ...d1V1 } = current.d1;
+		const {
+			work_notes: _omit,
+			watches: _w,
+			...d1V1
+		} = withoutRecall(current.d1);
 		const v1: Snapshot = { ...current, schema_version: 1, d1: d1V1 };
 		expect(parseSnapshot(v1).ok).toBe(true);
 
@@ -485,13 +498,13 @@ describe("restore", () => {
 		await seedD1();
 		await seedDo();
 		const current = await build();
-		const { watches: _w, ...d1V3 } = current.d1;
+		const { watches: _w, ...d1V3 } = withoutRecall(current.d1);
 		const v2: Snapshot = {
 			...current,
 			schema_version: 2,
 			d1: {
 				...d1V3,
-				work_notes: current.d1.work_notes
+				work_notes: d1V3.work_notes
 					.filter((n) => n.kind !== "goal")
 					.map(({ status: _s, closed_at: _c, ...n }) => ({
 						...n,
@@ -519,7 +532,7 @@ describe("restore", () => {
 		await seedDo();
 		const current = await build();
 		expect(current.d1.watches.map((w) => w.query)).toEqual(["中古の万年筆"]);
-		const { watches: _omit, ...d1V3 } = current.d1;
+		const { watches: _omit, ...d1V3 } = withoutRecall(current.d1);
 		const v3: Snapshot = { ...current, schema_version: 3, d1: d1V3 };
 		expect(parseSnapshot(v3).ok).toBe(true);
 		expect(parseSnapshot({ ...current, schema_version: 3 }).ok).toBe(false);
@@ -529,6 +542,29 @@ describe("restore", () => {
 		const body = v.parse(SnapshotRestoreResponseSchema, await res.json());
 		expect(body.counts).toMatchObject({ work_notes: 2, watches: 0 });
 		expect(await count("watches")).toBe(1);
+	});
+
+	it("想起の記録を持たない v5 の Snapshot も復元でき、回数は 0 で入る", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		const v5: Snapshot = {
+			...current,
+			schema_version: 5,
+			d1: withoutRecall(current.d1),
+		};
+		expect(parseSnapshot(v5).ok).toBe(true);
+		expect(parseSnapshot({ ...current, schema_version: 5 }).ok).toBe(false);
+
+		const res = await restoreRequest(v5);
+		expect(res.status).toBe(200);
+		expect(
+			(
+				await env.DB.prepare(
+					"SELECT recall_count, last_recalled_at FROM facts",
+				).all()
+			).results,
+		).toEqual([{ recall_count: 0, last_recalled_at: null }]);
 	});
 
 	it("restore を 1 行のログに残す", async () => {

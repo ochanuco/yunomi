@@ -567,7 +567,7 @@ export const ConversationLogDeleteResponseSchema: v.GenericSchema<ConversationLo
  * 会話本文（recent_messages）、audit、KPI、履歴テーブル、secret は含めない。
  * 行は partner_id を持たない（Snapshot 全体の partner_id に従う）。
  */
-export const SNAPSHOT_SCHEMA_VERSION = 5;
+export const SNAPSHOT_SCHEMA_VERSION = 6;
 
 /** R2 の customMetadata。一覧はこの値から組み立てる。 */
 export type SnapshotSummary = {
@@ -601,6 +601,25 @@ export type SnapshotRestoreResponse = {
 
 const int = v.pipe(v.number(), v.integer());
 
+const factV1 = {
+	id: str,
+	subject_entity_id: str,
+	predicate: str,
+	object_type: str,
+	object_value: str,
+	object_display: nullable(str),
+	confidence: num,
+	importance: num,
+	source: str,
+	observed_at: str,
+	valid_from: str,
+	valid_to: nullable(str),
+	decay_policy: str,
+	superseded_by: nullable(str),
+};
+
+const recallV6 = { recall_count: int, last_recalled_at: nullable(str) };
+
 const snapshotD1V1 = {
 	entities: v.array(
 		v.strictObject({
@@ -613,24 +632,7 @@ const snapshotD1V1 = {
 	external_identities: v.array(
 		v.strictObject({ provider: str, external_id: str, entity_id: str }),
 	),
-	facts: v.array(
-		v.strictObject({
-			id: str,
-			subject_entity_id: str,
-			predicate: str,
-			object_type: str,
-			object_value: str,
-			object_display: nullable(str),
-			confidence: num,
-			importance: num,
-			source: str,
-			observed_at: str,
-			valid_from: str,
-			valid_to: nullable(str),
-			decay_policy: str,
-			superseded_by: nullable(str),
-		}),
-	),
+	facts: v.array(v.strictObject(factV1)),
 	memory_candidates: v.array(
 		v.strictObject({
 			id: str,
@@ -722,14 +724,14 @@ const workNoteV2 = {
 	created_at: str,
 };
 
-const workNotesV3 = v.array(
-	v.strictObject({
-		...workNoteV2,
-		kind: v.picklist(["decided", "done", "goal"]),
-		status: nullable(v.picklist(["open", "achieved", "dropped"])),
-		closed_at: nullable(str),
-	}),
-);
+const workNoteV3 = {
+	...workNoteV2,
+	kind: v.picklist(["decided", "done", "goal"]),
+	status: nullable(v.picklist(["open", "achieved", "dropped"])),
+	closed_at: nullable(str),
+};
+
+const workNotesV3 = v.array(v.strictObject(workNoteV3));
 
 const watchV4 = {
 	id: str,
@@ -749,6 +751,7 @@ const watchV4 = {
  * 古い schema_version も復元できるよう、版ごとの形を受け付ける。
  * v1 は work_notes を持たない。v2 の work_notes は目標（goal と status、closed_at）を持たない。
  * v3 は watches を持たない。v4 の watches は新着を書く投稿（notify_thread_id）を持たない。
+ * v5 の facts と work_notes は想起の記録（recall_count、last_recalled_at）を持たない。
  */
 export const SnapshotSchema = v.variant("schema_version", [
 	v.strictObject({
@@ -779,11 +782,23 @@ export const SnapshotSchema = v.variant("schema_version", [
 		}),
 	}),
 	v.strictObject({
-		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+		schema_version: v.literal(5),
 		...snapshotHeader,
 		d1: v.strictObject({
 			...snapshotD1V1,
 			work_notes: workNotesV3,
+			watches: v.array(
+				v.strictObject({ ...watchV4, notify_thread_id: nullable(str) }),
+			),
+		}),
+	}),
+	v.strictObject({
+		schema_version: v.literal(SNAPSHOT_SCHEMA_VERSION),
+		...snapshotHeader,
+		d1: v.strictObject({
+			...snapshotD1V1,
+			facts: v.array(v.strictObject({ ...factV1, ...recallV6 })),
+			work_notes: v.array(v.strictObject({ ...workNoteV3, ...recallV6 })),
 			watches: v.array(
 				v.strictObject({ ...watchV4, notify_thread_id: nullable(str) }),
 			),

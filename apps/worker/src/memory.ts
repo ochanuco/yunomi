@@ -11,7 +11,7 @@ import {
 import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
-import type { IndexChangeListener } from "./memory-index/types.ts";
+import type { IndexChangeListener, IndexKey } from "./memory-index/types.ts";
 import {
 	WORK_NOTE_PREDICATE,
 	WORK_NOTE_PROMPT_LIMIT,
@@ -55,6 +55,8 @@ export type CandidateOutcome = {
 };
 
 export type PromptFact = {
+	/** 索引の文書。連想が固定の枠と同じ記憶を重ねて出さないために使う。 */
+	source: IndexKey;
 	kind: MemoryKind;
 	predicate: string;
 	/** datetime の値は Date で渡す。 */
@@ -248,6 +250,7 @@ export const createMemoryRepo = (
 				isNull(facts.supersededBy),
 			);
 			const columns = {
+				id: facts.id,
 				predicate: facts.predicate,
 				objectType: facts.objectType,
 				objectValue: facts.objectValue,
@@ -270,6 +273,7 @@ export const createMemoryRepo = (
 					.limit(PROMPT_EPISODE_LIMIT),
 				db
 					.select({
+						id: workNotes.id,
 						kind: workNotes.kind,
 						summary: workNotes.summary,
 						createdAt: workNotes.createdAt,
@@ -289,6 +293,7 @@ export const createMemoryRepo = (
 			const promptFact =
 				(kind: MemoryKind) =>
 				(r: (typeof lasting)[number]): PromptFact => ({
+					source: { kind: "fact", sourceId: r.id },
 					kind,
 					predicate: r.predicate,
 					object:
@@ -300,6 +305,7 @@ export const createMemoryRepo = (
 				});
 			const workEpisodes = notes.map(
 				(n): PromptFact => ({
+					source: { kind: "work_note", sourceId: n.id },
 					kind: "episode",
 					predicate: WORK_NOTE_PREDICATE[n.kind as WorkEpisodeKind],
 					object: n.summary,

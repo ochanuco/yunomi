@@ -46,8 +46,10 @@ import {
 } from "../interest-opinion.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import {
+	createRecaller,
 	type IndexChangeListener,
 	indexTurnConversation,
+	type Recaller,
 	syncVectors,
 	type VectorDeps,
 	vectorDepsFromEnv,
@@ -128,6 +130,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #entities: EntityResolver;
 	readonly #history: HistoryWriter;
 	readonly #memory: MemoryRepo;
+	readonly #recaller: Recaller;
 	readonly #openLoops: OpenLoopRepo;
 	readonly #workNotes: WorkNoteRepo;
 	readonly #watches: WatchRepo;
@@ -177,6 +180,10 @@ export class PartnerDO extends DurableObject<Env> {
 				background: (task) => this.#background(task),
 				onEngaged,
 				capabilities: this.capabilities,
+				recall: this.#recaller,
+				...(this.ownerDiscordUserId
+					? { ownerUserId: this.ownerDiscordUserId }
+					: {}),
 			},
 			msg,
 		);
@@ -196,6 +203,7 @@ export class PartnerDO extends DurableObject<Env> {
 			);
 		this.#history = createHistoryWriter(db);
 		this.#memory = createMemoryRepo(db, onIndexChange);
+		this.#recaller = createRecaller(db, () => this.memoryVectors);
 		this.#openLoops = createOpenLoopRepo(db);
 		this.#workNotes = createWorkNoteRepo(db, onIndexChange);
 		this.#watches = createWatchRepo(db);

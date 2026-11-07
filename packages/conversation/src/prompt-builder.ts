@@ -25,6 +25,13 @@ export type MemoryFact = {
 	observedAt: Date;
 };
 
+/** 連想で浮かんだ記憶。固定の枠とは別に出す。 */
+export type RecalledLine = {
+	/** 日時は JST に直してある 1 行。会話の塊は「名前: 本文」が改行で続く。 */
+	text: string;
+	at: Date;
+};
+
 export type OpenLoopLine = {
 	id: string;
 	summary: string;
@@ -107,6 +114,8 @@ export type PromptInput = {
 	relationship: { speakerName: string; familiarity: number; trust: number };
 	/** 続く事実、新しい出来事の順に渡す。予算超過時は末尾から削る。 */
 	memory: MemoryFact[];
+	/** 連想で浮かんだ記憶。関連の強い順。未指定か空なら区画を出さない。 */
+	recalled?: RecalledLine[];
 	/** 話し相手の open な Open Loop。重要度順で渡す。先頭から OPEN_LOOP_PROMPT_LIMIT 件だけ使う。 */
 	openLoops: OpenLoopLine[];
 	/** オーナーの open な目標。オーナーが話し相手のターンだけ渡す。未指定なら目標のブロックは出さない。 */
@@ -300,6 +309,27 @@ const memoryBlock = (facts: MemoryFact[], now: Date): string => {
 			: []),
 	].join("\n");
 };
+
+const recalledLine = (r: RecalledLine, now: Date): string => {
+	const at = toJstDate(r.at);
+	const year =
+		at.getUTCFullYear() === toJstDate(now).getUTCFullYear()
+			? ""
+			: `${at.getUTCFullYear()}/`;
+	const [first = "", ...rest] = r.text.split("\n");
+	return [
+		`- ${first}（${year}${at.getUTCMonth() + 1}/${at.getUTCDate()}）`,
+		...rest.map((l) => `  ${l}`),
+	].join("\n");
+};
+
+// 固定の枠の「自分からは持ち出さない」は当てない。いまの話題から浮かんだ記憶なので、触れても唐突にならない。
+const recalledBlock = (recalled: RecalledLine[], now: Date): string =>
+	[
+		"## ふと思い出したこと",
+		"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。",
+		...recalled.map((r) => recalledLine(r, now)),
+	].join("\n");
 
 const openLoopBlock = (loops: OpenLoopLine[]): string =>
 	[
@@ -577,6 +607,9 @@ export class PromptBuilder {
 			input.interests.slice(0, INTEREST_PROMPT_LIMIT),
 		);
 		const opinion = opinionBlock(input.opinions.slice(0, OPINION_PROMPT_LIMIT));
+		const recalled = input.recalled?.length
+			? recalledBlock(input.recalled, input.now)
+			: null;
 		const openLoop = openLoopBlock(
 			input.openLoops.slice(0, OPEN_LOOP_PROMPT_LIMIT),
 		);
@@ -613,6 +646,7 @@ export class PromptBuilder {
 			estimateTokens(channel) +
 			estimateTokens(body) +
 			estimateTokens(openLoop) +
+			(recalled === null ? 0 : estimateTokens(recalled)) +
 			(goal === null ? 0 : estimateTokens(goal)) +
 			(watch === null ? 0 : estimateTokens(watch)) +
 			estimateTokens(clock) +
@@ -650,6 +684,7 @@ export class PromptBuilder {
 				{ text: interest, cache: false },
 				{ text: opinion, cache: false },
 				{ text: memoryBlock(memory, input.now), cache: false },
+				...(recalled === null ? [] : [{ text: recalled, cache: false }]),
 				{ text: openLoop, cache: false },
 				...(goal === null ? [] : [{ text: goal, cache: false }]),
 				...(watch === null ? [] : [{ text: watch, cache: false }]),

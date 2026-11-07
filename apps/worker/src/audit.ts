@@ -72,6 +72,8 @@ export type TurnAuditData = {
 		showFace: boolean | null;
 		avatar: boolean;
 	} | null;
+	/** 返事に進んだターンだけ。Prompt に差し込んだ連想の記憶（kind:source_id）と、連想できなかった理由。 */
+	recall?: { keys: string[]; error: string | null } | null;
 	/** このターンで degradedMode が切り替わったとき。LLM 失敗の連続による遷移だけを示す。 */
 	degradedTransition: "entered" | "recovered" | null;
 };

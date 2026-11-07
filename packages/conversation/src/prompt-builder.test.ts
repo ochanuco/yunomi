@@ -12,6 +12,54 @@ import { baseInput } from "./test-fixtures.ts";
 const builder = new PromptBuilder();
 
 describe("PromptBuilder", () => {
+	describe("連想で浮かんだ記憶", () => {
+		const systemText = (input: ReturnType<typeof baseInput>) =>
+			builder
+				.build(input)
+				.system.map((b) => b.text)
+				.join("\n\n");
+
+		it("固定の枠とは別の見出しで出し、自分から触れてよいと書く", () => {
+			const input = baseInput();
+			input.now = new Date("2026-11-07T03:00:00Z");
+			input.recalled = [
+				{ text: "趣味 カヌー", at: new Date("2026-04-29T03:00:00Z") },
+				{
+					text: "持ち主: 秋葉原に行った\nゆかり: いいですね",
+					at: new Date("2025-12-31T16:00:00Z"),
+				},
+			];
+			const block = builder
+				.build(input)
+				.system.find((b) => b.text.startsWith("## ふと思い出したこと"));
+			expect(block?.text).toBe(
+				[
+					"## ふと思い出したこと",
+					"いまの話から連想で浮かんだ、前の記憶。話との関連が強ければ、自分から触れてよい。関連が薄ければ無理に出さない。",
+					"- 趣味 カヌー（4/29）",
+					"- 持ち主: 秋葉原に行った（1/1）",
+					"  ゆかり: いいですね",
+				].join("\n"),
+			);
+			expect(block?.text).not.toContain("持ち出さない");
+		});
+
+		it("前の年の記憶には年を付ける", () => {
+			const input = baseInput();
+			input.now = new Date("2026-11-07T03:00:00Z");
+			input.recalled = [
+				{ text: "旅行 金沢", at: new Date("2025-04-10T03:00:00Z") },
+			];
+			expect(systemText(input)).toContain("- 旅行 金沢（2025/4/10）");
+		});
+
+		it("無ければ区画を出さない", () => {
+			const input = baseInput();
+			input.recalled = [];
+			expect(systemText(input)).not.toContain("ふと思い出したこと");
+		});
+	});
+
 	it("会話例は cache しないブロックとして rules の直後、日時の前に入る", () => {
 		const input = baseInput();
 		input.examples = [
