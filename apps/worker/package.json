@@ -23,14 +23,14 @@
 		"@yunomi/partner-yukarin": "workspace:*",
 		"@yunomi/protocol": "workspace:*",
 		"age-encryption": "0.3.1",
-		"cf": "1.0.0-beta.18",
+		"cf": "1.0.0-beta.26",
 		"drizzle-orm": "^0.45.4",
 		"jose": "^6.2.12",
 		"valibot": "^1.5.0"
 	},
 	"devDependencies": {
-		"@cloudflare/config": "^0.27.0",
-		"@cloudflare/vitest-plugin": "1.4.4",
+		"@cloudflare/config": "^0.29.0",
+		"@cloudflare/vitest-plugin": "1.4.11",
 		"@yunomi/admin": "workspace:*",
 		"drizzle-kit": "^0.31.11",
 		"typescript": "^7.0.2",

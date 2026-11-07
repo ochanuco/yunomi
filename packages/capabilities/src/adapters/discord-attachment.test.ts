@@ -99,7 +99,7 @@ const PNG = Uint8Array.from([
 	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
 ]);
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]);
-const bytes = (data: Uint8Array) => new Response(new Blob([data]));
+const bytes = (data: Uint8Array<ArrayBuffer>) => new Response(new Blob([data]));
 
 describe("read_attachment の入力", () => {
 	it("message は current か reply、index は 1 以上の整数", () => {
