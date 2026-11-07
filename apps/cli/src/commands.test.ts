@@ -254,6 +254,43 @@ describe("run", () => {
 		);
 	});
 
+	it("maintenance conversation-log delete は条件を POST し、件数を出す", async () => {
+		const bodies: unknown[] = [];
+		const h = harness(api, {
+			fetch: async (input, init) => {
+				const url = new URL(input);
+				expect(url.pathname).toBe(
+					"/admin/api/partners/yukarin/conversation-log/delete",
+				);
+				expect(init?.method).toBe("POST");
+				bodies.push(JSON.parse(String(init?.body)));
+				return Response.json({ dry_run: true, count: 3 });
+			},
+		});
+		const code = await run(
+			[
+				"maintenance",
+				"conversation-log",
+				"delete",
+				"--from",
+				"2026-10-01",
+				"--to",
+				"2026-10-08",
+				"--dry-run",
+			],
+			h.deps,
+		);
+		expect(code).toBe(0);
+		expect(bodies).toEqual([
+			{
+				from: "2026-09-30T15:00:00.000Z",
+				to: "2026-10-07T15:00:00.000Z",
+				dry_run: true,
+			},
+		]);
+		expect(h.out.join("\n")).toContain("消える件数: 3");
+	});
+
 	it("使い方の誤りは 2、接続・認可の失敗は 1", async () => {
 		const bad = harness(api);
 		expect(await run(["nope"], bad.deps)).toBe(2);

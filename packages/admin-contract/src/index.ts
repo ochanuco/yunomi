@@ -274,6 +274,30 @@ export type StateHistoryResponse = {
 	truncated: boolean;
 };
 
+/**
+ * 会話ログの削除（`POST /partners/:partnerId/conversation-log/delete`）。
+ * 指定した条件をすべて満たす発言を消す。条件を 1 つも指定しない要求は 400 になる。
+ * from は含み to は含まない。発言の時刻（occurred_at）で比べる。
+ */
+export type ConversationLogDeleteRequest = {
+	from?: string;
+	to?: string;
+	channel_id?: string;
+	/** Discord のメッセージ ID（Partner の発言は仮 ID でもよい）。 */
+	message_ids?: string[];
+	/** true なら消さず、消える件数だけを返す。 */
+	dry_run?: boolean;
+};
+
+export type ConversationLogDeleteResponse = {
+	dry_run: boolean;
+	/** 消した件数。dry_run では消える件数。 */
+	count: number;
+};
+
+/** 一度に指定できるメッセージ ID の数。 */
+export const CONVERSATION_LOG_DELETE_MAX_MESSAGE_IDS = 40;
+
 export type ApiError = { error: string };
 
 const nullable = <T extends v.GenericSchema>(s: T) => v.nullable(s);
@@ -517,6 +541,26 @@ export const StateHistoryResponseSchema: v.GenericSchema<StateHistoryResponse> =
 export const ApiErrorSchema: v.GenericSchema<ApiError> = v.object({
 	error: str,
 });
+
+const timestamp = v.pipe(v.string(), v.isoTimestamp());
+
+export const ConversationLogDeleteRequestSchema: v.GenericSchema<ConversationLogDeleteRequest> =
+	v.strictObject({
+		from: v.optional(timestamp),
+		to: v.optional(timestamp),
+		channel_id: v.optional(v.pipe(v.string(), v.minLength(1))),
+		message_ids: v.optional(
+			v.pipe(
+				v.array(v.pipe(v.string(), v.minLength(1))),
+				v.minLength(1),
+				v.maxLength(CONVERSATION_LOG_DELETE_MAX_MESSAGE_IDS),
+			),
+		),
+		dry_run: v.optional(bool),
+	});
+
+export const ConversationLogDeleteResponseSchema: v.GenericSchema<ConversationLogDeleteResponse> =
+	v.object({ dry_run: bool, count: num });
 
 /**
  * Partner Snapshot。D1 の長期記憶と DO の現在値の時点コピー。
