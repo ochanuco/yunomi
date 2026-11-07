@@ -30,10 +30,15 @@ export CLOUDFLARE_API_TOKEN=...
 
 - D1 database を作り、UUID を控える
 - R2 bucket を作る（`cf` は bucket を作らないので、ダッシュボードか Wrangler で作る）
+- 記憶の索引の Vectorize index を作り、絞り込みに使う metadata の索引を足す。metadata の索引は、作る前に入れた vector には効かないので、Worker をデプロイする前に作る
 
 ```sh
 pnpm exec wrangler d1 create yunomi
 pnpm exec wrangler r2 bucket create yunomi-snapshots
+pnpm exec wrangler vectorize create yunomi-memory --dimensions=1024 --metric=cosine
+pnpm exec wrangler vectorize create-metadata-index yunomi-memory --propertyName=partner_id --type=string
+pnpm exec wrangler vectorize create-metadata-index yunomi-memory --propertyName=kind --type=string
+pnpm exec wrangler vectorize create-metadata-index yunomi-memory --propertyName=at --type=number
 ```
 
 ## 2. Snapshot の鍵を作る
@@ -88,6 +93,7 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `discordSendFromWorker` | `"1"` なら Worker が返事を送る（`DISCORD_BOT_TOKEN` が要る）。`"0"` なら Gateway が送る |
 | `voiceEnabled` | 音声を使わないなら `"0"` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
+| `memoryIndex` | 1 で作った Vectorize index 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
 | `accessAud` | 3 の AUD タグ |
 | `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm", "<Working 用 Client ID>": "working" }`。Working を動かさないなら `working` は省く |

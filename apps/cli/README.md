@@ -16,6 +16,7 @@ ykm snapshot pull <id> -o <file>             暗号化のまま保存
 ykm snapshot seed <id> --from prod --to dev  prod の Snapshot を dev に流し込む
 ykm maintenance conversation-log delete [--from D] [--to D] [--channel ID] [--message-id ID ...] (--dry-run | --yes)
                                              会話ログの発言を消す
+ykm memory-index rebuild                     既存の記憶を索引に入れ直す（会話ログの塊を作り、全文書を埋め込む）
 ```
 
 共通オプション: `--env dev|prod`（既定 dev）、`--url`、`--partner`（既定 `yukarin`）、`--json`。`--json` は整形せず JSON を出す（`status` は `{status, relationships}`、`open-loops` は応答（`{items, next_cursor}`）、`interests` / `opinions` は応答（`{items}`）そのまま、`audit tail` は 1 行 1 件）。人間向けの出力は表で、時刻は JST。

@@ -11,6 +11,7 @@ import {
 import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
+import type { IndexChangeListener } from "./memory-index/types.ts";
 import {
 	WORK_NOTE_PREDICATE,
 	WORK_NOTE_PROMPT_LIMIT,
@@ -82,7 +83,13 @@ export type MemoryRepo = {
 	topFacts(partnerId: string, entityId: string): Promise<PromptFact[]>;
 };
 
-export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
+export const createMemoryRepo = (
+	db: DrizzleD1Database,
+	onIndexChange: IndexChangeListener = () => {},
+): MemoryRepo => {
+	const factChanged = (sourceId: string) =>
+		onIndexChange([{ kind: "fact", sourceId }]);
+
 	const currentFact = async (
 		partnerId: string,
 		entityId: string,
@@ -190,6 +197,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 							.where(eq(facts.id, decision.factId)),
 						candidateRow("promoted", null),
 					]);
+					factChanged(decision.factId);
 					return {
 						predicate,
 						status: "promoted",
@@ -216,6 +224,7 @@ export const createMemoryRepo = (db: DrizzleD1Database): MemoryRepo => {
 					}),
 					candidateRow("promoted", null),
 				]);
+				factChanged(factId);
 				return { predicate, status: "promoted", factId, conflictFactId: null };
 			} catch (e) {
 				if (attempt >= 1) throw e;

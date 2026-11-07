@@ -8,6 +8,13 @@ const ok = (argv: string[]) => {
 };
 
 describe("parseCli", () => {
+	it("memory-index rebuild", () => {
+		expect(ok(["memory-index", "rebuild"]).command).toEqual({
+			name: "memory-index-rebuild",
+		});
+		expect(parseCli(["memory-index", "rebuild", "x"]).ok).toBe(false);
+	});
+
 	it("既定は dev / yukarin / 整形出力", () => {
 		expect(ok(["status"])).toMatchObject({
 			command: { name: "status" },

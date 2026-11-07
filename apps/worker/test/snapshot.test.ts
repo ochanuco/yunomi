@@ -1,4 +1,4 @@
-import { runInDurableObject } from "cloudflare:test";
+import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import {
 	type CurrentSnapshot,
@@ -558,6 +558,7 @@ describe("restore", () => {
 				body: JSON.stringify(source),
 			}),
 			{ ...env, YUNOMI_ENV: "production" },
+			createExecutionContext(),
 		);
 		expect(res.status).toBe(403);
 		expect(await res.json()).toEqual({

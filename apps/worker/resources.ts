@@ -41,6 +41,7 @@ export const resources = {
 		voiceEnabled: "1",
 		voiceRealization: "shizuku",
 		snapshotBucket: "yunomi-dev-snapshots",
+		memoryIndex: "yunomi-dev-memory",
 		snapshotAgeRecipient:
 			"age13g33j0raad3fhl7xeutrf7pkp2f3decwax2udr950mqq3stxnd2qvj2md7",
 	},
@@ -60,6 +61,7 @@ export const resources = {
 		voiceEnabled: "1",
 		voiceRealization: "yukari",
 		snapshotBucket: "yunomi-snapshots",
+		memoryIndex: "yunomi-memory",
 		snapshotAgeRecipient:
 			"age1ss5ud6wync43k5mu2zghpdt4tg5lumljvggs26jlxgzu60y3qshsyf0m0e",
 	},
@@ -74,6 +76,8 @@ export const resources = {
 		voiceEnabled: "0",
 		voiceRealization: "yukari",
 		snapshotBucket: "yunomi-local-snapshots",
+		// Vectorize と Workers AI はローカルで動かないため、local は索引の同期と意味検索をしない。
+		memoryIndex: null,
 		// テスト用の鍵ペア（対応する identity は test/snapshot-keys.ts）。
 		snapshotAgeRecipient:
 			"age1s23p452q2n8p2wv5cuqd8trvld0rw80kzrremgsrxdw7lxnx997qmpusg2",

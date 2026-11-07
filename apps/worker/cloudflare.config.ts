@@ -83,6 +83,13 @@ export default defineConfig(({ mode }) => {
 					: {}),
 				// bucket は事前に作成しておく。名前は mode ごとに resources.ts で決める。
 				SNAPSHOTS: bindings.r2({ name: r.snapshotBucket }),
+				// 記憶の索引。埋め込みは @cf/baai/bge-m3（1024 次元、cosine）。index は事前に作成しておく。
+				...(r.memoryIndex
+					? {
+							AI: bindings.ai(),
+							MEMORY_INDEX: bindings.vectorize({ name: r.memoryIndex }),
+						}
+					: {}),
 				DB: bindings.d1({
 					id: r.d1Id,
 					name: r.worker,

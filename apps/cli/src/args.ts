@@ -33,7 +33,8 @@ export type Command =
 			channel: string | null;
 			messageIds: string[];
 			dryRun: boolean;
-	  };
+	  }
+	| { name: "memory-index-rebuild" };
 
 export type Global = {
 	env: "dev" | "prod";
@@ -237,6 +238,11 @@ export const parseCli = (argv: string[]): ParseResult => {
 				global,
 			};
 		}
+		if (first === "memory-index" && second === "rebuild") {
+			only([]);
+			noExtra(rest);
+			return { ok: true, command: { name: "memory-index-rebuild" }, global };
+		}
 		if (first === "snapshot" && second === "list") {
 			only([]);
 			noExtra(rest);
@@ -365,6 +371,8 @@ export const HELP = `ykm: Yunomi の状態を読み取り、Snapshot と会話�
                                           どれか 1 つは必須。D は YYYY-MM-DD（JST の 0 時）か
                                           オフセット付きの日時で、--from は含み --to は含まない。
                                           --dry-run は件数だけを表示し、消すには --yes を付ける
+  ykm memory-index rebuild                既存の記憶を索引に入れ直す。会話ログを塊にし、
+                                          全文書を埋め込んで Vectorize に upsert する
 
 共通オプション:
   --env dev|prod   接続先環境（既定 dev）

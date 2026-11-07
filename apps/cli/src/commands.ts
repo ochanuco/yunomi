@@ -181,6 +181,36 @@ const execute = async (
 			);
 			return;
 		}
+		case "memory-index-rebuild":
+			await rebuildMemoryIndex(client, deps);
+			return;
+	}
+};
+
+// Worker は 1 回の呼び出しで少しずつ進めるので、next_cursor が尽きるまで呼び直す。
+// 塊を先に作り、その塊も含めて埋め込む。
+const rebuildMemoryIndex = async (
+	client: ReturnType<typeof createClient>,
+	deps: Deps,
+): Promise<void> => {
+	for (const step of ["chunks", "vectors"] as const) {
+		let cursor: string | null = null;
+		let total = 0;
+		do {
+			const r = await client.rebuildMemoryIndex({ step, cursor });
+			if (r.skipped === "owner_unknown") {
+				deps.err(
+					"会話ログは塊にしなかった（Worker に OWNER_DISCORD_USER_ID が無い）",
+				);
+			}
+			total += r.processed;
+			cursor = r.next_cursor;
+		} while (cursor !== null);
+		deps.out(
+			step === "chunks"
+				? `会話ログの塊: ${total} 件`
+				: `埋め込んだ文書: ${total} 件`,
+		);
 	}
 };
 

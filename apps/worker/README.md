@@ -152,6 +152,24 @@ LLM 障害は `degradedMode` / `systemStress` に自動で反映する（`applyL
 
 LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decidePromotion`（`@yunomi/core`）の決定的な規則で `facts` に昇格する。話者を指す subject（`user` / `speaker` / 表示名 / Discord user id）以外は entity を解決できないため `pending` のまま `subject_text` に原文を残す。候補の `kind`（`lasting` / `episode`）は Fact の `decay_policy`（`standard` / `episodic`）に写す。prompt には話者の現行 Fact のうち、`standard` を importance 降順・observed_at 降順で上位 `PROMPT_FACT_LIMIT`（30）件、`episodic` を observed_at 降順で上位 `PROMPT_EPISODE_LIMIT`（30）件入れる。`episodic` は聞いた日を添え、JST の暦日で 3 日以上たったものは「前に聞いた話」に回す。書き込みは次のターンが読めるよう応答前に完了させる。
 
+## 記憶の索引
+
+`facts`・`work_notes`・会話ログを、意味検索（Workers AI の `@cf/baai/bge-m3` と Vectorize の `MEMORY_INDEX`）とキーワード検索（D1 の FTS5、trigram）で引けるようにする。引く関数は `src/memory-index/` の `searchVectors` と `searchKeywords` で、どちらも partner・種類・期間で絞った top-k を返す。
+
+| 対象 | 索引に入れる単位 | 外れるとき |
+| --- | --- | --- |
+| `facts` | 現行の 1 行（`valid_to` と `superseded_by` が null） | 置き換え、期限、削除 |
+| `work_notes` | 1 行 | 削除 |
+| `conversation_messages` | `conversation_chunks` の塊 | 塊の元の発言の削除 |
+
+- キーワード検索の文書は `memory_search_docs` で、元の表の trigger が書き、FTS5 の `memory_search_fts` がそれに追従する。書き込みの経路によらず、同じ文の中で索引が変わる。
+- Vectorize は `memory_search_docs` を正として合わせる。書き込みの経路が変えた行を `IndexChangeListener` で知らせ、DO は `ctx.waitUntil` の background で、Working の口は Worker の `ctx.waitUntil` で埋め込みと upsert / delete を行う。応答は待たせない。
+- Vectorize の id は `<kind>:<行 id>`、metadata は `partner_id`・`kind`・`source_id`・`at`（UTC の epoch ミリ秒）。`at` は facts が `observed_at`、work_notes が `created_at`、塊が anchor の `occurred_at`。
+- 塊は、持ち主の発言のうちすぐ後に Partner の返事が続くものを anchor にし、anchor の前 30 分以内の持ち主と Partner の発言（最大 4 件）、anchor、続く返事をまとめる。持ち主以外の人の発言は入れず、その人への返事も塊にしない。持ち主は `OWNER_DISCORD_USER_ID` で決めるので、それを持たない環境では会話ログを索引に入れない。
+- 会話ログの削除（`deleteConversationMessages`。日次 cron の保持期間切れ削除と Admin API の削除）は、行を消す前に対象の行を `removeConversationMessagesFromIndex` で索引から外す。anchor が消える塊は消し、それ以外は残りの発言で作り直して、Vectorize も合わせる。索引から外せなければ行を消さず、Admin API は 503 `index_failed` を返す。
+- local mode は Vectorize と Workers AI の binding を持たず、FTS5 だけが動く。
+- 既存データは `ykm memory-index rebuild`（`POST /admin/api/partners/:id/memory-index`）で入れる。会話ログを 1 チャンネルずつ塊にし、続けて `memory_search_docs` を 50 件ずつ埋め込む。何度実行してもよい。
+
 ## Working の記憶
 
 mizuya の Working は `/v1/partners/:partnerId/working/memory` で Talking と同じ記憶を読み書きする。`working` の service token だけが使える。DO の turn を通さず D1 だけを触るので、関係性・状態・興味・意見・直近の会話履歴は動かない。要求と応答の形は [docs/working-memory-api.md](../../docs/working-memory-api.md) にある。

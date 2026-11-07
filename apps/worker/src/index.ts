@@ -27,6 +27,7 @@ import { PartnerDO } from "./do/partner-do.ts";
 import { accessEnv, partnerNamespace } from "./env.ts";
 import { aggregateDailyKpis } from "./kpi-store.ts";
 import { purgeExpiredCandidates } from "./memory.ts";
+import { vectorDepsFromEnv } from "./memory-index/vectors.ts";
 import {
 	defaultPartnerProfile,
 	partnerProfile,
@@ -44,7 +45,7 @@ const DISCORD_VOICE_CONNECTION_PATH =
 	/^\/v1\/partners\/([^/]+)\/discord\/voice-connection$/;
 
 export default {
-	async fetch(request, env): Promise<Response> {
+	async fetch(request, env, ctx): Promise<Response> {
 		const { pathname } = new URL(request.url);
 		if (request.method === "GET" && pathname === "/health") {
 			return health(env);
@@ -76,6 +77,7 @@ export default {
 				request,
 				env,
 				decodeURIComponent(workingPartnerId),
+				(task) => ctx.waitUntil(task),
 			);
 		}
 		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];
@@ -101,7 +103,13 @@ export default {
 			.OWNER_DISCORD_USER_ID;
 		if (!ownerId) return;
 		for (const p of partnerProfiles)
-			await purgeExpiredConversationMessages(db, p.partner_id, ownerId, now);
+			await purgeExpiredConversationMessages(
+				db,
+				p.partner_id,
+				ownerId,
+				now,
+				vectorDepsFromEnv(env),
+			);
 	},
 } satisfies ExportedHandler<Env>;
 

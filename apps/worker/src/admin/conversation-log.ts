@@ -10,6 +10,7 @@ import {
 	deleteConversationMessages,
 	recordMaintenance,
 } from "../conversation-log.ts";
+import { vectorDepsFromEnv } from "../memory-index/vectors.ts";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
@@ -60,9 +61,11 @@ export async function handleConversationLogDelete(
 			channelId: req.channel_id,
 			messageIds: req.message_ids,
 		},
-		{ dryRun },
+		{ dryRun, vectors: vectorDepsFromEnv(env) },
 	);
-	if (!r.ok) return fail(400, r.error.type);
+	if (!r.ok) {
+		return fail(r.error.type === "index_failed" ? 503 : 400, r.error.type);
+	}
 	const count = r.value.ids.length;
 	if (!dryRun) {
 		await recordMaintenance(db, {

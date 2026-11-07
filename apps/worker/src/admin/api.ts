@@ -20,6 +20,7 @@ import { KPI_DEFAULT_DAYS, KPI_MAX_DAYS, readDailyKpis } from "../kpi-store.ts";
 import { partnerProfile } from "../partners.ts";
 import { handleConversationLogDelete } from "./conversation-log.ts";
 import { decodeCursor } from "./cursor.ts";
+import { handleMemoryIndexRebuild } from "./memory-index.ts";
 import { createAdminQueries } from "./queries.ts";
 import { handleSnapshots } from "./snapshots.ts";
 import { readStateHistory } from "./state-history.ts";
@@ -32,6 +33,10 @@ const fail = (status: number, error: string) => json({ error }, status);
 
 const ROUTE = new RegExp(
 	`^${ADMIN_API_PREFIX}/partners/([^/]+)/(status|relationships|memory|open-loops|interests|opinions|audit|kpis|state-history)$`,
+);
+
+const MEMORY_INDEX_ROUTE = new RegExp(
+	`^${ADMIN_API_PREFIX}/partners/([^/]+)/memory-index$`,
 );
 
 const SNAPSHOT_ROUTE = new RegExp(
@@ -61,7 +66,7 @@ const parsePage = (url: URL): Params | Response => {
 
 /**
  * owner（Access の email）と service caller `ykm` だけが使える。
- * 読み取り専用だが、Snapshot の作成（POST）、development だけの restore、会話ログの削除は書き込む。
+ * 読み取り専用だが、Snapshot の作成（POST）、development だけの restore、会話ログの削除、記憶の索引の一括投入は書き込む。
  */
 export async function handleAdminApi(
 	request: Request,
@@ -86,6 +91,12 @@ export async function handleAdminApi(
 		const id = decodeURIComponent(deleteMatch[1] ?? "");
 		if (!partnerProfile(id)) return fail(404, "unknown_partner");
 		return handleConversationLogDelete(request, env, id, principal, new Date());
+	}
+	const indexMatch = MEMORY_INDEX_ROUTE.exec(url.pathname);
+	if (indexMatch) {
+		const id = decodeURIComponent(indexMatch[1] ?? "");
+		if (!partnerProfile(id)) return fail(404, "unknown_partner");
+		return handleMemoryIndexRebuild(request, env, id);
 	}
 	const match = ROUTE.exec(url.pathname);
 	if (!match) return fail(404, "not_found");
