@@ -275,7 +275,7 @@ JSON（`schema_version` 6、`@yunomi/admin-contract` の `SnapshotSchema`）。`
 
 JSON → gzip（`CompressionStream`）→ age（`age-encryption`、公開鍵方式）。Worker は recipient だけを持ち、復号できない。R2 の binding は `SNAPSHOTS`、キーは `snapshots/<partner_id>/<snapshot_id>.json.gz.age`、`customMetadata` に `schema_version` / `created_at` / `env`。bucket は `resources.ts` の mode ごとの値（development は `yunomi-dev-snapshots`、production は `yunomi-snapshots`、local は `yunomi-local-snapshots`）で、事前に作る。
 
-recipient は `SNAPSHOT_AGE_RECIPIENT`（`resources.ts` の `snapshotAgeRecipient`、公開鍵なので commit する）。秘密鍵は 1Password（`op://Personal/yunomi-dev-snapshot-age/credential`、`op://Personal/yunomi-prod-snapshot-age/credential`）にあり、リポジトリにも Worker にも置かない。local mode はテスト用の鍵ペアで、identity は `test/snapshot-keys.ts`。
+recipient は `SNAPSHOT_AGE_RECIPIENT`（`resources.ts` の `snapshotAgeRecipient`、公開鍵なので commit する）。秘密鍵は 1Password（`op://Personal/yunomi-dev-snapshot/age_snapshot_key`、`op://Personal/yunomi-snapshot/age_snapshot_key`）にあり、リポジトリにも Worker にも置かない。local mode はテスト用の鍵ペアで、identity は `test/snapshot-keys.ts`。
 
 `scripts/deploy.sh` は recipient が `AGE_RECIPIENT_PATTERN`（`age1` + bech32 の 58 文字）に合わなければ失敗する。プレースホルダや秘密鍵の取り違えがここで止まる。パターンと各 mode の値の整合は `test/snapshot.test.ts` が確かめる。
 
