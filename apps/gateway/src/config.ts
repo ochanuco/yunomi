@@ -25,9 +25,6 @@ const envSchema = v.pipe(
 		AVATAR_DIR: v.optional(nonEmpty),
 		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
-		WORKING_URL: v.optional(v.pipe(v.string(), v.url())),
-		WORKING_TOKEN: v.optional(nonEmpty),
-		WORKING_FORWARD: v.optional(v.picklist(["true", "false"])),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -42,10 +39,6 @@ const envSchema = v.pipe(
 	v.check(
 		(e) => Boolean(e.KUKICHA_URL) === Boolean(e.KUKICHA_TOKEN),
 		"KUKICHA_URL と KUKICHA_TOKEN は両方指定する",
-	),
-	v.check(
-		(e) => Boolean(e.WORKING_URL) === Boolean(e.WORKING_TOKEN),
-		"WORKING_URL と WORKING_TOKEN は両方指定する",
 	),
 );
 
@@ -66,15 +59,8 @@ export type GatewayConfig = {
 	avatarDir: string | null;
 	/** VC でこの人の声だけを聞く。未設定なら耳を閉じて入る。 */
 	ownerUserId: string | null;
-	/** この Discord カテゴリの発言は Worker に送らず Working へ回す。 */
+	/** この Discord カテゴリの発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。 */
 	workCategoryIds: ReadonlySet<string>;
-	/** Working 受付の URL と共有トークン。未設定なら仕事カテゴリの発言は捨てる。 */
-	working: { url: string; token: string } | null;
-	/**
-	 * 仕事カテゴリの発言を Working へ渡すか。false でも捨てるだけで Talking には送らず、席の数は読む。
-	 * Akarin 宛ての依頼も Yukarin の gateway が渡すので、Akarin の gateway は false にして二重に届けない。
-	 */
-	workingForward: boolean;
 	logLevel: LogLevel;
 };
 
@@ -123,11 +109,6 @@ export const loadConfig = (
 				.map((id) => id.trim())
 				.filter((id) => id !== ""),
 		),
-		working:
-			e.WORKING_URL && e.WORKING_TOKEN
-				? { url: e.WORKING_URL, token: e.WORKING_TOKEN }
-				: null,
-		workingForward: (e.WORKING_FORWARD ?? "true") === "true",
 		logLevel: e.LOG_LEVEL ?? "info",
 	});
 };

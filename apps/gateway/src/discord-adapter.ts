@@ -1,10 +1,4 @@
-import type {
-	ButtonInteraction,
-	Channel,
-	Message,
-	VoiceState,
-} from "discord.js";
-import type { ButtonLike } from "./button.ts";
+import type { Channel, Message, VoiceState } from "discord.js";
 import type { MessageLike } from "./to-envelope.ts";
 import type { VoiceStateLike } from "./voice-state.ts";
 
@@ -49,22 +43,6 @@ export const toMessageLike = (m: Message): MessageLike => ({
 		contentType: a.contentType,
 		size: a.size,
 	})),
-});
-
-export const toButtonLike = (
-	i: ButtonInteraction<"cached" | "raw">,
-): ButtonLike => ({
-	guildId: i.guildId,
-	channelId: i.channelId,
-	messageId: i.message.id,
-	customId: i.customId,
-	createdAt: i.createdAt,
-	user: {
-		id: i.user.id,
-		bot: i.user.bot,
-		displayName: i.inCachedGuild() ? i.member.displayName : i.user.displayName,
-	},
-	categoryId: categoryIdOf(i.channel),
 });
 
 export const toVoiceStateLike = (s: VoiceState): VoiceStateLike => ({

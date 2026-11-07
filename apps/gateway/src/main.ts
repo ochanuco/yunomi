@@ -1,12 +1,10 @@
 import { generateDependencyReport } from "@discordjs/voice";
-import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
-import { createButtonHandler } from "./button.ts";
 import { loadConfig } from "./config.ts";
 import {
 	countHumans,
 	isRelayable,
-	toButtonLike,
 	toMessageLike,
 	toVoiceStateLike,
 } from "./discord-adapter.ts";
@@ -19,8 +17,6 @@ import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
 import { createVoiceStateHandler } from "./voice-state.ts";
-import { startWorkActivity } from "./work-activity.ts";
-import { createWorkingClient } from "./working-client.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
 const config = loadConfig(process.env);
@@ -60,17 +56,6 @@ const yunomi = new YunomiClient({
 	devCaller: cfg.devCaller,
 	logger,
 });
-
-const working = cfg.working
-	? createWorkingClient({ ...cfg.working, partnerId: cfg.partnerId })
-	: null;
-if (cfg.workCategoryIds.size > 0 && !working) {
-	logger.warn("WORK_CATEGORY_IDS is set but WORKING_URL is not; dropping");
-} else if (cfg.workCategoryIds.size > 0 && !cfg.workingForward) {
-	logger.info("work category messages dropped", {
-		reason: "WORKING_FORWARD=false",
-	});
-}
 
 const ochoko = cfg.ochoko
 	? createOchokoClient({
@@ -160,25 +145,6 @@ discord.once(Events.ClientReady, (c) => {
 		path: process.env.HEARTBEAT_FILE ?? DEFAULT_HEARTBEAT_PATH,
 		isReady: () => discord.isReady(),
 	});
-	if (working) {
-		startWorkActivity({
-			working,
-			setActivity: (text) => {
-				if (text === null) c.user.setPresence({ activities: [] });
-				else c.user.setActivity(text, { type: ActivityType.Custom });
-			},
-			setBio: async (text) => {
-				try {
-					await c.application.edit({ description: text });
-					return true;
-				} catch (e) {
-					logger.warn("usage bio update failed", { error: String(e) });
-					return false;
-				}
-			},
-			logger,
-		});
-	}
 });
 
 discord.on(Events.MessageCreate, (message) => {
@@ -193,7 +159,6 @@ discord.on(Events.MessageCreate, (message) => {
 		voice,
 		avatars,
 		workCategoryIds: cfg.workCategoryIds,
-		working: cfg.workingForward ? working : null,
 		logger,
 	});
 	void handle(toMessageLike(message), {
@@ -204,22 +169,6 @@ discord.on(Events.MessageCreate, (message) => {
 		send: (options) => channel.send(options),
 	}).catch((e: unknown) => {
 		logger.error("handler crashed", { error: String(e) });
-	});
-});
-
-const handleButton = createButtonHandler({
-	partnerId: cfg.partnerId,
-	workCategoryIds: cfg.workCategoryIds,
-	working,
-	logger,
-});
-
-discord.on(Events.InteractionCreate, (interaction) => {
-	if (!interaction.isButton() || !interaction.inGuild()) return;
-	void handleButton(toButtonLike(interaction), () =>
-		interaction.deferUpdate(),
-	).catch((e: unknown) => {
-		logger.error("button handler crashed", { error: String(e) });
 	});
 });
 

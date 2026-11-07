@@ -164,7 +164,7 @@ docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # リポジトリ�
 
 bot をメンションして、返事が来れば動いています。
 
-Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、[ochanuco/mizuya](https://github.com/ochanuco/mizuya) の `apps/working/README.md` の「配備」に従い、Gateway と同じホストに置きます。Gateway には `WORK_CATEGORY_IDS`・`WORKING_URL`・`WORKING_TOKEN` を足します。
+Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、[ochanuco/mizuya](https://github.com/ochanuco/mizuya) の `apps/working/README.md` の「配備」に従います。Working は自分の bot で仕事カテゴリを受け持つので、Gateway には `WORK_CATEGORY_IDS` を足し、仕事カテゴリの発言を Talking に送らないようにします。
 
 ## 8. `ykm` と Admin Web
 

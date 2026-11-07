@@ -3,7 +3,6 @@ import { type ChannelLike, deliverResponse } from "./deliver.ts";
 import type { Logger } from "./logger.ts";
 import { type MessageLike, toEnvelope } from "./to-envelope.ts";
 import type { VoiceManager } from "./voice-manager.ts";
-import type { WorkingClient } from "./working-client.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
 export type HandlerDeps = {
@@ -13,10 +12,8 @@ export type HandlerDeps = {
 	voice?: Pick<VoiceManager, "apply">;
 	/** 未設定なら表情画像を貼らない。 */
 	avatars?: Pick<AvatarStock, "pick">;
-	/** このカテゴリの発言は Talking（Worker）に送らず Working へ回す。 */
+	/** このカテゴリの発言は Talking（Worker）に送らない。仕事カテゴリは mizuya の Working が受け持つ。 */
 	workCategoryIds?: ReadonlySet<string>;
-	/** 未設定なら仕事カテゴリの発言は捨てる。 */
-	working?: Pick<WorkingClient, "forward"> | null;
 	now?: () => Date;
 	logger: Logger;
 };
@@ -39,18 +36,7 @@ export const createMessageHandler =
 			message.categoryId !== null &&
 			deps.workCategoryIds?.has(message.categoryId)
 		) {
-			if (!deps.working) {
-				log.debug("work message dropped", { message_id: message.id });
-				return;
-			}
-			const forwarded = await deps.working.forward(envelope.value);
-			if (!forwarded.ok) {
-				log.warn("working forward failed", {
-					message_id: message.id,
-					event_id: envelope.value.event_id,
-					error: forwarded.error.type,
-				});
-			}
+			log.debug("work message skipped", { message_id: message.id });
 			return;
 		}
 
