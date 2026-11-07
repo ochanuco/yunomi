@@ -4,6 +4,8 @@ import { and, eq, gte, inArray, lt, ne, or, type SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { conversationMessages, maintenanceEvents } from "./db/schema.ts";
 import type { RecentMessage } from "./do/store.ts";
+import { removeConversationMessagesFromIndex } from "./memory-index/index.ts";
+import type { VectorDeps } from "./memory-index/vectors.ts";
 
 /** 受信メッセージより前から、文脈として一緒に残す件数。 */
 export const CONTEXT_BEFORE_COUNT = 10;
@@ -90,7 +92,8 @@ export type ConversationLogCriteria = {
 
 export type ConversationLogDeleteError =
 	| { type: "empty_criteria" }
-	| { type: "too_many_message_ids"; max: number };
+	| { type: "too_many_message_ids"; max: number }
+	| { type: "index_failed"; message: string };
 
 const toWhere = (c: ConversationLogCriteria): SQL | undefined => {
 	const m = conversationMessages;
@@ -113,12 +116,13 @@ const toWhere = (c: ConversationLogCriteria): SQL | undefined => {
 
 /**
  * 会話ログの行を消す唯一の入口。消した（dryRun では消す対象の）行の id を返す。
- * 索引など、会話ログから作ったものを後で追従させるときは、返した id を使う。
+ * 会話ログから作った記憶の索引（塊、FTS5、Vectorize）も同じ id で追従させる。
+ * vectors が null の環境では D1 の索引だけを直す。
  */
 export const deleteConversationMessages = async (
 	db: DrizzleD1Database,
 	criteria: ConversationLogCriteria,
-	opts: { dryRun: boolean },
+	opts: { dryRun: boolean; vectors?: VectorDeps | null },
 ): Promise<Result<{ ids: string[] }, ConversationLogDeleteError>> => {
 	const { from, to, channelId, messageIds } = criteria;
 	// partner の会話ログを丸ごと消す指定は受けない。
@@ -137,16 +141,37 @@ export const deleteConversationMessages = async (
 		return err({ type: "too_many_message_ids", max: MAX_DELETE_MESSAGE_IDS });
 	}
 	const where = toWhere(criteria);
-	const rows = opts.dryRun
-		? await db
-				.select({ id: conversationMessages.id })
-				.from(conversationMessages)
-				.where(where)
-		: await db
-				.delete(conversationMessages)
-				.where(where)
-				.returning({ id: conversationMessages.id });
-	return ok({ ids: rows.map((r) => r.id) });
+	const targets = (
+		await db
+			.select({ id: conversationMessages.id })
+			.from(conversationMessages)
+			.where(where)
+	).map((r) => r.id);
+	if (opts.dryRun) return ok({ ids: targets });
+	// 索引から先に外す。失敗したら行を残し、同じ指定でやり直せば索引も消えるようにする。
+	const vectors = opts.vectors ?? null;
+	const unindexed = await removeConversationMessagesFromIndex(
+		db,
+		vectors,
+		targets,
+	);
+	if (!unindexed.ok) {
+		return err({ type: "index_failed", message: unindexed.error.type });
+	}
+	const deleted = (
+		await db
+			.delete(conversationMessages)
+			.where(where)
+			.returning({ id: conversationMessages.id })
+	).map((r) => r.id);
+	// 選んでから消すまでの間に書かれた行は、まだ索引から外していない。
+	const known = new Set(targets);
+	const late = deleted.filter((id) => !known.has(id));
+	if (late.length > 0) {
+		const r = await removeConversationMessagesFromIndex(db, vectors, late);
+		if (!r.ok) console.error("conversation index cleanup failed", r.error);
+	}
+	return ok({ ids: deleted });
 };
 
 export type MaintenanceActor = (typeof maintenanceEvents.$inferInsert)["actor"];
@@ -182,6 +207,7 @@ export const purgeExpiredConversationMessages = async (
 	partnerId: string,
 	ownerDiscordUserId: string,
 	now: Date,
+	vectors: VectorDeps | null,
 ): Promise<number> => {
 	const r = await deleteConversationMessages(
 		db,
@@ -191,7 +217,7 @@ export const purgeExpiredConversationMessages = async (
 			keepAuthorIds: [ownerDiscordUserId],
 			keepPartner: true,
 		},
-		{ dryRun: false },
+		{ dryRun: false, vectors },
 	);
 	if (!r.ok) throw new Error(`conversation log retention: ${r.error.type}`);
 	const count = r.value.ids.length;

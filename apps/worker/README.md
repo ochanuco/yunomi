@@ -166,7 +166,7 @@ LLM の `memory_candidates` は D1 の `memory_candidates` に保存し、`decid
 - Vectorize は `memory_search_docs` を正として合わせる。書き込みの経路が変えた行を `IndexChangeListener` で知らせ、DO は `ctx.waitUntil` の background で、Working の口は Worker の `ctx.waitUntil` で埋め込みと upsert / delete を行う。応答は待たせない。
 - Vectorize の id は `<kind>:<行 id>`、metadata は `partner_id`・`kind`・`source_id`・`at`（UTC の epoch ミリ秒）。`at` は facts が `observed_at`、work_notes が `created_at`、塊が anchor の `occurred_at`。
 - 塊は、持ち主の発言のうちすぐ後に Partner の返事が続くものを anchor にし、anchor の前 30 分以内の持ち主と Partner の発言（最大 4 件）、anchor、続く返事をまとめる。持ち主以外の人の発言は入れず、その人への返事も塊にしない。持ち主は `OWNER_DISCORD_USER_ID` で決めるので、それを持たない環境では会話ログを索引に入れない。
-- 会話ログを消すときは、消した行の id で `removeConversationMessagesFromIndex` を呼ぶ。anchor が消えた塊は消し、それ以外は残りの発言で作り直して、Vectorize も合わせる。
+- 会話ログの削除（`deleteConversationMessages`。日次 cron の保持期間切れ削除と Admin API の削除）は、行を消す前に対象の行を `removeConversationMessagesFromIndex` で索引から外す。anchor が消える塊は消し、それ以外は残りの発言で作り直して、Vectorize も合わせる。索引から外せなければ行を消さず、Admin API は 503 `index_failed` を返す。
 - local mode は Vectorize と Workers AI の binding を持たず、FTS5 だけが動く。
 - 既存データは `ykm memory-index rebuild`（`POST /admin/api/partners/:id/memory-index`）で入れる。会話ログを 1 チャンネルずつ塊にし、続けて `memory_search_docs` を 50 件ずつ埋め込む。何度実行してもよい。
 

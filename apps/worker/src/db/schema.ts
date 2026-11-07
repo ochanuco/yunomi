@@ -444,7 +444,7 @@ export const conversationChunkMessages = sqliteTable(
 
 /**
  * キーワード検索（FTS5）の文書。facts・work_notes・conversation_chunks の trigger が書き、
- * memory_search_fts が trigger でこの表に追従する（migration 0016）。アプリからは書かない。
+ * memory_search_fts が trigger でこの表に追従する（migration 0017）。アプリからは書かない。
  * Vectorize の同期もこの表を正として行う。
  */
 export const memorySearchDocs = sqliteTable(
