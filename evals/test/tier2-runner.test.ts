@@ -92,6 +92,9 @@ const verdict = (over: Partial<JudgeVerdict> = {}) =>
 		used_cooling_down_joke: false,
 		misattributes_overheard: false,
 		acknowledges_overheard: false,
+		uses_recalled_memory: false,
+		hedges_recalled_memory: false,
+		brings_up_unrelated_past: false,
 		rationale: "テスト。",
 		...over,
 	});
@@ -423,6 +426,92 @@ describe("Tier 2 runner（Fake provider）", () => {
 			samples: 3,
 		});
 		expect(good.violations).toEqual([]);
+	});
+
+	it("連想の記憶を使った率を数え、自信のない言い方の率は記憶を使った返事だけを分母にする", async () => {
+		const reply = (over: Partial<JudgeVerdict>) => [
+			turn("reply", "嵐山、すごい人でしたよね。"),
+			verdict(over),
+		];
+		const report = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply({ uses_recalled_memory: true, hedges_recalled_memory: true }),
+				...reply({ uses_recalled_memory: true }),
+				...reply({}),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["recall-old-topic"]),
+			samples: 3,
+		});
+		const m = report.scenarios[0]?.metrics;
+		expect(m?.recalled_used_rate).toMatchObject({ successes: 2, n: 3 });
+		expect(m?.recalled_hedged_rate).toMatchObject({ successes: 1, n: 2 });
+		expect(report.violations).toEqual([]);
+
+		const unused = await runTier2({
+			provider: new FakeLLMProvider([...reply({}), ...reply({}), ...reply({})]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["recall-old-topic"]),
+			samples: 3,
+		});
+		expect(unused.violations.map((x) => x.metric)).toEqual([
+			"recalled_used_rate",
+		]);
+	});
+
+	it("関係しない昔の話を持ち出した率が上限を区間ごと超えたら違反にする", async () => {
+		const reply = (over: Partial<JudgeVerdict>) => [
+			turn("reply", "そういえば高尾山で足をくじいた話、もう治りました？"),
+			verdict(over),
+		];
+		const report = await runTier2({
+			provider: new FakeLLMProvider([
+				...reply({ brings_up_unrelated_past: true }),
+				...reply({ brings_up_unrelated_past: true }),
+				...reply({ brings_up_unrelated_past: true }),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["recall-unrelated"]),
+			samples: 3,
+		});
+		expect(report.violations.map((x) => x.metric)).toEqual([
+			"unrelated_past_rate",
+		]);
+	});
+
+	it("skip を書いたシナリオは回さずに理由を残し、runSkipped なら回す", async () => {
+		const skipped = await runTier2({
+			provider: new FakeLLMProvider([]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["recall-faded-memory"]),
+			samples: 1,
+		});
+		expect(skipped.scenarios).toEqual([]);
+		expect(skipped.skipped.map((x) => x.id)).toEqual(["recall-faded-memory"]);
+		expect(formatSummary(skipped)).toContain("skipped:");
+
+		const run = await runTier2({
+			provider: new FakeLLMProvider([
+				turn("reply", "たぶん、のどぐろでしたよね。"),
+				verdict({ uses_recalled_memory: true, hedges_recalled_memory: true }),
+			]),
+			env: "development",
+			profile: yukarinProfile,
+			profileVersion: "test",
+			scenarios: pick(["recall-faded-memory"]),
+			samples: 1,
+			runSkipped: true,
+		});
+		expect(run.skipped).toEqual([]);
+		expect(run.scenarios.map((x) => x.id)).toEqual(["recall-faded-memory"]);
 	});
 
 	it("複数件の返事は、質問で終わるかを最後の 1 件で、judge を全文で見る", async () => {

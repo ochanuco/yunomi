@@ -1,0 +1,15 @@
+id: recall-old-topic
+description: 前にした紅葉の話を振られる。固定の枠には無く、連想で浮かんだ記憶（嵐山の人混み）を使って答える。
+recent: []
+message: { speaker: alice, text: "ゆかりん、前に紅葉見に行った話したの覚えてる？", mentions_partner: true }
+recalled:
+  - { text: "alice: 嵐山に紅葉を見に行ったら、渡月橋がすごい人で全然進めなかった\nゆかり: それは大変でしたね", days_ago: 25 }
+  - { text: "alice 好きな飲み物 ほうじ茶", days_ago: 60 }
+relationship: { familiarity: 0.6, trust: 0.6 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  must_not_invent_facts: true
+  recalled_used_rate: { min: 0.7, max: 1.0 }

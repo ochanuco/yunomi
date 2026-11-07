@@ -50,6 +50,18 @@ export const expectationsSchema = v.object({
 	must_not_misattribute_overheard: v.optional(v.boolean(), false),
 	/** judge が「横で聞いていたと分かる言い方で触れた」と判定した割合の許容範囲。省略すると見ない。 */
 	overheard_acknowledged_rate: v.optional(range),
+	/** judge が「連想で浮かんだ記憶を返事に使った」と判定した割合の許容範囲。省略すると見ない。 */
+	recalled_used_rate: v.optional(range),
+	/** 連想で浮かんだ記憶を使った返事のうち、judge が自信のない言い方と判定した割合の許容範囲。省略すると見ない。 */
+	recalled_hedged_rate: v.optional(range),
+	/** judge が「いまの話と関係しない昔の話を自分から持ち出した」と判定した割合の上限。省略すると見ない。 */
+	unrelated_past_rate_max: v.optional(unit),
+});
+
+/** 連想で浮かんだ記憶。シナリオの時刻からの日数で書き、いつ回しても記憶の古さが変わらないようにする。 */
+const recalledSchema = v.object({
+	text: v.pipe(v.string(), v.minLength(1)),
+	days_ago: v.pipe(v.number(), v.integer(), v.minValue(0)),
 });
 
 export const scenarioSchema = v.object({
@@ -73,6 +85,10 @@ export const scenarioSchema = v.object({
 		v.record(v.string(), v.picklist(["available", "cooling_down"])),
 		{},
 	),
+	/** 連想で浮かんだ記憶。関連の強い順。 */
+	recalled: v.optional(v.array(recalledSchema), []),
+	/** 既定の実行から外す理由。--scenario で id を指定したときだけ回す。 */
+	skip: v.optional(v.pipe(v.string(), v.minLength(1))),
 	expectations: expectationsSchema,
 });
 
@@ -122,6 +138,11 @@ export const loadScenarios = (
 	return scenarios;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const recalledAt = (r: Scenario["recalled"][number], now: Date): Date =>
+	new Date(now.getTime() - r.days_ago * DAY_MS);
+
 export const toPromptInput = (
 	scenario: Scenario,
 	profile: PartnerProfile,
@@ -135,6 +156,14 @@ export const toPromptInput = (
 		...scenario.relationship,
 	},
 	memory: [],
+	...(scenario.recalled.length > 0
+		? {
+				recalled: scenario.recalled.map((r) => ({
+					text: r.text,
+					at: recalledAt(r, now),
+				})),
+			}
+		: {}),
 	interests: resolveInterests(profile, [])
 		.sort((a, b) => b.score - a.score)
 		.map((i) => ({

@@ -104,6 +104,8 @@ export const main = async (argv: string[], deps: CliDeps): Promise<number> => {
 		profileVersion: partner.profileVersion,
 		scenarios,
 		samples,
+		// id を名指ししたときは、skip を書いたシナリオも回す。
+		runSkipped: (values.scenario?.length ?? 0) > 0,
 		now: deps.now,
 		onProgress: log,
 	});
