@@ -34,8 +34,8 @@ ykm memory-index rebuild                     既存の記憶を索引に入れ�
 ```
 YKM_DEV_URL=https://<dev host>
 YKM_PROD_URL=https://<prod host>
-YKM_DEV_ACCESS_CLIENT_ID=op://<vault>/<item>/client_id
-YKM_DEV_ACCESS_CLIENT_SECRET=op://<vault>/<item>/client_secret
+YKM_DEV_ACCESS_CLIENT_ID=op://Personal/ykm-dev/cf_access_yunomi_client_id
+YKM_DEV_ACCESS_CLIENT_SECRET=op://Personal/ykm-dev/cf_access_yunomi_client_secret
 ```
 
 ```
@@ -61,11 +61,11 @@ pnpm --filter @yunomi/cli ykm status --url http://localhost:8787
 #### seed
 
 ```
-YKM_AGE_IDENTITY=op://Personal/yunomi-prod-snapshot-age/credential \
-YKM_PROD_ACCESS_CLIENT_ID=op://Personal/yunomi-ykm/client_id \
-YKM_PROD_ACCESS_CLIENT_SECRET=op://Personal/yunomi-ykm/client_secret \
-YKM_DEV_ACCESS_CLIENT_ID=op://Personal/yunomi-dev-ykm/client_id \
-YKM_DEV_ACCESS_CLIENT_SECRET=op://Personal/yunomi-dev-ykm/client_secret \
+YKM_AGE_IDENTITY=op://Personal/yunomi-snapshot/age_snapshot_key \
+YKM_PROD_ACCESS_CLIENT_ID=op://Personal/ykm/cf_access_yunomi_client_id \
+YKM_PROD_ACCESS_CLIENT_SECRET=op://Personal/ykm/cf_access_yunomi_client_secret \
+YKM_DEV_ACCESS_CLIENT_ID=op://Personal/ykm-dev/cf_access_yunomi_client_id \
+YKM_DEV_ACCESS_CLIENT_SECRET=op://Personal/ykm-dev/cf_access_yunomi_client_secret \
   op run -- ykm snapshot seed <id> --from prod --to dev
 ```
 
