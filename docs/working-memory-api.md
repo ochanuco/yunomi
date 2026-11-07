@@ -79,7 +79,7 @@ Talking の prompt と同じ選び方と順で返す。時刻はすべて `YYYY-
 }
 ```
 
-- `watch` は Talking の道具 `watch_add` と同じ検証を通す。`query` は改行なしの 200 字まで、`sources` は 1 件 300 字まで 5 件まで（省くと普通の検索）、`interval_hours` は 2 〜 168 の整数（省くと 24）、`until` はタイムゾーン付きの ISO 8601（省くと期限なし、過去は不可）。通らなければ 400 `validation_failed`。
+- `watch` は Talking の道具 `watch_add` と同じ検証を通す。`query` は改行なしの 200 字まで、`sources` は 1 件 300 字まで 5 件まで（省くと普通の検索）、`interval_hours` は 1 〜 168 の整数（省くと 24）、`until` はタイムゾーン付きの ISO 8601（省くと期限なし、過去は不可）。通らなければ 400 `validation_failed`。
 - 同じ `query` の見張りがあれば 409 `duplicate_watch`、動いている見張りが 10 件あれば 409 `watch_limit`。
 - 201 で `{ id, query, sources, interval_minutes, until_at }` を返す。
 

@@ -5,8 +5,8 @@ import type { ToolDefinition } from "../contract.ts";
 export const WATCH_QUERY_MAX_LENGTH = 200;
 export const WATCH_SOURCE_MAX_LENGTH = 300;
 export const WATCH_SOURCES_MAX = 5;
-// 見回りは 2 時間おきなので、それより短い間隔は守れない。
-export const WATCH_INTERVAL_MIN_HOURS = 2;
+// Working の受付が見張りごとに Dkron のジョブを置くので、1 時間単位まで守れる。
+export const WATCH_INTERVAL_MIN_HOURS = 1;
 export const WATCH_INTERVAL_MAX_HOURS = 24 * 7;
 
 const oneLine = (max: number, description: string) =>
@@ -63,7 +63,7 @@ export type WatchAddInput = v.InferOutput<typeof watchAddInput>;
 export const watchAdd: ToolDefinition<WatchAddInput> = {
 	name: "watch_add",
 	description:
-		"オーナーに頼まれた見張りを 1 件登録する。仕事の席の見回りが間隔ごとに調べ、条件に合う新着だけを 1 行で知らせる。同じ出品は二度知らせない。同じ見張りがもうあるときや、数の上限に達しているときは登録できない。",
+		"オーナーに頼まれた見張りを 1 件登録する。仕事の席が間隔ごとに調べ、条件に合う新着だけを 1 行で知らせる。同じ出品は二度知らせない。同じ見張りがもうあるときや、数の上限に達しているときは登録できない。",
 	category: "watch_write",
 	input: watchAddInput,
 };

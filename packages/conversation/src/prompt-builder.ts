@@ -425,7 +425,7 @@ const intervalText = (minutes: number): string =>
 const watchBlock = (watches: WatchLine[]): string =>
 	[
 		"## 見張り",
-		"オーナーに頼まれて、仕事の席の見回りが調べているもの。聞かれたら、この一覧で答える。",
+		"オーナーに頼まれて、仕事の席が間隔ごとに調べているもの。聞かれたら、この一覧で答える。",
 		...(watches.length
 			? watches.map((w) => {
 					const where = w.sources.length ? w.sources.join("、") : "普通の検索";

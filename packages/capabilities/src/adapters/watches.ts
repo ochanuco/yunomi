@@ -104,7 +104,7 @@ export const createWatchAdapter = (deps: {
 				data: {
 					status: "added",
 					id: r.value.id,
-					note: "次の見回りから調べ始める。新着が無ければ知らせない。",
+					note: "登録した間隔で調べ始める。新着が無ければ知らせない。",
 				},
 				summary: "見張りを 1 件登録した",
 			});
