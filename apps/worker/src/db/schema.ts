@@ -398,7 +398,10 @@ export const watches = sqliteTable(
 		query: text("query").notNull(),
 		/** どこを見るか。店の名前か URL の JSON 配列。空なら普通の検索。 */
 		sources: text("sources").notNull(),
-		intervalMinutes: integer("interval_minutes").notNull(),
+		/** 何分おきに調べるか。schedule の見張りでは null。 */
+		intervalMinutes: integer("interval_minutes"),
+		/** 調べる時刻の cron 式（5 項目、日本時間で読む）。間隔の見張りでは null。 */
+		schedule: text("schedule"),
 		untilAt: text("until_at"),
 		status: text("status", { enum: ["active", "stopped"] }).notNull(),
 		/** 前に知らせたものの key の JSON 配列。新しいものを後ろに足す。 */

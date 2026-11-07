@@ -165,15 +165,24 @@ const build = async (): Promise<CurrentSnapshot> => {
 	return r.value;
 };
 
+/** v7 までの Snapshot は watches に cron 式を持たず、間隔は必ず数。 */
+const withoutSchedule = (d1: CurrentSnapshot["d1"]) => ({
+	...d1,
+	watches: d1.watches.map(({ schedule: _s, interval_minutes, ...w }) => ({
+		...w,
+		interval_minutes: interval_minutes ?? 1440,
+	})),
+});
+
 /** v6 までの Snapshot は facts に同じ話を再び出した回数を持たない。 */
 const withoutRestate = (d1: CurrentSnapshot["d1"]) => ({
-	...d1,
+	...withoutSchedule(d1),
 	facts: d1.facts.map(({ restate_count: _r, ...f }) => f),
 });
 
 /** v5 までの Snapshot は facts と work_notes に想起の記録を持たない。 */
 const withoutRecall = (d1: CurrentSnapshot["d1"]) => ({
-	...d1,
+	...withoutSchedule(d1),
 	facts: d1.facts.map(
 		({ recall_count: _c, last_recalled_at: _l, restate_count: _r, ...f }) => f,
 	),
@@ -592,6 +601,59 @@ describe("restore", () => {
 		expect(
 			(await env.DB.prepare("SELECT restate_count FROM facts").all()).results,
 		).toEqual([{ restate_count: 0 }]);
+	});
+
+	it("cron 式を持たない v7 の Snapshot も復元でき、cron 式は null で入る", async () => {
+		await seedD1();
+		await seedDo();
+		const current = await build();
+		const v7: Snapshot = {
+			...current,
+			schema_version: 7,
+			d1: withoutSchedule(current.d1),
+		};
+		expect(parseSnapshot(v7).ok).toBe(true);
+		expect(parseSnapshot({ ...current, schema_version: 7 }).ok).toBe(false);
+
+		const res = await restoreRequest(v7);
+		expect(res.status).toBe(200);
+		expect(
+			(
+				await env.DB.prepare(
+					"SELECT interval_minutes, schedule FROM watches",
+				).all()
+			).results,
+		).toEqual([{ interval_minutes: 360, schedule: null }]);
+	});
+
+	it("cron 式の見張りも Snapshot に入り、復元で戻る", async () => {
+		await seedD1();
+		await seedDo();
+		await run(
+			`INSERT INTO watches (id, partner_id, entity_id, query, sources, interval_minutes, schedule, until_at, status, seen, last_checked_at, created_at, stopped_at)
+			VALUES ('wt2', ?, 'e1', '平日のセール', '[]', NULL, '0 9-18 * * 1-5', NULL, 'active', '[]', NULL, '2026-10-08T00:00:00Z', NULL)`,
+			PARTNER_ID,
+		);
+		const source = await build();
+		expect(
+			source.d1.watches.map((w) => [w.id, w.interval_minutes, w.schedule]),
+		).toEqual([
+			["wt1", 360, null],
+			["wt2", null, "0 9-18 * * 1-5"],
+		]);
+		await run("DELETE FROM watches");
+		const res = await restoreRequest(source);
+		expect(res.status).toBe(200);
+		expect(
+			(
+				await env.DB.prepare(
+					"SELECT id, interval_minutes, schedule FROM watches ORDER BY id",
+				).all()
+			).results,
+		).toEqual([
+			{ id: "wt1", interval_minutes: 360, schedule: null },
+			{ id: "wt2", interval_minutes: null, schedule: "0 9-18 * * 1-5" },
+		]);
 	});
 
 	it("restore を 1 行のログに残す", async () => {

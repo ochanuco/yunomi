@@ -50,10 +50,55 @@ describe("watch adapter", () => {
 				query: "RTX3090 の中古、24GB",
 				sources: ["じゃんぱら", "https://shop.example/gpu"],
 				intervalMinutes: 360,
+				schedule: null,
 				untilAt: new Date("2026-12-31T14:59:00Z"),
 				now: context.now,
 			},
 		]);
+	});
+
+	it("cron 式は間隔を null にして書き、どちらも無ければ 24 時間おきにする", async () => {
+		const { adapter, calls } = setup();
+		await run(adapter, "watch_add", {
+			...input,
+			interval_hours: null,
+			schedule: "0 9-18 * * 1-5",
+		});
+		await run(adapter, "watch_add", {
+			...input,
+			interval_hours: null,
+			schedule: null,
+		});
+		const { interval_hours: _i, ...omitted } = input;
+		await run(adapter, "watch_add", omitted);
+		expect(calls.map((c) => [c.intervalMinutes, c.schedule])).toEqual([
+			[null, "0 9-18 * * 1-5"],
+			[1440, null],
+			[1440, null],
+		]);
+	});
+
+	it("間隔と cron 式の両方、5 項目でない式、30 分より詰めた式は書かずに落とす", async () => {
+		const { adapter, calls } = setup();
+		const results = await Promise.all(
+			[
+				{ ...input, schedule: "0 9-18 * * 1-5" },
+				{ ...input, interval_hours: null, schedule: "0 0 9 * * 1-5" },
+				{ ...input, interval_hours: null, schedule: "@hourly" },
+				{ ...input, interval_hours: null, schedule: "*/15 9-18 * * *" },
+			].map((bad) => run(adapter, "watch_add", bad)),
+		);
+		expect(
+			results.map((r) =>
+				!r.ok && r.error.type === "ValidationFailed" ? r.error.issues : r,
+			),
+		).toEqual([
+			["schedule: interval_hours と一緒には指定できない"],
+			["schedule: 5 項目（分 時 日 月 曜日）の数字と * , - / だけで書く"],
+			["schedule: 5 項目（分 時 日 月 曜日）の数字と * , - / だけで書く"],
+			["schedule: 30 分より短い間隔で動く"],
+		]);
+		expect(calls).toEqual([]);
 	});
 
 	it("オフセットの無い期限は JST として読み、期限なしは null", async () => {

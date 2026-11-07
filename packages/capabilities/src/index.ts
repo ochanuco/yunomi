@@ -21,3 +21,4 @@ export * from "./pending.ts";
 export * from "./policy.ts";
 export * from "./registry.ts";
 export * from "./source-urls.ts";
+export * from "./watch-schedule.ts";

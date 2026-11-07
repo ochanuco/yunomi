@@ -1,4 +1,8 @@
-import type { WatchStore, WatchStoreError } from "@yunomi/capabilities";
+import {
+	type WatchStore,
+	type WatchStoreError,
+	watchScheduleFiredBetween,
+} from "@yunomi/capabilities";
 import { err, newId, ok, type Result } from "@yunomi/core";
 import { and, asc, eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
@@ -15,13 +19,16 @@ export type Watch = {
 	id: string;
 	query: string;
 	sources: string[];
-	intervalMinutes: number;
+	/** schedule の見張りでは null。 */
+	intervalMinutes: number | null;
+	/** 日本時間で読む 5 項目の cron 式。間隔の見張りでは null。 */
+	schedule: string | null;
 	untilAt: Date | null;
 	seen: string[];
 	lastCheckedAt: Date | null;
 	createdAt: Date;
 	notifyThreadId: string | null;
-	/** 前に調べてから間隔が過ぎていて、今調べる番か。 */
+	/** 今調べる番か。間隔なら前に調べてから間隔が過ぎた、cron 式なら前に調べてから発火の時刻を過ぎた。 */
 	due: boolean;
 };
 
@@ -31,7 +38,8 @@ export type WatchRepo = {
 		entityId: string;
 		query: string;
 		sources: readonly string[];
-		intervalMinutes: number;
+		intervalMinutes: number | null;
+		schedule: string | null;
 		untilAt: Date | null;
 		notifyThreadId?: string | null;
 		now: Date;
@@ -69,6 +77,22 @@ const parseList = (raw: string): string[] => {
 const dateOrNull = (iso: string | null) =>
 	iso === null ? null : new Date(iso);
 
+const isDue = (
+	cadence: { intervalMinutes: number | null; schedule: string | null },
+	lastCheckedAt: Date | null,
+	now: Date,
+): boolean => {
+	if (lastCheckedAt === null) return true;
+	if (cadence.schedule !== null) {
+		return watchScheduleFiredBetween(cadence.schedule, lastCheckedAt, now);
+	}
+	// 書くときにどちらかを必ず入れるので、両方 null の行は無い
+	if (cadence.intervalMinutes === null) return false;
+	return (
+		now.getTime() - lastCheckedAt.getTime() >= cadence.intervalMinutes * 60_000
+	);
+};
+
 export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 	const activeRows = (partnerId: string, entityId: string) =>
 		and(
@@ -97,15 +121,13 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 					query: r.query,
 					sources: parseList(r.sources),
 					intervalMinutes: r.intervalMinutes,
+					schedule: r.schedule,
 					untilAt,
 					seen: parseList(r.seen),
 					lastCheckedAt,
 					createdAt: new Date(r.createdAt),
 					notifyThreadId: r.notifyThreadId,
-					due:
-						lastCheckedAt === null ||
-						now.getTime() - lastCheckedAt.getTime() >=
-							r.intervalMinutes * 60_000,
+					due: isDue(r, lastCheckedAt, now),
 				},
 			];
 		});
@@ -118,6 +140,7 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 			query,
 			sources,
 			intervalMinutes,
+			schedule,
 			untilAt,
 			notifyThreadId,
 			now,
@@ -135,6 +158,7 @@ export const createWatchRepo = (db: DrizzleD1Database): WatchRepo => {
 				query,
 				sources: JSON.stringify(sources),
 				intervalMinutes,
+				schedule,
 				untilAt: untilAt?.toISOString() ?? null,
 				status: "active",
 				seen: "[]",
