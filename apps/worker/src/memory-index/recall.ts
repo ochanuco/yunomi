@@ -1,17 +1,20 @@
-import { err, formatJstForPrompt, ok, type Result } from "@yunomi/core";
+import {
+	err,
+	factRetentionKind,
+	formatJstForPrompt,
+	isVague,
+	lastTouched,
+	ok,
+	type Result,
+	type RetentionInput,
+	retention,
+} from "@yunomi/core";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { conversationChunks, facts, workNotes } from "../db/schema.ts";
 import { WORK_NOTE_PREDICATE, type WorkEpisodeKind } from "../work-notes.ts";
 import { type KeywordHit, MIN_TERM_LENGTH, searchKeywords } from "./keyword.ts";
 import { type RecallPeriod, recallPeriod } from "./period.ts";
-import {
-	factRetentionKind,
-	isVague,
-	lastTouched,
-	type RetentionInput,
-	retention,
-} from "./retention.ts";
 import {
 	chunked,
 	D1_PARAM_CHUNK,

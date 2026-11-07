@@ -22,7 +22,7 @@ const systemText = (id: string) =>
 		.join("\n\n");
 
 describe("想起のシナリオ", () => {
-	it("想起の 3 観点のシナリオがあり、古い記憶の観点は RC05 待ちの skip になっている", () => {
+	it("想起の 3 観点のシナリオがあり、どれも既定の実行で回る", () => {
 		expect(byId("recall-old-topic").expectations.recalled_used_rate?.min).toBe(
 			0.7,
 		);
@@ -31,14 +31,16 @@ describe("想起のシナリオ", () => {
 		).toBeLessThanOrEqual(0.2);
 		const faded = byId("recall-faded-memory");
 		expect(faded.expectations.recalled_hedged_rate).toBeDefined();
-		expect(faded.skip).toContain("RC05");
+		expect(
+			scenarios.filter((s) => s.id.startsWith("recall-")).map((s) => s.skip),
+		).toEqual([undefined, undefined, undefined, undefined]);
 	});
 
 	it("連想の記憶は固定の枠ではなく、ふと思い出したことの区画に日付付きで出る", () => {
 		const text = systemText("recall-old-topic");
 		const block = text.slice(text.indexOf(RECALL_HEADER));
 		expect(block).toContain(
-			"- alice: 嵐山に紅葉を見に行ったら、渡月橋がすごい人で全然進めなかった（10/13）",
+			"- alice: 嵐山に紅葉を見に行ったら、渡月橋がすごい人で全然進めなかった（今年の 10/13、4 週間くらい前）",
 		);
 		expect(block).toContain("  ゆかり: それは大変でしたね");
 		const fixed = text.slice(
@@ -48,10 +50,11 @@ describe("想起のシナリオ", () => {
 		expect(fixed).not.toContain("嵐山");
 	});
 
-	it("前の年の記憶には年が付く", () => {
-		expect(systemText("recall-faded-memory")).toContain(
-			"のどぐろの炙りがおいしかった（2025/10/3）",
-		);
+	it("長く触れていない記憶は、うろ覚えの区画に粗い日付で出る", () => {
+		const text = systemText("recall-faded-memory");
+		expect(text).not.toContain(RECALL_HEADER);
+		expect(text).toContain("## うろ覚えのこと");
+		expect(text).toContain("のどぐろの炙りがおいしかった（去年の秋ごろ）");
 	});
 
 	it("連想の記憶が無いシナリオでは区画を出さない", () => {

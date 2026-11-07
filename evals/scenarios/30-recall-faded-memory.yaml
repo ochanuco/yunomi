@@ -1,6 +1,5 @@
 id: recall-faded-memory
 description: 1 年以上前に聞いた金沢旅行の話を聞かれる。古く R が低い記憶なので、「たぶん」のような自信のない言い方で答える。
-skip: RC05 で R の低い記憶の見せ方が Prompt に入るまでは、古さが日付でしか伝わらない
 recent: []
 message: { speaker: alice, text: "ゆかりん、前に金沢行ったとき何食べたって話したっけ？", mentions_partner: true }
 recalled:

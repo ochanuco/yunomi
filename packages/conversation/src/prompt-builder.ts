@@ -358,9 +358,10 @@ export const elapsedText = (at: Date, now: Date): string => {
 
 const recalledLine = (r: RecalledLine, now: Date): string => {
 	const at = toJstDate(r.at);
+	// 年を省くと、季節の話題でモデルが今年の記憶を「去年」と取り違える。
 	const year =
 		at.getUTCFullYear() === toJstDate(now).getUTCFullYear()
-			? ""
+			? "今年の "
 			: `${at.getUTCFullYear()}/`;
 	const date = r.vague
 		? roughDate(r.at, now)

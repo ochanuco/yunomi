@@ -1,24 +1,22 @@
 import {
 	CANDIDATE_TTL_MS,
+	DECAY_POLICY,
 	decidePromotion,
+	FORGETTING,
+	isVague,
+	lastTouched,
 	type MemoryKind,
 	type MemoryObject,
 	type MemorySource,
 	newId,
 	normalizeObject,
 	normalizePredicate,
+	type RetentionInput,
+	retention,
 } from "@yunomi/core";
 import { and, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { facts, memoryCandidates, workNotes } from "./db/schema.ts";
-import {
-	DECAY_POLICY,
-	FORGETTING,
-	isVague,
-	lastTouched,
-	type RetentionInput,
-	retention,
-} from "./memory-index/retention.ts";
 import type { IndexChangeListener, IndexKey } from "./memory-index/types.ts";
 import {
 	WORK_NOTE_PREDICATE,

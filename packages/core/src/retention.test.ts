@@ -6,7 +6,7 @@ import {
 	type RetentionInput,
 	retention,
 	stabilityDays,
-} from "../src/memory-index/retention.ts";
+} from "./retention.ts";
 
 const NOW = new Date("2026-11-07T03:00:00Z");
 const daysAgo = (days: number) =>

@@ -8,7 +8,7 @@ export const FORGETTING = {
 		lasting: 60,
 		episode: 14,
 		work_note: 21,
-		conversation: 7,
+		conversation: 14,
 	},
 	/** importance（0〜1）の分だけ S を 1 + 重み × importance 倍にする。 */
 	importanceWeight: 3,

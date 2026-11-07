@@ -443,7 +443,9 @@ describe("返事のターンの連想", () => {
 		const [clear = "", vague = ""] = (
 			prompt.split("## ふと思い出したこと")[1] ?? ""
 		).split("## うろ覚えのこと");
-		expect(clear).toContain("- 昔の趣味 カヌー教室（9/20、3 週間くらい前）");
+		expect(clear).toContain(
+			"- 昔の趣味 カヌー教室（今年の 9/20、3 週間くらい前）",
+		);
 		expect(clear).not.toContain("自分からは持ち出さない");
 		expect(vague).toContain("自信はない");
 		expect(vague).toContain("- 習い事 カヌー教室の体験会（去年の春ごろ）");

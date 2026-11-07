@@ -10,6 +10,7 @@ export * from "./partner-profile.ts";
 export * from "./partner-state.ts";
 export * from "./partners.ts";
 export * from "./result.ts";
+export * from "./retention.ts";
 export * from "./time.ts";
 export * from "./voice-mapping.ts";
 export * from "./voice-profile.ts";
