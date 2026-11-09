@@ -13,7 +13,7 @@
 	},
 	"dependencies": {
 		"@yunomi/core": "workspace:*",
-		"croner": "10.0.1",
+		"croner": "11.0.0",
 		"valibot": "^1.5.0"
 	},
 	"devDependencies": {
