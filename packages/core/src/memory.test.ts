@@ -77,23 +77,23 @@ describe("decidePromotion", () => {
 		).toEqual({ status: "promoted", action: "refresh", factId: "f1" });
 	});
 
-	it("値が違えば conflict（自動置換しない）", () => {
+	it("値が違えば新しい値で置き換える", () => {
 		expect(
 			decidePromotion({
 				...base,
 				current: { id: "f1", object: { type: "string", value: "紅茶" } },
 			}),
-		).toEqual({ status: "conflict", conflictFactId: "f1" });
+		).toEqual({ status: "promoted", action: "replace", factId: "f1" });
 	});
 
-	it("型が違う同値も別物として conflict", () => {
+	it("型が違う同値も別物として置き換える", () => {
 		expect(
 			decidePromotion({
 				...base,
 				object: { type: "number", value: "1" },
 				current: { id: "f1", object: { type: "string", value: "1" } },
-			}).status,
-		).toBe("conflict");
+			}),
+		).toEqual({ status: "promoted", action: "replace", factId: "f1" });
 	});
 
 	it.each([

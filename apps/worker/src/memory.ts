@@ -192,15 +192,6 @@ export const createMemoryRepo = (
 						conflictFactId: null,
 					};
 				}
-				if (decision.status === "conflict") {
-					await candidateRow("conflict", decision.conflictFactId);
-					return {
-						predicate,
-						status: "conflict",
-						factId: null,
-						conflictFactId: decision.conflictFactId,
-					};
-				}
 				if (decision.action === "refresh") {
 					await db.batch([
 						db
@@ -222,24 +213,34 @@ export const createMemoryRepo = (
 					};
 				}
 				const factId = newId();
-				await db.batch([
-					db.insert(facts).values({
-						id: factId,
-						partnerId: ctx.partnerId,
-						subjectEntityId: ctx.speakerEntityId,
-						predicate,
-						objectType: object.type,
-						objectValue: object.value,
-						objectDisplay: null,
-						confidence: c.confidence,
-						importance: c.importance,
-						source: c.source,
-						observedAt: at,
-						validFrom: at,
-						decayPolicy: DECAY_POLICY[c.kind],
-					}),
-					candidateRow("promoted", null),
-				]);
+				const insert = db.insert(facts).values({
+					id: factId,
+					partnerId: ctx.partnerId,
+					subjectEntityId: ctx.speakerEntityId,
+					predicate,
+					objectType: object.type,
+					objectValue: object.value,
+					objectDisplay: null,
+					confidence: c.confidence,
+					importance: c.importance,
+					source: c.source,
+					observedAt: at,
+					validFrom: at,
+					decayPolicy: DECAY_POLICY[c.kind],
+				});
+				const promoted = candidateRow("promoted", null);
+				// 古い Fact を先に閉じる。現行 Fact は (subject, predicate) ごとに 1 件という unique index があるため。
+				await (decision.action === "replace"
+					? db.batch([
+							db
+								.update(facts)
+								.set({ validTo: at, supersededBy: factId })
+								.where(eq(facts.id, decision.factId)),
+							insert,
+							promoted,
+						])
+					: db.batch([insert, promoted]));
+				if (decision.action === "replace") factChanged(decision.factId);
 				factChanged(factId);
 				return { predicate, status: "promoted", factId, conflictFactId: null };
 			} catch (e) {
