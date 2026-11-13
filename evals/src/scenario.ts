@@ -73,6 +73,14 @@ const recalledSchema = v.object({
 	recall_count: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0)), 0),
 });
 
+/** 固定の枠に入っている、発言者についての記憶。 */
+const memorySchema = v.object({
+	predicate: v.pipe(v.string(), v.minLength(1)),
+	object: v.pipe(v.string(), v.minLength(1)),
+	days_ago: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	kind: v.optional(v.picklist(["lasting", "episode"]), "lasting"),
+});
+
 export const scenarioSchema = v.object({
 	id: v.pipe(v.string(), v.regex(/^[a-z0-9][a-z0-9-]*$/)),
 	description: v.pipe(v.string(), v.minLength(1)),
@@ -94,6 +102,7 @@ export const scenarioSchema = v.object({
 		v.record(v.string(), v.picklist(["available", "cooling_down"])),
 		{},
 	),
+	memory: v.optional(v.array(memorySchema), []),
 	/** 連想で浮かんだ記憶。関連の強い順。 */
 	recalled: v.optional(v.array(recalledSchema), []),
 	/** 既定の実行から外す理由。--scenario で id を指定したときだけ回す。 */
@@ -164,7 +173,13 @@ export const toPromptInput = (
 		speakerName: scenario.message.speaker,
 		...scenario.relationship,
 	},
-	memory: [],
+	memory: scenario.memory.map((m) => ({
+		subject: scenario.message.speaker,
+		predicate: m.predicate,
+		object: m.object,
+		kind: m.kind,
+		observedAt: new Date(now.getTime() - m.days_ago * DAY_MS),
+	})),
 	...(scenario.recalled.length > 0
 		? {
 				// Worker と同じ係数で R を求め、うろ覚えかどうかを決める。最後に触れたのは days_ago とみなす。
