@@ -214,33 +214,46 @@ describe("Fact memory", () => {
 		expect((await policy())?.decay_policy).toBe("standard");
 	});
 
-	it("値が違えば conflict として残し、Fact は置換しない", async () => {
+	it("値が違えば新しい値で置き換え、古い Fact は履歴に残す", async () => {
 		const a = newAuthor();
-		const { stub, fake } = await setup("mem-conflict", [
+		const { stub, fake, clock } = await setup("mem-replace", [
 			[candidate()],
 			[candidate({ object: { type: "string", value: "紅茶" } })],
 			[],
 		]);
 		await stub.handleDiscordMessage(say(a));
+		clock.now = new Date("2026-10-12T03:00:00Z");
 		const res = await stub.handleDiscordMessage(
-			say(a, { content: "紅茶が好き" }),
+			say(a, { content: "やっぱり紅茶が好き" }),
 		);
 		const entity = await entityOf(a);
-		const rows = await factsOf(entity);
-		expect(rows).toHaveLength(1);
-		expect(rows[0]?.object_value).toBe("緑茶");
+		const rows = (
+			await env.DB.prepare(
+				"SELECT id, object_value, valid_to, superseded_by FROM facts WHERE subject_entity_id = ? ORDER BY observed_at",
+			)
+				.bind(entity)
+				.all<{
+					id: string;
+					object_value: string;
+					valid_to: string | null;
+					superseded_by: string | null;
+				}>()
+		).results;
+		expect(rows.map((r) => r.object_value)).toEqual(["緑茶", "紅茶"]);
+		expect(rows[0]).toMatchObject({
+			valid_to: "2026-10-12T03:00:00.000Z",
+			superseded_by: rows[1]?.id,
+		});
+		expect(rows[1]).toMatchObject({ valid_to: null, superseded_by: null });
 		expect(res.audit.memory?.outcomes[0]).toMatchObject({
-			status: "conflict",
-			conflictFactId: rows[0]?.id,
+			status: "promoted",
+			factId: rows[1]?.id,
 		});
 		const cands = await candidatesOf(entity, "好きな飲み物");
-		expect(cands.map((c) => c.status).sort()).toEqual(["conflict", "promoted"]);
-		expect(cands.find((c) => c.status === "conflict")?.conflict_fact_id).toBe(
-			rows[0]?.id,
-		);
+		expect(cands.map((c) => c.status)).toEqual(["promoted", "promoted"]);
 		await stub.handleDiscordMessage(say(a, { content: "続き" }));
-		expect(memoryOf(fake.requests[2])).toContain("緑茶");
-		expect(memoryOf(fake.requests[2])).not.toContain("紅茶");
+		expect(memoryOf(fake.requests[2])).toContain("紅茶");
+		expect(memoryOf(fake.requests[2])).not.toContain("緑茶");
 	});
 
 	it("predicate を正規化して同じ Fact として扱う", async () => {

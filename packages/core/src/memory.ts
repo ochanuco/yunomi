@@ -64,12 +64,12 @@ export type PromotionInput = {
 export type PromotionDecision =
 	| { status: "promoted"; action: "insert" }
 	| { status: "promoted"; action: "refresh"; factId: string }
-	| { status: "conflict"; conflictFactId: string }
+	| { status: "promoted"; action: "replace"; factId: string }
 	| { status: "pending" };
 
 /**
  * 候補を Fact に昇格するかの決定的な規則。
- * 本人の明示的な自己申告で confidence が十分なものだけが対象で、既存 Fact と値が違えば自動置換せず conflict にする。
+ * 本人の明示的な自己申告で confidence が十分なものだけが対象。既存 Fact と値が違えば、本人の言い直しとして新しい値に置き換える。
  */
 export const decidePromotion = (i: PromotionInput): PromotionDecision => {
 	if (
@@ -85,5 +85,5 @@ export const decidePromotion = (i: PromotionInput): PromotionDecision => {
 		i.current.object.value === i.object.value;
 	return same
 		? { status: "promoted", action: "refresh", factId: i.current.id }
-		: { status: "conflict", conflictFactId: i.current.id };
+		: { status: "promoted", action: "replace", factId: i.current.id };
 };

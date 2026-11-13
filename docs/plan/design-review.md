@@ -47,7 +47,7 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 
 - `memory_candidates` と `facts` を分ける。
 - MVP の昇格ルールは決定的にする。本人による明示的な自己申告（source=`user_statement`）で confidence ≥ 0.8 のものは自動で Fact にする。それ以外は candidate のまま残す。
-- 既存 Fact と subject+predicate が衝突し、内容が異なる場合は自動置換せず、candidate に `conflict_target` を付けて残す（`memory.md` の Contradictions 方針の最小版）。
+- 昇格の条件を満たす候補が既存 Fact と subject+predicate で衝突し、内容が異なる場合は、本人の言い直しとして新しい値に置き換える。古い Fact は `valid_to` と `superseded_by` を付けて履歴に残す（`memory.md` の Contradictions 方針の clear replacement）。
 - Prompt には importance と recency で選んだ上位 N 件の Fact を入れる（意味検索はしない）。
 
 ### B5. `cf` CLI の成熟度と設定の分担
