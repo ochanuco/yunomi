@@ -1,0 +1,13 @@
+id: restated-nickname
+description: 呼び名「たろ」を覚えている相手が、敬称を付けた「たろさん」で呼ぶよう言い直す。記憶と同じに見えても、新しい呼び名を memory_candidates に入れる。
+recent: []
+message: { speaker: taro, text: "ゆかりん、名前を呼ぶときは「たろさん」ってさん付けで呼んでね", mentions_partner: true }
+memory:
+  - { predicate: preferred_nickname, object: たろ, days_ago: 30 }
+relationship: { familiarity: 0.6, trust: 0.6 }
+state: { mood: 0.2, energy: 0.6 }
+expectations:
+  reply_rate: { min: 0.9, max: 1.0 }
+  must_be_polite: true
+  should_not_over_agree: false
+  memory_candidate_rate: { min: 0.8, max: 1.0 }
