@@ -1,5 +1,5 @@
 # ビルドコンテキストはリポジトリルート: docker build -f apps/gateway/Dockerfile .
-FROM node:26.12.1-slim AS build
+FROM node:26.13.0-slim AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 # Node 25 から corepack は同梱されないので npm で入れる
@@ -10,7 +10,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @yunomi/gateway... \
  && pnpm --filter @yunomi/gateway deploy --prod --legacy /out
 
-FROM node:26.12.1-slim
+FROM node:26.13.0-slim
 ENV NODE_ENV=production
 # VC で再生する WAV を ffmpeg で 48kHz ステレオへ変換する
 RUN apt-get update \
