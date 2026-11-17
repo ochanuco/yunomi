@@ -58,6 +58,13 @@ export default defineConfig(({ mode }) => {
 				CF_ACCESS_CLIENT_ID: bindings.secret(),
 				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
 				AIVOICE_TOKEN: bindings.secret(),
+				// LLM の呼び出しの trace の送り先（Langfuse）。Langfuse の API キー（Ingestion のみ）と、前に立つ Cloudflare Access の Service Token の
+				// 4 つの secret が揃っているときだけ送る。
+				LANGFUSE_URL: bindings.text(instance.langfuseUrl),
+				LANGFUSE_PUBLIC_KEY: bindings.secret(),
+				LANGFUSE_SECRET_KEY: bindings.secret(),
+				LANGFUSE_ACCESS_CLIENT_ID: bindings.secret(),
+				LANGFUSE_ACCESS_CLIENT_SECRET: bindings.secret(),
 				// 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
 				// 値を置かない dev で宣言すると deploy が通らない。
 				...(production

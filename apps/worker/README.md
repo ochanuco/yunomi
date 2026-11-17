@@ -45,6 +45,25 @@ token は返事の送信（下記）と添付の読み取りに、そのパー�
 
 返事の送信は `DISCORD_SEND_FROM_WORKER`（text。dev・prod `1` / local `0`）が `1` で、そのパートナーの bot の token（Yukarin は secret `DISCORD_BOT_TOKEN`）があるときだけ Worker の身体が担う。`src/discord-rest.ts` が `CommunicationPort` を Discord REST で実装し（テキスト、入力中、multipart 添付。返信形式の `message_reference` は、返信先の発言のあとに partner 以外の発言が積まれているときだけ付け、1 対 1 の流れでは普通のメッセージで送る。429 は `retry_after` が 5 秒以内なら待って最大 2 回再送し、超えれば `RateLimited`）、PartnerDO が返事を自分で送って、得た message id を partner 発言に結び付ける。入力中はターン開始から 1.5 秒を超えて応答が遅いときだけ出し、8 秒ごとに続ける。このとき events の応答は `{ "action": "ack" }` で、送信に失敗しても `reply` は返さない（Gateway が重ねて送らないため）。条件を満たさないときは下記の `reply` を返し、Gateway が送る。secret は環境変数に置いて `scripts/deploy.sh` に渡すと `--secrets-file` で反映される（`.github/deploy/*.env.op` の 1Password 参照から `op run` が渡す）。
 
+## LLM の trace（Langfuse）
+
+会話のターン 1 回を Langfuse の trace 1 つにして、oci01 の Langfuse（project `main`）へ送る。`src/langfuse.ts` が OTLP/HTTP の JSON を組み立てて `POST ${LANGFUSE_URL}/api/public/otel/v1/traces` に fetch で送る。OpenTelemetry の SDK は使わず、依存を増やさない。
+
+- root の観測（`turn`、`langfuse.observation.type` は `span`）の input は受けた発言、output は判定（`decision`・`reason`）と返事の本文。
+- LLM の呼び出しは root の下の generation になる。`ModelRouter.withObserver` が provider の呼び出しごとに記録するので、入口の Haiku の判定（`gate_decision`）、返事（`turn_response`）、道具のループの往復（`turn_response.step`）、fallback した呼び出しがそれぞれ 1 つになる。model、入力（system・messages・道具の名前）、出力、token usage（`input`・`output`・`cache_read_input_tokens`・`cache_creation_input_tokens`）、開始と終了の時刻を持つ。失敗した呼び出しは level `ERROR` で、status message にエラーの type を書く。
+- 全 span に `langfuse.environment`（`YUNOMI_ENV`。`development` / `production`）、trace name（`<partner_id>.turn`）、session（`<partner_id>:<channel_id>`）、user（発言者の Discord user id）を付ける。
+- 画像の base64 と thinking の署名は中身を落とし、32,000 文字を超える文字列は切り詰める。
+- 返事を送り終えてから `ctx.waitUntil` で送る。5 秒で打ち切り、失敗・2xx 以外・一部の span の拒否は `console.warn` に残すだけで、ターンの結果は変えない。LLM を呼ばなかったターン（自己発言、bot、まとめて捨てた発言）は送らない。
+- 下の 4 つの secret のどれかが欠けていれば送らない（local とテストは送らない）。
+
+| 設定 | 種類 | 値 |
+| --- | --- | --- |
+| `LANGFUSE_URL` | text | `https://langfuse.chanu.co`（`resources.ts`） |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | secret | Langfuse の project `main` の API キー（Basic 認証）。1Password の `yunomi-worker` / `yunomi-dev-worker` の `langfuse_public_key`・`langfuse_secret_key` |
+| `LANGFUSE_ACCESS_CLIENT_ID` / `LANGFUSE_ACCESS_CLIENT_SECRET` | secret | Langfuse の前に立つ Cloudflare Access の Service Token。ochoko と wol のものとは別。1Password の `cf_access_langfuse_client_id`・`cf_access_langfuse_client_secret` |
+
+4 つの secret は dev・prod とも宣言するので、deploy が必須として検査する。参照は `.github/deploy/*.env.op` に置き、`scripts/deploy.sh` が `--secrets-file` で反映する。
+
 ## 声の添付
 
 返事のテキストを送ったあと、脳が `speak_aloud` を選んでいれば、身体が WAV を同じチャンネルに、その返事への返信として添付する。声はテキストの返事を待たせず、失敗してもテキストは届いている。`VOICE_ENABLED` が `1` で、下の設定と secret が揃い、`CommunicationPort`（Discord REST）があるときだけ動く。揃わないときは声を使わず、脳には「声を出せない」と伝える。使うプリセットは環境が `VOICE_REALIZATION` で選ぶ。プロファイルにない名前は警告を出して default（`yukari`）にする。
