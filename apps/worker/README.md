@@ -47,7 +47,7 @@ token は返事の送信（下記）と添付の読み取りに、そのパー�
 
 ## LLM の trace（Langfuse）
 
-会話のターン 1 回を Langfuse の trace 1 つにして、oci01 の Langfuse（project `main`）へ送る。`src/langfuse.ts` が OTLP/HTTP の JSON を組み立てて `POST ${LANGFUSE_URL}/api/public/otel/v1/traces` に fetch で送る。SDK（`@langfuse/otel`）は OpenTelemetry の SDK 一式を peer に要し、Worker は `nodejs_compat` を持たないので使わない。
+会話のターン 1 回を Langfuse の trace 1 つにして、oci01 の Langfuse（project `main`）へ送る。`src/langfuse.ts` が OTLP/HTTP の JSON を組み立てて `POST ${LANGFUSE_URL}/api/public/otel/v1/traces` に fetch で送る。OpenTelemetry の SDK は使わず、依存を増やさない。
 
 - root の観測（`turn`、`langfuse.observation.type` は `span`）の input は受けた発言、output は判定（`decision`・`reason`）と返事の本文。
 - LLM の呼び出しは root の下の generation になる。`ModelRouter.withObserver` が provider の呼び出しごとに記録するので、入口の Haiku の判定（`gate_decision`）、返事（`turn_response`）、道具のループの往復（`turn_response.step`）、fallback した呼び出しがそれぞれ 1 つになる。model、入力（system・messages・道具の名前）、出力、token usage（`input`・`output`・`cache_read_input_tokens`・`cache_creation_input_tokens`）、開始と終了の時刻を持つ。失敗した呼び出しは level `ERROR` で、status message にエラーの type を書く。
