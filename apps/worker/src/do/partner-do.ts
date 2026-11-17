@@ -44,6 +44,12 @@ import {
 	createInterestOpinionRepo,
 	type InterestOpinionRepo,
 } from "../interest-opinion.ts";
+import {
+	exportTurnTrace,
+	type LangfuseConfig,
+	langfuseConfig,
+	TurnTrace,
+} from "../langfuse.ts";
 import { createMemoryRepo, type MemoryRepo } from "../memory.ts";
 import {
 	createRecaller,
@@ -141,7 +147,7 @@ export class PartnerDO extends DurableObject<Env> {
 	// 同一イベントが処理中に再送されたとき、同じ結果を共有する。
 	readonly #inflight = new Map<string, Promise<HandleResult>>();
 
-	// 以下 8 つはテストが runInDurableObject で差し替える seam。
+	// 以下 9 つはテストが runInDurableObject で差し替える seam。
 	now: () => Date = () => new Date();
 	/** 返事のメッセージの間を待つ。 */
 	sleep: (ms: number) => Promise<void> = (ms) =>
@@ -159,7 +165,9 @@ export class PartnerDO extends DurableObject<Env> {
 	memoryVectors: VectorDeps | null;
 	/** 道具の部品。undefined（prod で secret が揃っていない、dev を含む）ならターンは道具なしで返事を作る。 */
 	capabilities: TurnCapabilities | undefined;
-	pipeline: Pipeline = (msg, onEngaged) =>
+	/** Langfuse の送り先。null（設定が欠けている、local、テスト）なら trace を送らない。 */
+	langfuse: LangfuseConfig | null;
+	pipeline: Pipeline = (msg, onEngaged, observer) =>
 		runTurn(
 			{
 				store: this.#store,
@@ -167,7 +175,10 @@ export class PartnerDO extends DurableObject<Env> {
 				partnerUserId: partnerDiscord(this.env, this.profile.partner_id).userId,
 				otherPartners: otherPartners(this.env, this.profile.partner_id),
 				now: () => this.now(),
-				createRouter: () => this.createRouter(this.env),
+				createRouter: () => {
+					const router = this.createRouter(this.env);
+					return observer ? router.withObserver(observer) : router;
+				},
 				bodyState: async (): Promise<BodyState> =>
 					(await this.#voice()?.bodyState()) ?? "unavailable",
 				entities: this.#entities,
@@ -196,6 +207,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#db = db;
 		this.memoryVectors = vectorDepsFromEnv(env);
 		this.ownerDiscordUserId = env.OWNER_DISCORD_USER_ID;
+		this.langfuse = langfuseConfig(env);
 		// テストが memoryVectors を差し替えられるよう、呼ばれた時点の値を読む。
 		const onIndexChange: IndexChangeListener = (keys) =>
 			vectorSyncListener(db, this.memoryVectors, (t) => this.#background(t))(
@@ -338,7 +350,32 @@ export class PartnerDO extends DurableObject<Env> {
 		}
 	}
 
+	// trace は返事を送り終えてから応答経路の外で送る。送れなくてもターンの結果は変えない。
 	async #runTurn(inbound: InboundMessage): Promise<HandleResult> {
+		const config = this.langfuse;
+		if (!config) return this.#reply(inbound);
+		const trace = new TurnTrace({
+			partnerId: inbound.partnerId,
+			channelId: inbound.channelId,
+			eventId: inbound.eventId,
+			messageId: inbound.messageId,
+			authorId: inbound.author.id,
+			input: {
+				speaker: inbound.author.displayName,
+				modality: inbound.modality,
+				text: inbound.content,
+			},
+			startedAt: Date.now(),
+		});
+		const result = await this.#reply(inbound, trace);
+		this.#background(exportTurnTrace(config, trace, Date.now()));
+		return result;
+	}
+
+	async #reply(
+		inbound: InboundMessage,
+		trace?: TurnTrace,
+	): Promise<HandleResult> {
 		const port = this.createCommunication(this.env);
 		let stopTyping: (() => void) | null = null;
 		const onEngaged = () => {
@@ -348,10 +385,15 @@ export class PartnerDO extends DurableObject<Env> {
 		};
 		let outcome: TurnOutcome;
 		try {
-			outcome = await this.pipeline(inbound, onEngaged);
+			outcome = await this.pipeline(inbound, onEngaged, trace?.observe);
 		} finally {
 			(stopTyping as (() => void) | null)?.();
 		}
+		trace?.setOutput({
+			decision: outcome.audit.decision,
+			reason: outcome.audit.reason,
+			messages: (outcome.partnerMessages ?? []).map((m) => m.content),
+		});
 		if (outcome.response.action !== "reply") return toResult(outcome);
 		if (port) {
 			const sent = await this.#send(port, inbound, outcome);

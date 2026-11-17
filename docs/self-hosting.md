@@ -128,6 +128,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 | `DISCORD_BOT_TOKEN` | `discordSendFromWorker` が `"1"` のとき必須 |
 | `AKARIN_DISCORD_BOT_TOKEN` | Akarin の bot の token。production mode では宣言しているので必須（deploy が検査する）。development では宣言せず、Akarin の返事は Gateway が送る |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
+| `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY`、`LANGFUSE_ACCESS_CLIENT_ID`、`LANGFUSE_ACCESS_CLIENT_SECRET` | LLM の trace を Langfuse に送る。development・production mode では宣言しているので必須（deploy が検査する）。送り先は `resources.ts` の `instance.langfuseUrl`。Langfuse の前に Cloudflare Access が無ければ、Access の 2 つには空でない任意の値を置く |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`HOME_ASSISTANT_URL`、`HOME_ENTITY_IDS`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
 
 ```sh

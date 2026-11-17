@@ -1,4 +1,5 @@
 import type { BodyIntent, BodyState } from "@yunomi/core";
+import type { LLMCallObserver } from "@yunomi/llm";
 import type { GatewayResponse, InboundMessage } from "@yunomi/protocol";
 import type { DecisionReason, TurnAuditData } from "../audit.ts";
 import type { RecentMessage } from "./store.ts";
@@ -16,10 +17,14 @@ export type TurnOutcome = {
 	partnerMessages?: RecentMessage[];
 };
 
-/** onEngaged は、返事に進むと決まった時点で一度だけ呼ばれる。入力中の表示はここから始める。 */
+/**
+ * onEngaged は、返事に進むと決まった時点で一度だけ呼ばれる。入力中の表示はここから始める。
+ * observer はターンの LLM 呼び出しを受け取る（Langfuse の trace）。
+ */
 export type Pipeline = (
 	msg: InboundMessage,
 	onEngaged?: () => void,
+	observer?: LLMCallObserver,
 ) => Promise<TurnOutcome>;
 
 export const inboundSummary = (

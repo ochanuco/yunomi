@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { anthropicContinuation } from "./continuation.ts";
 import { FakeLLMProvider } from "./fake.ts";
 import { defineOutput } from "./json-schema.ts";
-import { ModelRouter } from "./router.ts";
+import { type LLMCallRecord, ModelRouter } from "./router.ts";
 import type { LLMResult, StepResult } from "./types.ts";
 
 const output = defineOutput("o", v.object({ a: v.string() }));
@@ -197,5 +197,49 @@ describe("ModelRouter.step", () => {
 			service: "llm:step-unsupported",
 			retryable: false,
 		});
+	});
+});
+
+describe("ModelRouter.withObserver", () => {
+	it("provider の呼び出しごとに記録し、fallback した呼び出しを区別する", async () => {
+		const fake = new FakeLLMProvider([down(), ok(success("claude-haiku-5-5"))]);
+		const records: LLMCallRecord[] = [];
+		const r = await new ModelRouter({ provider: fake })
+			.withObserver((rec) => records.push(rec))
+			.generate(base);
+		expect(r.ok).toBe(true);
+		expect(
+			records.map((x) => [x.kind, x.model, x.fallback, x.result.ok]),
+		).toEqual([
+			["generate", "claude-sonnet-5-5", false, false],
+			["generate", "claude-haiku-5-5", true, true],
+		]);
+		expect(records[0]?.endedAt).toBeGreaterThanOrEqual(
+			records[0]?.startedAt ?? Number.POSITIVE_INFINITY,
+		);
+	});
+
+	it("呼び出し後に messages が積み足されても、記録は呼んだ時点の並びを持つ", async () => {
+		const fake = new FakeLLMProvider([], [ok(final("claude-sonnet-5-5"))]);
+		const records: LLMCallRecord[] = [];
+		const messages: { role: "user"; content: string }[] = [
+			{ role: "user", content: "a" },
+		];
+		await new ModelRouter({ provider: fake })
+			.withObserver((rec) => records.push(rec))
+			.step({ ...stepBase, messages });
+		messages.push({ role: "user", content: "b" });
+		expect(records[0]?.kind).toBe("step");
+		expect(records[0]?.request.messages).toHaveLength(1);
+	});
+
+	it("observer が投げても呼び出しの結果は変わらない", async () => {
+		const fake = new FakeLLMProvider([ok(success("claude-sonnet-5-5"))]);
+		const r = await new ModelRouter({ provider: fake })
+			.withObserver(() => {
+				throw new Error("boom");
+			})
+			.generate(base);
+		expect(r.ok && r.value.model).toBe("claude-sonnet-5-5");
 	});
 });

@@ -19,6 +19,8 @@ export const instance = {
 	chatsumiUrl: "https://chatsumi.chanu.co",
 	ochokoUrl: "https://ochoko.chanu.co",
 	wolUrl: "https://wol.chanu.co",
+	// LLM の呼び出しの trace の送り先（oci01 の Langfuse）。
+	langfuseUrl: "https://langfuse.chanu.co",
 } as const;
 
 // Access の application ごとの AUD と、service token の common_name -> 呼び出し元。local は dev の application を使う。
