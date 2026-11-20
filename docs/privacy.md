@@ -58,7 +58,7 @@ prod の Snapshot は `ykm snapshot-seed` で dev に復元できる。復元し
 | --- | --- | --- | --- |
 | Worker のログ（Cloudflare） | エラーの種類、イベント ID、チャンネル ID、Discord の user ID、Snapshot の復元の件数。発言の本文は出さない | Cloudflare のログの保持期間 | なし |
 | Gateway のログ（docker01 のコンテナ） | 接続、VC の発話の長さ、エラーの種類、guild とチャンネルの ID。発言の本文は出さない | コンテナのログの設定による | コンテナを作り直す |
-| ochoko・kukicha のログ（GPU 機） | 呼び出し元、文字数、処理時間。本文は出さない | 各サービスの設定による | GPU 機でログを消す |
+| ochoko・kukicha のログ（ochoko-box・GPU 機） | 呼び出し元、文字数、処理時間。本文は出さない | 各サービスの設定による | 各機械でログを消す |
 
 ## 外部の処理先
 
@@ -67,7 +67,7 @@ prod の Snapshot は `ykm snapshot-seed` で dev に復元できる。復元し
 | Anthropic（Claude API） | 人格の本文、チャンネルの直近の発言、覚えている事実と出来事、Working のメモ、気にかけている事柄、人ごとの関係、道具の結果、添付画像 | 返事をするかの判定と、返事の生成 |
 | Workers AI（`@cf/baai/bge-m3`） | 索引に入れる現行の事実、Working のメモ、会話の塊の本文と、索引を引くときの手がかりの文 | 埋め込みの生成 |
 | Vectorize | 埋め込みと、元の行の ID、partner、種類、時刻。本文は送らない | 話題に関係する記憶を探す索引。会話は持ち主と Partner の発言だけを入れる。事実の置き換え・期限、行の削除、会話ログの削除に追従して消える |
-| ochoko（GPU 機） | 声にする返事の本文と声の指定 | 音声合成。合成した音声は Discord に添付する |
+| ochoko（ochoko-box） | 声にする返事の本文と声の指定 | 音声合成。合成した音声は Discord に添付する |
 | kukicha（GPU 機） | VC で持ち主が話した音声 | 文字起こし。登録した持ち主の声以外は捨てる |
 | mizuya の Working | 記憶の口（`docs/working-memory-api.md`）で、依頼した人の事実と出来事、気にかけている事柄、目標、見張り | Working が仕事の依頼に答える。Working は自分のモデルの呼び先にもこれを送る |
 | 道具の呼び先（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant） | 道具の入力（検索語、予定の内容、URL など） | 道具の実行 |
