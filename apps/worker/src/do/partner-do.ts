@@ -95,7 +95,7 @@ import {
 } from "./store.ts";
 import type { TurnCapabilities } from "./tool-loop.ts";
 import { runTurn } from "./turn.ts";
-import { VoiceBody, wakeIfAsleep } from "./voice.ts";
+import { VoiceBody } from "./voice.ts";
 
 const defaultRouter = (env: Env): ModelRouter => {
 	const provider: LLMProvider = env.ANTHROPIC_API_KEY
@@ -535,12 +535,6 @@ export class PartnerDO extends DurableObject<Env> {
 		);
 	}
 
-	/** GPU 機が寝ていれば起こす。応答は待たせない。 */
-	#wakeVoiceOrgan(): void {
-		const organs = this.createVoiceOrgans(this.env);
-		if (organs) this.#background(wakeIfAsleep(organs, this.now()));
-	}
-
 	// 返事のあとに Gateway へ頼む VC の操作。join は著者が VC にいて、まだ別の VC にいないときだけ。
 	// 読み上げるのは送れたメッセージ（delivered）だけ。
 	#voiceDirective(
@@ -556,7 +550,6 @@ export class PartnerDO extends DurableObject<Env> {
 			const target = inbound.authorVoiceChannelId;
 			if (target && (connected === null || connected === target)) {
 				directive.join = { guild_id: inbound.guildId, channel_id: target };
-				this.#wakeVoiceOrgan();
 			}
 		} else if (wants === "leave" && connected !== null) {
 			directive.leave = { guild_id: inbound.guildId };
@@ -577,7 +570,6 @@ export class PartnerDO extends DurableObject<Env> {
 					text,
 					values,
 				}));
-				if (outcome.bodyState === "asleep") this.#wakeVoiceOrgan();
 			}
 		}
 		const voice = withSpeakQueue(directive, queue);
@@ -621,7 +613,6 @@ export class PartnerDO extends DurableObject<Env> {
 		const partnerEmpty = partnerVc !== null && u.humansInPartnerChannel === 0;
 		const follow = await this.#followVerdict(u, partnerVc, partnerEmpty);
 		if (follow.join && u.toChannelId) {
-			this.#wakeVoiceOrgan();
 			return {
 				response: {
 					action: "voice_join",

@@ -48,9 +48,6 @@ const fakeOrgans = (state: { availability: Availability }) => {
 				durationMs: 100,
 			}),
 	);
-	const wake = vi.fn(
-		async (): Promise<Result<void, DomainError>> => ok(undefined),
-	);
 	const organs: VoiceOrgans = {
 		speech: { synthesize },
 		checkAvailability: async (at) => ({
@@ -58,9 +55,8 @@ const fakeOrgans = (state: { availability: Availability }) => {
 			availability: state.availability,
 			checkedAt: at.toISOString(),
 		}),
-		wake,
 	};
-	return { organs, synthesize, wake };
+	return { organs, synthesize };
 };
 
 const install = (
@@ -229,7 +225,7 @@ describe("声の添付", () => {
 		expect(JSON.stringify(fake.requests[0]?.system)).toContain("眠っている");
 	});
 
-	it("寝ていたら起こし、alarm で ready を待って添付する", async () => {
+	it("寝ていると返ってきたら待たせ、alarm で ready を待って添付する", async () => {
 		const s = newScenario();
 		await installFakeLlm([llmOk(speakAloud())]);
 		const port = fakePort();
@@ -240,7 +236,6 @@ describe("声の添付", () => {
 		await send(mention(s));
 
 		expect(port.sendText).toHaveBeenCalledTimes(1);
-		expect(o.wake).toHaveBeenCalledTimes(1);
 		expect(port.sendAttachment).not.toHaveBeenCalled();
 		const alarm = await runInDurableObject(partnerStub(PARTNER_ID), (_o, st) =>
 			st.storage.getAlarm(),

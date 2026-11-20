@@ -2,7 +2,6 @@ import type { AivoiceValues } from "@yunomi/core";
 import { describe, expect, it, vi } from "vitest";
 import { createOchoko } from "../src/ochoko.ts";
 import { composeVoiceOrgans } from "../src/voice-organs.ts";
-import { createWol } from "../src/wol.ts";
 
 const access = { clientId: "id", clientSecret: "secret" };
 
@@ -191,87 +190,21 @@ describe("ochoko health", () => {
 	});
 });
 
-const wol = (fetch: typeof globalThis.fetch) =>
-	createWol({ baseUrl: "https://wol.example", access, fetch });
-
-describe("wol", () => {
-	it.each([
-		["online", "ready"],
-		["waking", "waking"],
-		["sleeping", "asleep"],
-		["going_to_sleep", "asleep"],
-		["offline", "asleep"],
-	])("%s は %s", async (state, expected) => {
-		const fetch = vi.fn(async () => json({ state }));
-		expect(await wol(fetch).status()).toBe(expected);
-		const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-		expect(url).toBe("https://wol.example/status");
-		expect(new Headers(init.headers).get("cf-access-client-secret")).toBe(
-			"secret",
-		);
-	});
-
-	it("読めない応答と失敗は unreachable", async () => {
-		expect(await wol(async () => json({ state: "?" })).status()).toBe(
-			"unreachable",
-		);
-		expect(await wol(async () => json({}, 502)).status()).toBe("unreachable");
-	});
-
-	it("wake は POST /wake で、200 と 202 を成功にする", async () => {
-		for (const status of [200, 202]) {
-			const fetch = vi.fn(async () => new Response("{}", { status }));
-			expect((await wol(fetch).wake()).ok).toBe(true);
-			const [url, init] = fetch.mock.calls[0] as unknown as [
-				string,
-				RequestInit,
-			];
-			expect(url).toBe("https://wol.example/wake");
-			expect(init.method).toBe("POST");
-		}
-	});
-
-	it("wake の失敗を DomainError にする", async () => {
-		const bad = await wol(async () => new Response("", { status: 403 })).wake();
-		if (bad.ok) throw new Error("ok になった");
-		expect(bad.error.type).toBe("PermissionDenied");
-		const down = await wol(
-			async () => new Response("", { status: 502 }),
-		).wake();
-		if (down.ok) throw new Error("ok になった");
-		expect(down.error.type).toBe("ExternalServiceUnavailable");
-	});
-});
-
 describe("composeVoiceOrgans", () => {
-	const compose = (power: string, engine: string) => {
-		const ochokoFetch = vi.fn(async () => json({ status: "ok", engine }));
-		const organs = composeVoiceOrgans({
-			ochoko: ochoko(ochokoFetch),
-			wol: wol(async () => json({ state: power })),
-		});
-		return { organs, ochokoFetch };
-	};
 	const at = new Date("2026-10-11T03:00:00Z");
+	const compose = (engine: string) =>
+		composeVoiceOrgans({
+			ochoko: ochoko(async () => json({ status: "ok", engine })),
+		});
 
-	it("寝ているときは ochoko に聞かない", async () => {
-		const { organs, ochokoFetch } = compose("sleeping", "ready");
-		expect(await organs.checkAvailability(at)).toEqual({
+	it("可用性は ochoko の healthz だけで決める", async () => {
+		expect(await compose("ready").checkAvailability(at)).toEqual({
 			organId: "ochoko",
-			availability: "asleep",
+			availability: "ready",
 			checkedAt: at.toISOString(),
 		});
-		expect(ochokoFetch).not.toHaveBeenCalled();
-	});
-
-	it("online のときだけ ochoko の healthz で決める", async () => {
-		expect(
-			(await compose("online", "ready").organs.checkAvailability(at))
-				.availability,
-		).toBe("ready");
-		expect(
-			(await compose("online", "starting").organs.checkAvailability(at))
-				.availability,
-		).toBe("waking");
+		expect((await compose("starting").checkAvailability(at)).availability).toBe(
+			"waking",
+		);
 	});
 });

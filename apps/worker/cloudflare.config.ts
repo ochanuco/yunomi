@@ -48,13 +48,12 @@ export default defineConfig(({ mode }) => {
 				// それ以外は従来どおり Gateway に reply を返す。
 				DISCORD_SEND_FROM_WORKER: bindings.text(r.discordSendFromWorker),
 				DISCORD_BOT_TOKEN: bindings.secret(),
-				// 声の添付。"1" で、OCHOKO_URL・WOL_URL と下の secret が揃っているときだけ声にする。
+				// 声の添付。"1" で、OCHOKO_URL と下の secret が揃っているときだけ声にする。
 				VOICE_ENABLED: bindings.text(r.voiceEnabled),
 				// 声のプロファイルのうち、この環境が使う A.I.VOICE の実現方法の名前。
 				VOICE_REALIZATION: bindings.text(r.voiceRealization),
 				OCHOKO_URL: bindings.text(instance.ochokoUrl),
-				WOL_URL: bindings.text(instance.wolUrl),
-				// ochoko と wol の Cloudflare Access の Service Token と、ochoko の Bearer token。
+				// ochoko の Cloudflare Access の Service Token と、ochoko の Bearer token。
 				CF_ACCESS_CLIENT_ID: bindings.secret(),
 				CF_ACCESS_CLIENT_SECRET: bindings.secret(),
 				AIVOICE_TOKEN: bindings.secret(),

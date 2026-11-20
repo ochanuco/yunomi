@@ -69,11 +69,11 @@ describe("loadConfig", () => {
 	it("OCHOKO_URL と AIVOICE_TOKEN は任意で、指定するなら両方そろえる", () => {
 		const both = loadConfig({
 			...base,
-			OCHOKO_URL: "http://192.168.10.254:8190/",
+			OCHOKO_URL: "http://192.168.10.253:8190/",
 			AIVOICE_TOKEN: "tok",
 		});
 		expect(both.ok && both.value.ochoko).toEqual({
-			url: "http://192.168.10.254:8190",
+			url: "http://192.168.10.253:8190",
 			token: "tok",
 		});
 		expect(loadConfig({ ...base, OCHOKO_URL: "http://x:1" }).ok).toBe(false);

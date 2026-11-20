@@ -71,9 +71,6 @@ const setup = () => {
 				durationMs: 500,
 			}),
 	);
-	const wake = vi.fn(
-		async (): Promise<Result<void, DomainError>> => ok(undefined),
-	);
 	const checkAvailability = vi.fn(async (at: Date) => ({
 		organId: "ochoko",
 		availability: state.availability,
@@ -82,7 +79,6 @@ const setup = () => {
 	const organs: VoiceOrgans = {
 		speech: { synthesize },
 		checkAvailability,
-		wake,
 	};
 	const sendAttachment = vi.fn(
 		async (): Promise<Result<SentMessage, DomainError>> =>
@@ -110,7 +106,6 @@ const setup = () => {
 		map,
 		state,
 		synthesize,
-		wake,
 		checkAvailability,
 		sendAttachment,
 		hasMessagesAfter,
@@ -147,16 +142,14 @@ describe("VoiceBody.speak", () => {
 			data: new Uint8Array([1, 2, 3]),
 		});
 		expect(t.hasMessagesAfter).toHaveBeenCalledWith("c1", "d-500");
-		expect(t.wake).not.toHaveBeenCalled();
 		expect(t.setAlarm).not.toHaveBeenCalled();
 	});
 
-	it("寝ていたら起こして待たせ、alarm で ready になったら添付する", async () => {
+	it("寝ていると返ってきても、起きかけと同じに待たせ、alarm で ready になったら添付する", async () => {
 		const t = setup();
 		t.state.availability = "asleep";
 		await t.body.speak(job);
 
-		expect(t.wake).toHaveBeenCalledTimes(1);
 		expect(t.sendAttachment).not.toHaveBeenCalled();
 		expect(t.setAlarm).toHaveBeenLastCalledWith(
 			new Date(T0.getTime() + VOICE_POLL_MS),
@@ -182,11 +175,10 @@ describe("VoiceBody.speak", () => {
 		expect(t.setAlarm).toHaveBeenCalledTimes(2);
 	});
 
-	it("起きかけなら wake を重ねず待つ", async () => {
+	it("起きかけなら待つ", async () => {
 		const t = setup();
 		t.state.availability = "waking";
 		await t.body.speak(job);
-		expect(t.wake).not.toHaveBeenCalled();
 		expect(t.map.has("voice:pending:d-500")).toBe(true);
 	});
 
@@ -195,22 +187,9 @@ describe("VoiceBody.speak", () => {
 			const t = setup();
 			t.state.availability = availability;
 			await t.body.speak(job);
-			expect(t.wake).not.toHaveBeenCalled();
 			expect(t.map.has("voice:pending:d-500")).toBe(false);
 			expect(t.sendAttachment).not.toHaveBeenCalled();
 		}
-	});
-
-	it("wake に失敗したら待たずに諦める", async () => {
-		const t = setup();
-		t.state.availability = "asleep";
-		t.wake.mockResolvedValueOnce(
-			err(externalServiceUnavailable({ service: "wol" })),
-		);
-		vi.spyOn(console, "warn").mockImplementation(() => {});
-		await t.body.speak(job);
-		expect(t.map.has("voice:pending:d-500")).toBe(false);
-		expect(await t.body.bodyState()).toBe("unavailable");
 	});
 
 	it("合成が一時的に失敗したら待ちに回して再試行する", async () => {

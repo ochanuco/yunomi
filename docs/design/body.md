@@ -21,7 +21,7 @@ brain  (core)
         │ intent                ▲ body state, perceptions
 body   (core, logic in packages/core)
   turns IR into engine-specific instructions using the character's voice profile
-  coordinates organs (wake, wait, deliver) and keeps body state
+  coordinates organs (wait, deliver) and keeps body state
         │
 organ  (anywhere; e.g. ochoko on the GPU box)
   executes the instructions (text + engine values -> WAV)
@@ -39,7 +39,7 @@ The Partner knows the state of its body and behaves accordingly.
 
 - states: can speak / asleep / waking / unavailable
 - the core derives body state from each organ's availability, however the organ is reached
-- asleep and waking still count as able to speak: when the character chooses to speak, the body wakes the organ and the voice arrives late
+- asleep and waking still count as able to speak: when the character chooses to speak, the body waits for the organ and the voice arrives late
 - example: when the character cannot speak, it replies in text and does not offer to join a VC
 
 ## Scope

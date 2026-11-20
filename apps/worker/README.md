@@ -60,7 +60,7 @@ token は返事の送信（下記）と添付の読み取りに、そのパー�
 | --- | --- | --- |
 | `LANGFUSE_URL` | text | `https://langfuse.chanu.co`（`resources.ts`） |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | secret | Langfuse の project `main` の API キー（Basic 認証）。1Password の `yunomi-worker` / `yunomi-dev-worker` の `langfuse_public_key`・`langfuse_secret_key` |
-| `LANGFUSE_ACCESS_CLIENT_ID` / `LANGFUSE_ACCESS_CLIENT_SECRET` | secret | Langfuse の前に立つ Cloudflare Access の Service Token。ochoko と wol のものとは別。1Password の `cf_access_langfuse_client_id`・`cf_access_langfuse_client_secret` |
+| `LANGFUSE_ACCESS_CLIENT_ID` / `LANGFUSE_ACCESS_CLIENT_SECRET` | secret | Langfuse の前に立つ Cloudflare Access の Service Token。ochoko のものとは別。1Password の `cf_access_langfuse_client_id`・`cf_access_langfuse_client_secret` |
 
 4 つの secret は dev・prod とも宣言するので、deploy が必須として検査する。参照は `.github/deploy/*.env.op` に置き、`scripts/deploy.sh` が `--secrets-file` で反映する。
 
@@ -73,22 +73,13 @@ token は返事の送信（下記）と添付の読み取りに、そのパー�
 | `VOICE_ENABLED` | text | dev・prod `1` / local `0` |
 | `VOICE_REALIZATION` | text | 声のプロファイルのうち使う A.I.VOICE の実現方法の名前。dev `shizuku` / prod・local `yukari` |
 | `OCHOKO_URL` | text | `https://ochoko.chanu.co` |
-| `WOL_URL` | text | `https://wol.chanu.co` |
-| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | secret | ochoko と wol を通る Cloudflare Access の Service Token |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | secret | ochoko を通る Cloudflare Access の Service Token |
 | `AIVOICE_TOKEN` | secret | ochoko の Bearer token |
 
 #### 器官
 
 - `src/ochoko.ts`: `SpeechPort`。`POST ${OCHOKO_URL}/mcp` に MCP の `tools/call` `synthesize` を JSON-RPC で送り、audio の base64 を WAV に戻して `duration_ms` を読む。`GET /healthz` の `engine` を可用性にする（`ready` は ready、`starting` は waking、それ以外は unavailable、応答がなければ unreachable）。Tunnel の 502 は unreachable。
-- `src/wol.ts`: `GET ${WOL_URL}/status` の `state` を可用性にし、`POST /wake` で起こす。
-- `src/voice-organs.ts`: wol を先に見て、`online` のときだけ ochoko の `/healthz` を見る。
-
-| wol の state | 可用性 |
-| --- | --- |
-| `online` | ochoko の `/healthz` で決める |
-| `waking` | waking |
-| `sleeping` / `going_to_sleep` / `offline` | asleep（どれも `POST /wake` で起こせる） |
-| 応答なし・読めない応答 | unreachable |
+- `src/voice-organs.ts`: 可用性は ochoko の `/healthz` で決める。
 
 応答は Valibot で検証し、HTTP のエラーは DomainError にする（401・403・Access の redirect は `PermissionDenied`、429 は `RateLimited`、5xx・通信失敗・ツールのエラーは `ExternalServiceUnavailable`、それ以外は `ValidationFailed`）。
 
@@ -101,7 +92,7 @@ token は返事の送信（下記）と添付の読み取りに、そのパー�
 | 可用性 | 動き |
 | --- | --- |
 | ready | 合成して添付する |
-| asleep | `POST /wake` を呼び、待ちに入れる |
+| asleep | 待ちに入れる（ochoko の `/healthz` は返さないが、waking と同じに扱う） |
 | waking | 待ちに入れる |
 | unavailable / unreachable | 声を諦める |
 
@@ -131,7 +122,7 @@ DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_
 
 脳の出力に `voice_channel`（`join` / `leave` / `stay`）がある。返事を送ったあと、DO は応答（Worker が送信済みなら `ack`、Gateway が送るなら `reply`）に `voice` を載せる。
 
-- `join`: 発言者が VC にいて（`author_voice_channel_id`）、まだどの VC にもいない（または同じ VC にいる）ときだけ `voice.join`。GPU 機が寝ていれば起こす。満たさなければ黙って無視する。
+- `join`: 発言者が VC にいて（`author_voice_channel_id`）、まだどの VC にもいない（または同じ VC にいる）ときだけ `voice.join`。満たさなければ黙って無視する。
 - `leave`: VC に入っているとき `voice.leave`。
 - VC のテキストチャットへの返事: 返事の送信に成功し、身体の状態が `unavailable` でなければ、`speak_aloud` に関わらず `voice.speak`（`channel_id` は VC、`text` は返事、`values` は WAV 添付と同じ `VOICE_REALIZATION` から作る値）を載せ、WAV は添付しない。`unavailable` ならテキストだけ。
 - ほかのチャンネルは従来どおり（`speak_aloud` なら WAV を添付）。

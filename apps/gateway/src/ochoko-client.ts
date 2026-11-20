@@ -74,7 +74,7 @@ const httpError = (status: number): DomainError => {
 	return validationFailed({ issues: [`ochoko ${status}`] });
 };
 
-/** GPU 機が寝ている・起動中のとき（接続不可・タイムアウト・busy・5xx・429）だけ待てば直る。 */
+/** ochoko が一時的に使えないとき（接続不可・タイムアウト・busy・5xx・429）だけ待てば直る。 */
 const isRetryable = (e: DomainError): boolean => e.retryable;
 
 const defaultSleep = (ms: number) =>
@@ -179,7 +179,7 @@ export const createOchokoClient = (opts: OchokoClientOptions): OchokoClient => {
 			return called.ok ? ok(undefined) : called;
 		},
 
-		// Gateway は GPU 機を起こせない（wol は Worker 側）。起きるまで期限つきで待つ
+		// ochoko に一時的につながらないだけなら待てば直るので、期限つきで再試行する
 		async synthesizeWithRetry(request) {
 			const deadline = now() + SYNTHESIZE_DEADLINE_MS;
 			for (let attempt = 1; ; attempt++) {

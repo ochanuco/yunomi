@@ -30,7 +30,7 @@ export type CapabilityEnv = {
 	GITHUB_DEFAULT_REPO?: string;
 	/** web_fetch の呼び先 chatsumi の origin。 */
 	CHATSUMI_URL?: string;
-	/** chatsumi の Cloudflare Access のサービストークン。ochoko と wol のものとは別。 */
+	/** chatsumi の Cloudflare Access のサービストークン。ochoko のものとは別。 */
 	CHATSUMI_ACCESS_CLIENT_ID?: string;
 	CHATSUMI_ACCESS_CLIENT_SECRET?: string;
 	/** home_state の呼び先 Home Assistant の origin。 */
