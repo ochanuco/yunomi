@@ -47,7 +47,6 @@ const readyOrgans = (): VoiceOrgans => ({
 		availability: "ready",
 		checkedAt: at.toISOString(),
 	}),
-	wake: async () => ok(undefined),
 });
 
 const install = (port: CommunicationPort | null, organs: VoiceOrgans | null) =>

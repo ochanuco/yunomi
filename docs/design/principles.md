@@ -20,7 +20,7 @@ Example with two characters, Yukari and Akari:
 |---|---|---|
 | Cloudflare Worker | routes to Yukari's Partner DO | routes to Akari's Partner DO |
 | LLM provider | Yukari's prompts, context, conversation | Akari's prompts, context, conversation |
-| GPU box (`ochoko`, wol) | Yukari's voice preset and realization, body state, keep-awake lease | Akari's voice preset and realization, body state, keep-awake lease |
+| Voice organ host (`ochoko`) | Yukari's voice preset and realization, body state, keep-awake lease | Akari's voice preset and realization, body state, keep-awake lease |
 | Gateway host | Yukari's Discord bot and its relay | Akari's Discord bot and its relay |
 
 - Nothing Yukari says or thinks through the shared LLM provider becomes part of Akari's context or memory, and the reverse.

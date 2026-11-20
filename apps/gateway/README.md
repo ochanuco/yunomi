@@ -20,7 +20,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `YUNOMI_URL` | はい | Worker の URL |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | 本番 | Access service token。どちらか一方だけの指定は起動時エラー |
 | `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
-| `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.254:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
+| `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.253:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
 | `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
@@ -93,7 +93,7 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 ### 声
 
 - 合成は ochoko を直接呼ぶ（`POST {OCHOKO_URL}/mcp`、JSON-RPC `tools/call`、`Authorization: Bearer`。Cloudflare Access は通さない）。リクエストとエラーの分類は `apps/worker/src/ochoko.ts` の `synthesize` と同じ。Worker 側は Access ヘッダー・Workers 型・`SpeechPort` の組み立てと一体なので共通化せず、Gateway 側に最小限を写した。
-- GPU 機が寝ている間は接続エラー・タイムアウト・5xx・429・busy が返る（Gateway は wol を打てず、起こすのは Worker）。再試行できる失敗は 5 秒おきに、発話ごとに 2 分の期限まで試し、超えたら警告ログを出して捨てる。認証エラーや不正な応答は再試行しない。
+- ochoko に一時的につながらないと、接続エラー・タイムアウト・5xx・429・busy が返る。再試行できる失敗は 5 秒おきに、発話ごとに 2 分の期限まで試し、超えたら警告ログを出して捨てる。認証エラーや不正な応答は再試行しない。
 - 発話は VC ごとに 1 本のキューに入れ、1 つの AudioPlayer で順番に再生する。
 - 変換は ffmpeg（`StreamType.Arbitrary`）に WAV を stdin から流し、48kHz ステレオにする。ファイルは作らず、読み取り専用のルートファイルシステムでも動く。WAV のサンプル形式やレートを自前で扱わずに済むため ffmpeg を選んだ（イメージは大きくなる）。
 - VC にいる間、ochoko の `keep_awake`（`ttl_seconds: 900`、`partner_id: yukarin`）を Ready 直後と 5 分ごとに呼ぶ。失敗は警告ログだけで、次の周期で再び試す。切断で止める。

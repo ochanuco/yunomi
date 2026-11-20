@@ -18,7 +18,6 @@ export const instance = {
 	githubDefaultRepo: "ochanuco/yunomi",
 	chatsumiUrl: "https://chatsumi.chanu.co",
 	ochokoUrl: "https://ochoko.chanu.co",
-	wolUrl: "https://wol.chanu.co",
 	// LLM の呼び出しの trace の送り先（oci01 の Langfuse）。
 	langfuseUrl: "https://langfuse.chanu.co",
 } as const;

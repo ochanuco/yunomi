@@ -48,9 +48,6 @@ const fakeOrgans = (state: { availability: Availability }) => {
 				durationMs: 100,
 			}),
 	);
-	const wake = vi.fn(
-		async (): Promise<Result<void, DomainError>> => ok(undefined),
-	);
 	const organs: VoiceOrgans = {
 		speech: { synthesize },
 		checkAvailability: async (at) => ({
@@ -58,9 +55,8 @@ const fakeOrgans = (state: { availability: Availability }) => {
 			availability: state.availability,
 			checkedAt: at.toISOString(),
 		}),
-		wake,
 	};
-	return { organs, synthesize, wake };
+	return { organs, synthesize };
 };
 
 const install = (port: CommunicationPort | null, organs: VoiceOrgans | null) =>
@@ -178,7 +174,6 @@ describe("VC の出入りの判断", () => {
 			guild_id: "g1",
 			channel_id: "vc1",
 		});
-		expect(o.wake).not.toHaveBeenCalled();
 	});
 
 	it("away でもついて行く", async () => {
@@ -188,13 +183,12 @@ describe("VC の出入りの判断", () => {
 		expect((await decide()).action).toBe("voice_join");
 	});
 
-	it("GPU 機が寝ていればついて行きつつ起こす", async () => {
+	it("器官が寝ていると返ってきてもついて行く", async () => {
 		await seedFriend("vu1");
 		const o = fakeOrgans({ availability: "asleep" });
 		await install(fakePort(), o.organs);
 
 		expect((await decide()).action).toBe("voice_join");
-		expect(o.wake).toHaveBeenCalledTimes(1);
 	});
 
 	it("知らない人にはついて行かず、entity も作らない", async () => {
@@ -220,7 +214,6 @@ describe("VC の出入りの判断", () => {
 			"SELECT 1 FROM external_identities WHERE external_id = 'stranger'",
 		).first();
 		expect(identity).toBeNull();
-		expect(o.wake).not.toHaveBeenCalled();
 	});
 
 	it("初対面の段階ならついて行かない", async () => {
@@ -434,7 +427,7 @@ describe("VC のテキストチャットへの返事", () => {
 		expect(port.sendAttachment).not.toHaveBeenCalled();
 	});
 
-	it("GPU 機が寝ていれば起こす", async () => {
+	it("器官が寝ていると返ってきても声を載せる", async () => {
 		const s = newScenario();
 		await report(s.channelId);
 		await installFakeLlm([llmOk(turn())]);
@@ -444,7 +437,6 @@ describe("VC のテキストチャットへの返事", () => {
 		const res = await sendAs(mention(s));
 
 		expect(res.voice?.speak).toBeDefined();
-		expect(o.wake).toHaveBeenCalledTimes(1);
 	});
 
 	it("声が使えなければテキストだけで返す", async () => {
@@ -494,7 +486,7 @@ describe("VC のテキストチャットへの返事", () => {
 });
 
 describe("voice_channel の出力", () => {
-	it("join: 作者が VC にいれば ack に voice.join を載せ、GPU 機を起こす", async () => {
+	it("join: 作者が VC にいれば ack に voice.join を載せる", async () => {
 		const s = newScenario();
 		await installFakeLlm([llmOk(turn({ voice_channel: "join" }))]);
 		const o = fakeOrgans({ availability: "asleep" });
@@ -504,7 +496,6 @@ describe("voice_channel の出力", () => {
 
 		expect(res.action).toBe("ack");
 		expect(res.voice).toEqual({ join: { guild_id: "g1", channel_id: "vc7" } });
-		expect(o.wake).toHaveBeenCalledTimes(1);
 	});
 
 	it("join: 作者が VC にいなければ何もしない", async () => {
@@ -514,7 +505,6 @@ describe("voice_channel の出力", () => {
 		await install(fakePort(), o.organs);
 
 		expect(await sendAs(mention(s))).toEqual({ action: "ack" });
-		expect(o.wake).not.toHaveBeenCalled();
 	});
 
 	it("join: すでに別の VC にいれば何もしない", async () => {

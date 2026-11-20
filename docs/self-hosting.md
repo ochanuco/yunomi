@@ -15,7 +15,7 @@
 | [age](https://github.com/FiloSottile/age) の鍵ペア | Partner Snapshot の暗号化 |
 | Gateway を常時動かせるホスト | Discord Gateway への常時接続（Docker か Node 24） |
 
-音声（ochoko と wol）はなくても動きます。手順では音声を無効にして進めます。
+音声（ochoko）はなくても動きます。手順では音声を無効にして進めます。
 
 ## 1. Cloudflare のリソースを作る
 
@@ -106,7 +106,7 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `accessTeamDomain` | 3 のチームドメイン |
 | `githubDefaultRepo` | `github_read` が repo を省略されたときに読む repo |
 | `chatsumiUrl` | `web_fetch` を使うときだけ |
-| `ochokoUrl` / `wolUrl` | 音声を使うときだけ |
+| `ochokoUrl` | 音声を使うときだけ |
 
 ### デプロイ時の環境変数
 

@@ -135,7 +135,7 @@ The Worker cannot reach the home network directly, so the adapter goes through a
 
 ### GPU box power
 
-- the core wakes the GPU box through wol when the character decides to speak and the box is asleep; wol is reached the same way as the organ
+- the organ runs on an always-on machine, so the core does not wake it; availability comes from the organ's own health endpoint
 - while speaking or in VC, the core renews a keep-awake lease on the organ; the organ holds a Windows power request so the box does not sleep
 - if the box is unreachable, the Partner's body state is not "can speak" and it behaves accordingly (offline policy `fail`)
 
