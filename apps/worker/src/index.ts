@@ -20,7 +20,7 @@ import * as v from "valibot";
 import { handleAdminApi } from "./admin/api.ts";
 import { ADMIN_BASE, serveAdminAsset } from "./admin/static.ts";
 import { purgeExpiredAudit } from "./audit-store.ts";
-import { authenticate, type Principal } from "./auth/access.ts";
+import { authenticate, type Caller, type Principal } from "./auth/access.ts";
 import type { CapabilityEnv } from "./capabilities.ts";
 import { purgeExpiredConversationMessages } from "./conversation-log.ts";
 import { PartnerDO } from "./do/partner-do.ts";
@@ -43,6 +43,11 @@ const DISCORD_EVENTS_PATH = "/v1/interfaces/discord/events";
 const DISCORD_SENT_PATH = /^\/v1\/partners\/([^/]+)\/discord\/sent$/;
 const DISCORD_VOICE_CONNECTION_PATH =
 	/^\/v1\/partners\/([^/]+)\/discord\/voice-connection$/;
+const VOICE_SOCKET_PATH = /^\/v1\/partners\/([^/]+)\/voice\/socket$/;
+
+// VC の口は、relay から yunomi-voice へ移しきるまで両方から受ける。
+const VOICE_CALLERS: readonly Caller[] = ["gateway", "voice"];
+const GATEWAY_ONLY: readonly Caller[] = ["gateway"];
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
@@ -70,6 +75,10 @@ export default {
 				env,
 				decodeURIComponent(connectionPartnerId),
 			);
+		}
+		const socketPartnerId = VOICE_SOCKET_PATH.exec(pathname)?.[1];
+		if (socketPartnerId !== undefined) {
+			return voiceSocket(request, env, decodeURIComponent(socketPartnerId));
 		}
 		const workingPartnerId = WORKING_MEMORY_PATH.exec(pathname)?.[1];
 		if (workingPartnerId !== undefined) {
@@ -145,12 +154,22 @@ const snapshotDaily = async (
 	}
 };
 
-const isGateway = (p: Principal) =>
-	p.kind === "service" && p.caller === "gateway";
+const isCallerIn = (p: Principal, allowed: readonly Caller[]) =>
+	p.kind === "service" && allowed.includes(p.caller);
+
+const forbidden = () => Response.json({ error: "forbidden" }, { status: 403 });
 
 async function discordEvents(request: Request, env: Env): Promise<Response> {
-	const read = await readGatewayJson(request, env);
+	const read = await readServiceJson(request, env, VOICE_CALLERS);
 	if ("response" in read) return read.response;
+	// 発話は VC の口なので voice からも受け、テキストの発言は relay だけから受ける。
+	// 知らない type は発言のスキーマで弾くので、relay だけに絞った側に入れる。
+	if (
+		envelopeType(read.body) !== DISCORD_VOICE_UTTERANCE &&
+		!isCallerIn(read.principal, GATEWAY_ONLY)
+	) {
+		return forbidden();
+	}
 	const event = toDiscordEvent(read.body);
 	if (!event.ok) {
 		return Response.json(
@@ -177,11 +196,13 @@ type DiscordEvent =
 
 // 中身の検証は type ごとのスキーマに任せ、ここでは Envelope の type で振り分け先だけを決める。
 // 知らない type は発言のスキーマで弾かせる。
+const envelopeType = (body: unknown): unknown =>
+	typeof body === "object" && body !== null && "type" in body
+		? body.type
+		: undefined;
+
 const toDiscordEvent = (body: unknown): Result<DiscordEvent, DomainError> => {
-	const type =
-		typeof body === "object" && body !== null && "type" in body
-			? body.type
-			: undefined;
+	const type = envelopeType(body);
 	if (type === DISCORD_VOICE_UTTERANCE) {
 		const heard = toHeardUtterance(body);
 		return heard.ok ? ok({ type, value: heard.value }) : heard;
@@ -192,11 +213,12 @@ const toDiscordEvent = (body: unknown): Result<DiscordEvent, DomainError> => {
 		: inbound;
 };
 
-// Gateway からの POST を受ける経路の共通部分: メソッド・認証・caller・JSON 本文。
-async function readGatewayJson(
+// 常駐部分からの POST を受ける経路の共通部分: メソッド・認証・caller・JSON 本文。
+async function readServiceJson(
 	request: Request,
 	env: Env,
-): Promise<{ body: unknown } | { response: Response }> {
+	allowed: readonly Caller[],
+): Promise<{ body: unknown; principal: Principal } | { response: Response }> {
 	if (request.method !== "POST") {
 		return {
 			response: Response.json({ error: "method_not_allowed" }, { status: 405 }),
@@ -211,13 +233,11 @@ async function readGatewayJson(
 			),
 		};
 	}
-	if (!isGateway(auth.principal)) {
-		return {
-			response: Response.json({ error: "forbidden" }, { status: 403 }),
-		};
+	if (!isCallerIn(auth.principal, allowed)) {
+		return { response: forbidden() };
 	}
 	try {
-		return { body: await request.json() };
+		return { body: await request.json(), principal: auth.principal };
 	} catch {
 		return {
 			response: Response.json({ error: "invalid_json" }, { status: 400 }),
@@ -229,7 +249,7 @@ async function discordVoiceEvents(
 	request: Request,
 	env: Env,
 ): Promise<Response> {
-	const read = await readGatewayJson(request, env);
+	const read = await readServiceJson(request, env, VOICE_CALLERS);
 	if ("response" in read) return read.response;
 	const update = toVoiceStateUpdate(read.body);
 	if (!update.ok) {
@@ -252,7 +272,7 @@ async function discordVoiceConnection(
 	env: Env,
 	partnerId: string,
 ): Promise<Response> {
-	const read = await readGatewayJson(request, env);
+	const read = await readServiceJson(request, env, VOICE_CALLERS);
 	if ("response" in read) return read.response;
 	if (!partnerProfile(partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
@@ -289,9 +309,7 @@ async function discordSent(
 			{ status: auth.failure.status },
 		);
 	}
-	if (!isGateway(auth.principal)) {
-		return Response.json({ error: "forbidden" }, { status: 403 });
-	}
+	if (!isCallerIn(auth.principal, GATEWAY_ONLY)) return forbidden();
 	if (!partnerProfile(partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });
 	}
@@ -318,6 +336,33 @@ async function discordSent(
 	const partner = partnerNamespace(env);
 	const stub = partner.get(partner.idFromName(partnerId));
 	return Response.json(await stub.bindSentMessage(parsed.output));
+}
+
+// yunomi-voice が PartnerDO に張る WebSocket。受け入れは DO が Hibernation API で行う。
+async function voiceSocket(
+	request: Request,
+	env: Env,
+	partnerId: string,
+): Promise<Response> {
+	if (request.method !== "GET") {
+		return Response.json({ error: "method_not_allowed" }, { status: 405 });
+	}
+	const auth = await authenticate(request, accessEnv(env));
+	if (!auth.ok) {
+		return Response.json(
+			{ error: auth.failure.error },
+			{ status: auth.failure.status },
+		);
+	}
+	if (!isCallerIn(auth.principal, ["voice"])) return forbidden();
+	if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+		return Response.json({ error: "upgrade_required" }, { status: 426 });
+	}
+	if (!partnerProfile(partnerId)) {
+		return Response.json({ error: "unknown_partner" }, { status: 404 });
+	}
+	const partner = partnerNamespace(env);
+	return partner.get(partner.idFromName(partnerId)).fetch(request);
 }
 
 async function health(env: Env): Promise<Response> {

@@ -59,6 +59,8 @@ Discord テキスト ⇄ relay（docker01）⇄ Worker
 
 ## Issue 一覧
 
+番号は計画上の ID。GitHub Issue は C01〜C09 が #342〜#350（CNN = #(NN+341)）。
+
 | ID | Epic | タイトル | 依存 | 並行 |
 | --- | --- | --- | --- | --- |
 | C01 | CV1 | `apps/voice` の土台（設定、Discord の client、Worker の client） | - | C05, C06 と並行 |

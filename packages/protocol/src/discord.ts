@@ -317,6 +317,29 @@ export const toVoiceStateUpdate = (
 export const discordVoiceConnectionPathFor = (partnerId: string): string =>
 	`/v1/partners/${encodeURIComponent(partnerId)}/discord/voice-connection`;
 
+/** yunomi-voice が PartnerDO につなぐ WebSocket の口。 */
+export const voiceSocketPathFor = (partnerId: string): string =>
+	`/v1/partners/${encodeURIComponent(partnerId)}/voice/socket`;
+
+export const VOICE_DIRECTIVE = "voice.directive";
+
+/**
+ * PartnerDO → yunomi-voice の WebSocket のメッセージ。
+ * VC のテキストチャットの発言への返事のように、yunomi-voice が呼んでいないターンの声の指示を届ける。
+ */
+export const voiceSocketMessageSchema = v.variant("type", [
+	v.object({
+		type: v.literal(VOICE_DIRECTIVE),
+		partner_id: v.pipe(v.string(), v.nonEmpty()),
+		guild_id: snowflake,
+		// 指示のもとになった発言のチャンネル。VC のテキストチャットなら VC の id と同じになる
+		channel_id: snowflake,
+		voice: voiceDirectiveSchema,
+	}),
+]);
+
+export type VoiceSocketMessage = v.InferOutput<typeof voiceSocketMessageSchema>;
+
 /** Gateway → Yunomi。VC に実際に接続・切断できたあと、いまの接続先を知らせる。起動時は null で送る。 */
 export const discordVoiceConnectionSchema = v.object({
 	guild_id: snowflake,

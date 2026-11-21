@@ -6,7 +6,7 @@ import {
 	jwtVerify,
 } from "jose";
 
-export type Caller = "gateway" | "ykm" | "working";
+export type Caller = "gateway" | "voice" | "ykm" | "working";
 
 export type Principal =
 	| { kind: "owner"; email: string }
@@ -40,7 +40,7 @@ export const accessKeySource = (teamDomain: string): JWTVerifyGetKey => {
 };
 
 const isCaller = (v: string): v is Caller =>
-	v === "gateway" || v === "ykm" || v === "working";
+	v === "gateway" || v === "voice" || v === "ykm" || v === "working";
 
 const fail = (status: 401 | 403, error: string) => ({
 	ok: false as const,
