@@ -99,7 +99,7 @@ describe("YunomiClient.sendUtterance", () => {
 		});
 		await client.sendUtterance(utterance);
 		const h = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
-		expect(h["x-yunomi-dev-caller"]).toBe("gateway");
+		expect(h["x-yunomi-dev-caller"]).toBe("voice");
 		expect(h["CF-Access-Client-Id"]).toBeUndefined();
 	});
 
@@ -198,7 +198,7 @@ describe("YunomiClient.reportVoiceConnection", () => {
 		);
 		expect(JSON.parse(String(init?.body))).toEqual(connection);
 		const h = init?.headers as Record<string, string>;
-		expect(h["x-yunomi-dev-caller"]).toBe("gateway");
+		expect(h["x-yunomi-dev-caller"]).toBe("voice");
 	});
 
 	it("503 は再送し、403 は再送しない", async () => {

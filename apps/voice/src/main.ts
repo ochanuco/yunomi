@@ -12,8 +12,9 @@ import { createKukichaClient } from "./kukicha-client.ts";
 import { createLogger } from "./logger.ts";
 import { createOchokoClient } from "./ochoko-client.ts";
 import { VoiceManager } from "./voice-manager.ts";
+import { startVoiceSocket, type VoiceSocket } from "./voice-socket.ts";
 import { createVoiceStateHandler } from "./voice-state.ts";
-import { YunomiClient } from "./yunomi-client.ts";
+import { callerHeaders, YunomiClient } from "./yunomi-client.ts";
 
 const config = loadConfig(process.env);
 if (!config.ok) {
@@ -108,11 +109,22 @@ const handleVoiceState = createVoiceStateHandler({
 	logger,
 });
 
+let socket: VoiceSocket | null = null;
+let shuttingDown = false;
+
 discord.once(Events.ClientReady, (c) => {
 	logger.info("voice ready", { bot_user_id: c.user.id });
 	logger.debug("voice dependencies", { report: generateDependencyReport() });
 	// 前回の接続先を Worker が覚えたままにしない
 	void voice.reportStartup([...c.guilds.cache.keys()]);
+	if (shuttingDown) return;
+	socket = startVoiceSocket({
+		baseUrl: cfg.yunomiUrl,
+		partnerId: cfg.partnerId,
+		headers: callerHeaders(cfg.access, cfg.devCaller),
+		voice,
+		logger,
+	});
 });
 
 discord.on(Events.VoiceStateUpdate, (oldState, newState) => {
@@ -124,11 +136,11 @@ discord.on(Events.VoiceStateUpdate, (oldState, newState) => {
 	});
 });
 
-let shuttingDown = false;
 const shutdown = async (signal: string) => {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	logger.info("shutting down", { signal });
+	socket?.stop();
 	await voice.shutdown();
 	await discord.destroy();
 	process.exit(0);

@@ -20,6 +20,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `YUNOMI_URL` | はい | Worker の URL |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | 本番 | Access service token。どちらか一方だけの指定は起動時エラー |
 | `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
+| `RELAY_VOICE` | いいえ | `off` で VC を扱わない（既定 `on`）。VC を yunomi-voice（`apps/voice`）が受け持つときに使う。下の「VC」を参照 |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.253:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
@@ -80,6 +81,8 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 `apps/relay/avatars/<emotion>/` に、chagama で作ったストック（chimera で rating=good、タグ `avatar-stock` と `emotion:<name>`）を同梱し、Docker image に入れる。ディレクトリ名は `@yunomi/core` の `performanceEmotions` と同じ。起動時に一覧を作り、貼るたびにディスクから読む。差し替えは画像を入れ替える PR で行う。
 
 ## VC
+
+`RELAY_VOICE=off` のときは、この節の振る舞いをすべて止める。VoiceStateUpdate を受けても Worker に送らず、VoiceManager・耳・聞き取りを作らず、起動時の接続先の報告もしない。Worker の応答に `voice` が載っていても無視し、テキストと表情画像だけを扱う。`OCHOKO_URL` や `KUKICHA_URL` が残っていれば、使わないことを起動時に警告する。
 
 intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別の VC を指示されたら接続を移す（別の guild なら先に切る）。`OWNER_DISCORD_USER_ID` が無ければ耳を閉じて（`selfDeaf`）入る。Discord は耳を閉じた参加者には音声を送らない。
 

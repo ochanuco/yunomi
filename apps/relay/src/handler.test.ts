@@ -273,6 +273,20 @@ describe("createMessageHandler", () => {
 		expect(manager.apply).not.toHaveBeenCalled();
 	});
 
+	it("VoiceManager を持たない（RELAY_VOICE=off）なら voice を無視し、返信だけ送る", async () => {
+		const { channel, handle } = setup(
+			async () =>
+				ok({
+					action: "reply",
+					content: "やあ",
+					voice: { join: { guild_id: "1", channel_id: "vc" } },
+				}),
+			{ voice: undefined },
+		);
+		await handle(message, channel);
+		expect(channel.send).toHaveBeenCalledTimes(1);
+	});
+
 	it("VC の操作が失敗しても返信は送る", async () => {
 		const {
 			channel,

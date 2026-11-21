@@ -27,6 +27,7 @@ const envSchema = v.pipe(
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
 		SEAT_STATUS_URL: v.optional(v.pipe(v.string(), v.url())),
 		SEAT_STATUS_TOKEN: v.optional(nonEmpty),
+		RELAY_VOICE: v.optional(v.picklist(["on", "off"])),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
@@ -57,6 +58,8 @@ export type GatewayConfig = {
 	yunomiUrl: string;
 	access: { clientId: string; clientSecret: string } | null;
 	devCaller: boolean;
+	/** false なら VC を扱わない。VC は yunomi-voice が受け持ち、relay はテキストの中継だけをする。 */
+	voice: boolean;
 	/** 未設定なら声の合成と keep_awake を使わない。 */
 	ochoko: { url: string; token: string } | null;
 	/** 未設定なら聞いた発話を文字にせず、ログに残すだけにする。 */
@@ -109,6 +112,7 @@ export const loadConfig = (
 				? { url: e.KUKICHA_URL.replace(/\/+$/, ""), token: e.KUKICHA_TOKEN }
 				: null,
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
+		voice: e.RELAY_VOICE !== "off",
 		avatarDir: e.AVATAR_DIR ?? null,
 		ownerUserId: e.OWNER_DISCORD_USER_ID ?? null,
 		seatStatus:
@@ -130,8 +134,11 @@ export const loadConfig = (
  * WORK_CATEGORY_IDS は dev のように仕事カテゴリのないサーバーでは空が正しいため、必須にはしない。
  */
 export const configWarnings = (cfg: GatewayConfig): string[] => [
-	...(cfg.kukicha && !cfg.ownerUserId
+	...(cfg.voice && cfg.kukicha && !cfg.ownerUserId
 		? ["KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening"]
+		: []),
+	...(!cfg.voice && (cfg.ochoko || cfg.kukicha)
+		? ["RELAY_VOICE is off; OCHOKO_URL and KUKICHA_URL are ignored"]
 		: []),
 	...(cfg.workCategoryIds.size === 0
 		? [
