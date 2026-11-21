@@ -20,7 +20,7 @@ yunomi の範囲は記憶と人格、Talking（会話・VC・声）。Working（
 - `packages/admin-contract`: `@yunomi/admin-contract`。Admin 読み取り API（`/admin/api/...`）の応答型と Valibot スキーマ。Worker・`ykm`・Admin Web が共有する
 - `apps/cli`: `@yunomi/cli`（bin `ykm`）。Admin API を読む CLI。ビルドせず Node 24 の type stripping で `src/bin.ts` を実行する
 - `apps/admin`: `@yunomi/admin`。Admin Web（Vite + plain DOM）。ビルド成果物は `apps/worker/scripts/embed-admin.ts` で Worker に埋め込み、`/admin/` で配信する
-- `apps/gateway`: Home の Discord Gateway（discord.js、`tsx` で直接実行）
+- `apps/relay`: `@yunomi/relay`（yunomi-relay）。Worker が持てない Discord Gateway への常時接続を Home で持ち、中継だけをする（discord.js、`tsx` で直接実行）
 - `partners/yukarin`: `@yunomi/partner-yukarin`。Yukarin の人格本文とプロファイル。`identity/`・`profile.yaml`・`examples.yaml` は mizuya の Working も読む
 - `evals`: `@yunomi/evals`。persona eval（Tier 1 は `pnpm turbo test`、Tier 2 は `pnpm turbo eval`）
 

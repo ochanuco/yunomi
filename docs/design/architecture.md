@@ -10,7 +10,7 @@ Yunomi is a persistent AI partner runtime. Its core (decisions and state) lives 
                            │  text / presence / VC│
                            └──────────┬────────────┘
                                       │
-                             Home Docker Agent
+                          Home Docker: yunomi-relay
                          (Discord Gateway always-on)
                                       │
                          HTTPS / WebSocket to Cloud
@@ -72,7 +72,7 @@ Home is not a redundancy layer. If Home is down, Discord and other home-dependen
 
 Home runs:
 
-- Discord Gateway Agent
+- yunomi-relay (holds the Discord Gateway connection and relays only)
 - lightweight local MCPs/services
 - LAN integrations
 - relays toward GPU Box organs where an adapter chooses the LAN path (see `principles.md`)

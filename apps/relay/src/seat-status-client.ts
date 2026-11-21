@@ -21,7 +21,7 @@ export type SeatSummary = {
 };
 
 export type SeatStatusClient = {
-	/** この gateway のパートナーの、作業中の席の数と CLI の使用率。 */
+	/** この relay のパートナーの、作業中の席の数と CLI の使用率。 */
 	seatSummary: () => Promise<Result<SeatSummary, DomainError>>;
 };
 

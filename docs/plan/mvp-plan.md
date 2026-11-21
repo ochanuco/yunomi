@@ -34,7 +34,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 
 ### E1. Yukarin が Discord のメッセージを受け取り、返事をするか黙るかを自分で決める
 
-- 技術範囲: Discord event の Envelope と Valibot スキーマ、Home Gateway Agent（Node + discord.js + Docker）、Yunomi の受信 endpoint、Partner DO（チャンネル別 recent context、直列化、dedupe）、Yukarin 静的プロファイル、`LLMProvider` + `ClaudeProvider`（structured output、Prompt Caching、Sonnet→Haiku fallback）、PromptBuilder、reply/ignore のハイブリッド判定。
+- 技術範囲: Discord event の Envelope と Valibot スキーマ、Home の relay（Node + discord.js + Docker）、Yunomi の受信 endpoint、Partner DO（チャンネル別 recent context、直列化、dedupe）、Yukarin 静的プロファイル、`LLMProvider` + `ClaudeProvider`（structured output、Prompt Caching、Sonnet→Haiku fallback）、PromptBuilder、reply/ignore のハイブリッド判定。
 - 非ゴール: 自発発言、DM、添付の中身の解析、チャンネル別ポリシー、Queue、ツール実行。
 - Done: dev サーバーでメンションに対して丁寧語で返事が来る。継続会話はメンションなしでも返事が来る。明らかに返事不要な発言には返事しない。fake LLM を使った E2E テストで reply と ignore の両方が再現する。
 
@@ -58,7 +58,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 
 ### E5. dev と prod が分離され、prod は main へのマージで更新される
 
-- 技術範囲: prod 用の Worker / D1 / DO namespace / Discord bot application / secret、prod deploy workflow（GitHub Environment で保護）、Cloudflare Access（Admin 用 app と Gateway/`ykm` 用 service token）、Home Gateway の Docker 運用。
+- 技術範囲: prod 用の Worker / D1 / DO namespace / Discord bot application / secret、prod deploy workflow（GitHub Environment で保護）、Cloudflare Access（Admin 用 app と relay/`ykm` 用 service token）、Home の relay の Docker 運用。
 - 非ゴール: staging、snapshot による prod→dev seed（Goal 2）、バックアップ。
 - Done: dev と prod が別の D1・別の Discord bot を使う。main へのマージで prod にデプロイされる。前回の記録がない、ロールバック、追加系でない migration を含むときだけ、Environment `production-approval` の承認で止まる。
 
@@ -78,7 +78,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | Y08 | E1 | PromptBuilder と応答スキーマ | Y06, Y07 | - |
 | Y09 | E1 | 受信 endpoint と Partner DO の会話処理（recent context、直列化、dedupe） | Y03, Y05 | Y08 と並行 |
 | Y10 | E1 | reply / ignore のハイブリッド判定と会話パイプラインの結線 | Y08, Y09 | - |
-| Y11 | E1 | Home Discord Gateway Agent | Y05 | Y06〜Y10 と並行 |
+| Y11 | E1 | Home の relay（`yunomi-relay`） | Y05 | Y06〜Y10 と並行 |
 | Y12 | E2 | 最小 Partner State と Relationship（bounded delta、D1 履歴） | Y03, Y10 | Y13 と並行 |
 | Y13 | E2 | Fact memory candidate の保存と Fact への昇格・Prompt 注入 | Y03, Y10 | Y12 と並行 |
 | Y14 | E2 | 会話 E2E シナリオ（reply / ignore / 記憶 / 状態 / fallback / 再起動） | Y12, Y13 | - |
@@ -89,7 +89,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | Y19 | E4 | Yukarin persona 本文 | Y06 | Y07 以降と並行 |
 | Y20 | E4 | persona eval Tier 1（PR）と Tier 2（nightly） | Y08, Y19 | - |
 | Y21 | E5 | prod 環境と prod デプロイ | Y04, I-infra1 | - |
-| Y22 | E5 | Home Gateway の Docker 運用 | Y11 | - |
+| Y22 | E5 | Home の relay の Docker 運用 | Y11 | - |
 
 インフラ側（インフラ側のリポジトリが担当）:
 
@@ -97,7 +97,7 @@ dev の Discord サーバーで Yukarin に話しかけると、Yukarin はチ�
 | --- | --- | --- |
 | I-infra1 | Cloudflare の API token（dev/prod deploy 用）と CI への注入経路（1Password Service Account） | Y04, Y21 |
 | I-infra2 | Worker のカスタムドメイン（例: `yunomi.chanu.co` / `yunomi-dev.chanu.co`）と `workers.dev` 無効化 | Y16, Y11 の本番接続 |
-| I-infra3 | インフラ側の Terraform: Access application（Admin、owner のみ）と service token（Gateway / ykm、dev/prod 別） | Y16, Y17, Y18, Y11 の本番接続 |
+| I-infra3 | インフラ側の Terraform: Access application（Admin、owner のみ）と service token（relay / ykm、dev/prod 別） | Y16, Y17, Y18, Y11 の本番接続 |
 | I-infra4 | Discord bot application（dev / prod）の作成と Message Content Intent の有効化 | Y11 の実機確認 |
 | I-infra5 | Anthropic API key の Worker secret 登録（dev / prod） | Y10 の実機確認 |
 
@@ -144,7 +144,7 @@ graph TD
 
 Y01 → Y03 → Y09 → Y10 → Y12 / Y13 → Y16 → Y17 / Y18
 
-Y02 → Y05・Y07 と Y06 → Y08 は Y03〜Y09 と並行で進められ、Y10 で合流する。Gateway（Y11）は Y05 の後ならいつでも着手でき、Y10 が終わるまでに用意できればデモに間に合う。
+Y02 → Y05・Y07 と Y06 → Y08 は Y03〜Y09 と並行で進められ、Y10 で合流する。relay（Y11）は Y05 の後ならいつでも着手でき、Y10 が終わるまでに用意できればデモに間に合う。
 
 ### 並行して進められる作業
 

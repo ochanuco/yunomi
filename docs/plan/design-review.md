@@ -6,16 +6,16 @@
 
 実装開始前に決める必要があるもの。各項目に推奨案を併記し、この計画では推奨案を採用して進める。
 
-### B1. Home Gateway ↔ Yunomi の転送方式と返信経路
+### B1. Home の relay ↔ Yunomi の転送方式と返信経路
 
 `architecture.md` は「HTTPS / WebSocket」としか書いておらず、返信を誰が Discord に送るかが未定義。
 
 推奨:
 
-- MVP は Gateway → Yunomi の同期 HTTPS リクエスト/レスポンスにする。Gateway は `POST /v1/interfaces/discord/events` を呼び、レスポンスとして `reply`（本文付き）か `ignore` を受け取る。Discord への送信は Gateway が行う。
+- MVP は relay → Yunomi の同期 HTTPS リクエスト/レスポンスにする。relay は `POST /v1/interfaces/discord/events` を呼び、レスポンスとして `reply`（本文付き）か `ignore` を受け取る。Discord への送信は relay が行う。
 - Discord bot token は Home にだけ置く。Worker は token を持たない。
-- LLM 待ちの間、Gateway は typing indicator を出す。Workers の HTTP リクエストは接続中なら wall time 制限がないため、Sonnet の応答待ち（数秒〜数十秒）でも成立する。
-- 自発発言（Phase 2）では Gateway から Yunomi へ outbound WebSocket（Partner DO の Hibernatable WebSocket）を張り、DO から push する。Home が落ちていれば Discord は使えない、という前提（`discord.md`）とも矛盾しない。
+- LLM 待ちの間、relay は typing indicator を出す。Workers の HTTP リクエストは接続中なら wall time 制限がないため、Sonnet の応答待ち（数秒〜数十秒）でも成立する。
+- 自発発言（Phase 2）では relay から Yunomi へ outbound WebSocket（Partner DO の Hibernatable WebSocket）を張り、DO から push する。Home が落ちていれば Discord は使えない、という前提（`discord.md`）とも矛盾しない。
 
 ### B2. Partner DO 内の並行性
 
@@ -76,15 +76,15 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 | # | 対象 | 修正内容 |
 | --- | --- | --- |
 | C1 | Discord Message Content Intent | 非メンションの継続会話を読むには privileged intent が必要。dev/prod 両方の bot application で有効化する（100 サーバー未満なので審査は不要）。 |
-| C2 | 重複受信 | Gateway の再送に備え、`source=discord` + Discord message id で DO 内 dedupe（`events.md` の Dedupe 方針）。 |
-| C3 | 返信長 | Discord の 2000 文字制限に合わせ、structured output の utterance に上限を設けて Gateway 側で分割しない。 |
+| C2 | 重複受信 | relay の再送に備え、`source=discord` + Discord message id で DO 内 dedupe（`events.md` の Dedupe 方針）。 |
+| C3 | 返信長 | Discord の 2000 文字制限に合わせ、structured output の utterance に上限を設けて relay 側で分割しない。 |
 | C4 | 構造化出力の失敗 | スキーマ不一致・パース失敗は `ignore` + `degraded` として Audit に残し、ユーザーには何も送らない。主モデルは dev / prod とも Sonnet で、失敗時は Haiku で 1 回だけ再試行する。 |
 | C5 | Audit の保持期間 | `observability.md` は短期保存とするが期限がない。D1 には TTL がないので、受信本文を含む詳細 Audit は 30 日で Cron が削除する。判断サマリだけの KPI 集計は残す。 |
 | C6 | Queue の導入時期 | 最初の縦切りでは非同期処理がない（memory candidate は同じ structured output から同期で保存できる）。EventBus interface と Envelope は最初に定義し、Cloudflare Queues 実装は最初の非同期 consumer（Goal 2 の memory extraction / summary）で入れる。Audit 書き込みは `ctx.waitUntil` 相当で応答経路から外す。 |
 | C7 | Open Loop | `mvp-scope.md` は MVP で抽出・保存とするが、`CLAUDE_TASK.md` の最初の縦切りと `implementation-plan.md` は Goal 2。structured output のスキーマには `open_loop_updates` を入れ、保存は Goal 2 で行う。 |
 | C8 | 公開リポジトリ | `ochanuco/yunomi` は public。snapshot・prod 由来の seed・会話ログ・eval の実データはリポジトリに置かない。persona の公式設定は要約・言い換えで書き、公式文章の転載はしない。 |
 | C9 | 他ユーザーからの指示注入 | サーバー内の他人の発言が prompt に入る。MVP はツール実行がないため影響は発話内容に限られるが、`tool_intents` は MVP では無視して Audit に記録だけする。 |
-| C10 | Admin / Gateway / ykm の認証 | Admin は Cloudflare Access（owner のみ）。Gateway と `ykm` は Access Service Token。Worker 側でも `Cf-Access-Jwt-Assertion` を検証し、Access を経由しない `workers.dev` 経路は無効化する。Access app と service token はインフラ側のリポジトリの Terraform で作る（他のアプリと同じ分担）。 |
+| C10 | Admin / relay / ykm の認証 | Admin は Cloudflare Access（owner のみ）。relay と `ykm` は Access Service Token。Worker 側でも `Cf-Access-Jwt-Assertion` を検証し、Access を経由しない `workers.dev` 経路は無効化する。Access app と service token はインフラ側のリポジトリの Terraform で作る（他のアプリと同じ分担）。 |
 
 ## 安全に先送りできる決定
 
@@ -100,5 +100,5 @@ MVP Done 条件の「Minimal facts survive restarts」は、候補を保存す�
 
 ## 過剰な抽象化の指摘
 
-- `packages/` の細分化（partner-core / memory / relationship …）は最初からやらない。`repo-layout.md` の「小さく始める」案（`apps/worker`, `apps/admin`, `packages/core`）に `apps/gateway` と `apps/cli` を足した構成で始める。
+- `packages/` の細分化（partner-core / memory / relationship …）は最初からやらない。`repo-layout.md` の「小さく始める」案（`apps/worker`, `apps/admin`, `packages/core`）に `apps/relay` と `apps/cli` を足した構成で始める。
 - `VectorStore` / `BlobStore` interface は使う実装ができるまで作らない。`EventBus` と `LLMProvider` だけ最初から作る（後者は fallback と fake を差し替えるのに既に必要）。

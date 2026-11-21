@@ -135,7 +135,7 @@ const handleVoiceState = createVoiceStateHandler({
 });
 
 discord.once(Events.ClientReady, (c) => {
-	logger.info("gateway ready", { bot_user_id: c.user.id });
+	logger.info("relay ready", { bot_user_id: c.user.id });
 	logger.debug("voice dependencies", { report: generateDependencyReport() });
 	// 前回の接続先を Worker が覚えたままにしない
 	void voice.reportStartup([...c.guilds.cache.keys()]);

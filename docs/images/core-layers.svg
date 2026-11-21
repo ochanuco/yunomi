@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 560" role="img" aria-label="Partner DO の中に心、脳、身体がある。脳は心を読み、変化を提案する。脳は身体に意図を渡し、身体は状態と知覚を返す。脳には思考補助の口があり LLM がつながる。身体には意思疎通、発声、視覚（将来）の口があり、Discord、ochoko、未定の器官につながる。Discord からの受信は Gateway が中継し、gpu-box へは Tunnel と Access を通る">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 560" role="img" aria-label="Partner DO の中に心、脳、身体がある。脳は心を読み、変化を提案する。脳は身体に意図を渡し、身体は状態と知覚を返す。脳には思考補助の口があり LLM がつながる。身体には意思疎通、発声、視覚（将来）の口があり、Discord、ochoko、未定の器官につながる。Discord からの受信は relay が中継し、gpu-box へは Tunnel と Access を通る">
 <style>
 svg {
   --bg: #f4f6f2; --fg: #1d231e; --muted: #5d665e; --line: #c6cdc3; --surface: #ffffff;
@@ -137,7 +137,7 @@ text { font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif; fi
           <text class="lbl" x="215" y="304" text-anchor="middle">送信</text>
 
           <rect class="node" x="30" y="458" width="260" height="72" rx="7"/>
-          <text class="t" x="160" y="484" text-anchor="middle">Gateway</text>
+          <text class="t" x="160" y="484" text-anchor="middle">relay</text>
           <text class="s" x="160" y="504" text-anchor="middle">受信を中継するだけ（常時接続）</text>
           <line class="edge" x1="105" y1="350" x2="105" y2="454" marker-end="url(#c-arrow)"/>
           <text class="lbl" x="113" y="402">受信</text>

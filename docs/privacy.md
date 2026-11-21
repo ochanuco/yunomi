@@ -6,7 +6,7 @@ yunomi は個人用の AI パートナーの実行環境で、このデプロイ
 
 ## 前提
 
-- Gateway は、Discord サーバーのテキストチャンネルの発言を、仕事カテゴリ（`WORK_CATEGORY_IDS`）を除いてすべて Worker に送る。持ち主以外の人の発言も含む。`WORK_CATEGORY_IDS` が未設定だと仕事カテゴリも除外されず、Gateway は起動時に警告を出す。
+- relay は、Discord サーバーのテキストチャンネルの発言を、仕事カテゴリ（`WORK_CATEGORY_IDS`）を除いてすべて Worker に送る。持ち主以外の人の発言も含む。`WORK_CATEGORY_IDS` が未設定だと仕事カテゴリも除外されず、relay は起動時に警告を出す。
 - VC では、持ち主（`OWNER_DISCORD_USER_ID`）の声だけを kukicha で文字にして Worker に送る。文字にした発言は、VC のテキストチャットにも書き込む。
 - 下の表の「削除手段」で D1 への SQL とあるものは、持ち主が Wrangler（`wrangler d1 execute`）で行を消す。`ykm` と Admin API で消せるのは会話ログ（`conversation_messages`）だけである。会話ログを消すと、そこから作った記憶の索引（会話の塊、FTS5、Vectorize）からも消える。
 - D1 や DO から消した行も、消す前に作られた Snapshot には残る。Snapshot は 30 日で消える。
@@ -57,7 +57,7 @@ prod の Snapshot は `ykm snapshot-seed` で dev に復元できる。復元し
 | 保存先 | 内容 | 保持期間 | 削除手段 |
 | --- | --- | --- | --- |
 | Worker のログ（Cloudflare） | エラーの種類、イベント ID、チャンネル ID、Discord の user ID、Snapshot の復元の件数。発言の本文は出さない | Cloudflare のログの保持期間 | なし |
-| Gateway のログ（docker01 のコンテナ） | 接続、VC の発話の長さ、エラーの種類、guild とチャンネルの ID。発言の本文は出さない | コンテナのログの設定による | コンテナを作り直す |
+| relay のログ（docker01 のコンテナ） | 接続、VC の発話の長さ、エラーの種類、guild とチャンネルの ID。発言の本文は出さない | コンテナのログの設定による | コンテナを作り直す |
 | ochoko・kukicha のログ（ochoko-box・GPU 機） | 呼び出し元、文字数、処理時間。本文は出さない | 各サービスの設定による | 各機械でログを消す |
 
 ## 外部の処理先

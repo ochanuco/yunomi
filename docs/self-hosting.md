@@ -10,10 +10,10 @@
 | Node 24、pnpm 10 | ビルドと実行（`mise.toml` で固定） |
 | Cloudflare アカウントと、そのアカウントにあるゾーン | Worker、D1、R2、Access。`workers.dev` は無効にしてあるので、独自ドメインが要る |
 | Cloudflare Zero Trust（Access） | Worker の認証。`/health` 以外のすべての経路で Access の JWT を検証する |
-| Discord の bot | パートナーの体。Gateway と Worker が同じ bot を使う |
+| Discord の bot | パートナーの体。relay と Worker が同じ bot を使う |
 | Anthropic API key | 応答の生成 |
 | [age](https://github.com/FiloSottile/age) の鍵ペア | Partner Snapshot の暗号化 |
-| Gateway を常時動かせるホスト | Discord Gateway への常時接続（Docker か Node 24） |
+| relay を常時動かせるホスト | Discord Gateway への常時接続（Docker か Node 24） |
 
 音声（ochoko）はなくても動きます。手順では音声を無効にして進めます。
 
@@ -63,7 +63,7 @@ Worker は、`/health` 以外へのリクエストに `Cf-Access-Jwt-Assertion` 
    - Service Auth で、次の service token を許可する
    - `/health` を bypass する（`deploy.sh` が認証なしで確認する）
 4. service token を作る
-   - Gateway 用
+   - relay 用
    - `ykm`（CLI）用
    - Working 用（mizuya の Working が記憶を読み書きする。`docs/working-memory-api.md`）
 
@@ -74,7 +74,7 @@ service token の JWT は `common_name`（service token の Client ID）を `ACC
 
 Discord Developer Portal でアプリケーションと bot を作ります。
 
-- Privileged Gateway Intents の Message Content を有効にする（Gateway は `Guilds`、`GuildMessages`、`MessageContent` を使う）
+- Privileged Gateway Intents の Message Content を有効にする（relay は `Guilds`、`GuildMessages`、`MessageContent` を使う）
 - サーバーに招待するときの権限: メッセージの送信、メッセージ履歴の閲覧、ファイルの添付
 - Application ID（bot の user id）と bot token を控える
 
@@ -91,13 +91,13 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `d1Id` | 1 で作った D1 の UUID |
 | `partnerDiscordUserId` | bot の Application ID |
 | `akarinDiscordUserId` | 2 人目のパートナー（Akarin）の bot の Application ID。Akarin を動かさないなら `""` |
-| `discordSendFromWorker` | `"1"` なら Worker が返事を送る（`DISCORD_BOT_TOKEN` が要る）。`"0"` なら Gateway が送る |
+| `discordSendFromWorker` | `"1"` なら Worker が返事を送る（`DISCORD_BOT_TOKEN` が要る）。`"0"` なら relay が送る |
 | `voiceEnabled` | 音声を使わないなら `"0"` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
 | `memoryIndex` | 1 で作った Vectorize index 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
 | `accessAud` | 3 の AUD タグ |
-| `accessCallers` | `{ "<Gateway 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm", "<Working 用 Client ID>": "working" }`。Working を動かさないなら `working` は省く |
+| `accessCallers` | `{ "<relay 用 Client ID>": "gateway", "<ykm 用 Client ID>": "ykm", "<Working 用 Client ID>": "working" }`。Working を動かさないなら `working` は省く |
 
 同じファイルの `instance` は mode によらない値です。
 
@@ -126,7 +126,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 |---|---|
 | `ANTHROPIC_API_KEY` | 必須。ないと応答を生成できない |
 | `DISCORD_BOT_TOKEN` | `discordSendFromWorker` が `"1"` のとき必須 |
-| `AKARIN_DISCORD_BOT_TOKEN` | Akarin の bot の token。production mode では宣言しているので必須（deploy が検査する）。development では宣言せず、Akarin の返事は Gateway が送る |
+| `AKARIN_DISCORD_BOT_TOKEN` | Akarin の bot の token。production mode では宣言しているので必須（deploy が検査する）。development では宣言せず、Akarin の返事は relay が送る |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
 | `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY`、`LANGFUSE_ACCESS_CLIENT_ID`、`LANGFUSE_ACCESS_CLIENT_SECRET` | LLM の trace を Langfuse に送る。development・production mode では宣言しているので必須（deploy が検査する）。送り先は `resources.ts` の `instance.langfuseUrl`。Langfuse の前に Cloudflare Access が無ければ、Access の 2 つには空でない任意の値を置く |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`HOME_ASSISTANT_URL`、`HOME_ENTITY_IDS`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
@@ -146,32 +146,32 @@ scripts/deploy.sh production
 
 止まったときは、Job Summary に出た復元コマンド（`cf d1 time-travel restore <D1 の UUID> --bookmark <bookmark> --force`）で D1 を戻し、Worker を前のコミットにロールバックします。
 
-## 7. Gateway を動かす
+## 7. relay を動かす
 
-Gateway は Discord のメッセージを Worker に中継します。環境変数で設定します。
+relay は Discord のメッセージを Worker に中継します。環境変数で設定します。
 
 | 変数 | 値 |
 |---|---|
 | `DISCORD_TOKEN` | bot token |
 | `YUNOMI_URL` | `https://<host>` |
-| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Gateway 用 service token（2 つともそろえる） |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | relay 用 service token（2 つともそろえる） |
 | `LOG_LEVEL` | 任意 |
 
 ソースから動かす場合:
 
 ```sh
-pnpm --filter @yunomi/gateway start
+pnpm --filter @yunomi/relay start
 ```
 
-Docker で動かす場合は、イメージを自分でビルドします。`apps/gateway/compose.example.yaml` を元に compose を書き、`.env` で変数を渡します。
+Docker で動かす場合は、イメージを自分でビルドします。`apps/relay/compose.example.yaml` を元に compose を書き、`.env` で変数を渡します。
 
 ```sh
-docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # リポジトリルートで実行
+docker build -f apps/relay/Dockerfile -t yunomi-relay .   # リポジトリルートで実行
 ```
 
 bot をメンションして、返事が来れば動いています。
 
-Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、[ochanuco/mizuya](https://github.com/ochanuco/mizuya) の `apps/working/README.md` の「配備」に従います。Working は自分の bot で仕事カテゴリを受け持つので、Gateway には `WORK_CATEGORY_IDS` を足し、仕事カテゴリの発言を Talking に送らないようにします。
+Working（仕事カテゴリの依頼を Claude CLI で作業する）も動かす場合は、[ochanuco/mizuya](https://github.com/ochanuco/mizuya) の `apps/working/README.md` の「配備」に従います。Working は自分の bot で仕事カテゴリを受け持つので、relay には `WORK_CATEGORY_IDS` を足し、仕事カテゴリの発言を Talking に送らないようにします。
 
 ## 8. `ykm` と Admin Web
 
@@ -192,18 +192,18 @@ pnpm --filter @yunomi/worker db:migrate:local
 pnpm --filter @yunomi/worker dev
 ```
 
-`local` mode では Access の代わりに `x-yunomi-dev-caller` ヘッダーで呼び出し元を名乗れます。Gateway は `YUNOMI_DEV_CALLER=1` と `YUNOMI_URL=http://localhost:<port>` でつなぎます。
+`local` mode では Access の代わりに `x-yunomi-dev-caller` ヘッダーで呼び出し元を名乗れます。relay は `YUNOMI_DEV_CALLER=1` と `YUNOMI_URL=http://localhost:<port>` でつなぎます。
 
 ## 作者の環境に依存しているもの
 
 次のものは作者の環境に合わせてあるので、フォークでは削除するか、自分の環境に合わせて書き換えます。
 
 - `.github/workflows/deploy*.yml`、`eval-nightly.yml`: 作者の 1Password と共有 workflow を使う
-- `.github/deploy/*.env.op`、`apps/gateway/*.env.op`: 作者の 1Password の参照
-- `.github/workflows/gateway-image.yml`: 作者の GHCR にイメージを公開する
+- `.github/deploy/*.env.op`、`apps/relay/*.env.op`: 作者の 1Password の参照
+- `.github/workflows/relay-image.yml`: 作者の GHCR にイメージを公開する
 
 ## キャラクターを変える
 
-パートナーは `partners/yukarin` に固定されています（Worker の `src/index.ts` と Gateway の `src/main.ts`）。
+パートナーは `partners/yukarin` に固定されています（Worker の `src/index.ts` と relay の `src/main.ts`）。
 別のキャラクターにするには、`partners/yukarin` の人格本文とプロファイルを書き換えて `pnpm --filter @yunomi/partner-yukarin gen` を実行するのが最も手軽です。
 ゆかりの人格を使う場合は、`partners/yukarin/README.md` の注意書きを確認してください。

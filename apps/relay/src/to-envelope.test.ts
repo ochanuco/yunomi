@@ -48,7 +48,7 @@ describe("toEnvelope", () => {
 		expect(toInboundMessage(r.value).ok).toBe(true);
 	});
 
-	it("もうひとりのパートナーの bot の発言は、is_bot を付けてこの gateway のパートナー宛てに中継する", () => {
+	it("もうひとりのパートナーの bot の発言は、is_bot を付けてこの relay のパートナー宛てに中継する", () => {
 		const r = toEnvelope(
 			msg({ author: { id: "888", bot: true, displayName: "結月ゆかり" } }),
 			{ ...opts, partnerId: "akarin" },

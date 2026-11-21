@@ -8,7 +8,7 @@ import {
 } from "@yunomi/protocol";
 import * as v from "valibot";
 
-/** discord.js の Message のうち Gateway が読む部分だけの構造型。 */
+/** discord.js の Message のうち relay が読む部分だけの構造型。 */
 export type MessageLike = {
 	id: string;
 	guildId: string | null;

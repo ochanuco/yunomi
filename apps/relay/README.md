@@ -1,14 +1,14 @@
-# @yunomi/gateway
+# @yunomi/relay
 
 Home の Docker 上で Discord Gateway に常時接続し、guild のテキストメッセージを Yunomi Worker へ中継して返事を送る。Worker の指示で VC に入り、返事を A.I.VOICE の声で再生する。
 
 ## 実行方法
 
-ビルド工程は持たず、`tsx` で TypeScript を直接実行する（`pnpm --filter @yunomi/gateway start`）。
+ビルド工程は持たず、`tsx` で TypeScript を直接実行する（`pnpm --filter @yunomi/relay start`）。
 
 ```sh
 DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
-  pnpm --filter @yunomi/gateway start
+  pnpm --filter @yunomi/relay start
 ```
 
 ## 環境変数
@@ -23,34 +23,34 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
 | `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | 自宅 LAN の ochoko の URL（例 `http://192.168.10.253:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない（警告ログは 1 回） |
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | STT 器官（kukicha）の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
-| `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/gateway/avatars/` を使う |
+| `AVATAR_DIR` | いいえ | 表情画像のディレクトリ。`<dir>/<emotion>/*.png` の形で置く。未設定なら同梱の `apps/relay/avatars/` を使う |
 | `WORK_CATEGORY_IDS` | いいえ | 仕事カテゴリの Discord カテゴリ ID（カンマ区切り）。この中の発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。未設定ならすべての発言を Worker に送る |
 | `SEAT_STATUS_URL` | いいえ | mizuya の Working の、席の状態を渡す口の URL（例: `http://<docker01>:8191`）。未設定なら作業中の数と使用率を出さない |
 | `SEAT_STATUS_TOKEN` | `SEAT_STATUS_URL` と組 | 席の状態を渡す口と共有するトークン。`Authorization: Bearer` で送る |
-| `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-gateway.heartbeat`） |
+| `HEARTBEAT_FILE` | いいえ | heartbeat の書き込み先（既定 `/tmp/yunomi-relay.heartbeat`） |
 | `LOG_LEVEL` | いいえ | `debug` `info` `warn` `error`（既定 `info`） |
 
-## 2 つ目のパートナーの gateway
+## 2 つ目のパートナーの relay
 
-パートナーごとに Discord の bot を分け、gateway も 1 つずつ動かす。Akarin の gateway は Yukarin のものと同じイメージで、環境変数だけを変える。
+パートナーごとに Discord の bot を分け、relay も 1 つずつ動かす。Akarin の relay は Yukarin のものと同じイメージで、環境変数だけを変える。
 
-| 名前 | Akarin の gateway での値 |
+| 名前 | Akarin の relay での値 |
 | --- | --- |
 | `PARTNER_ID` | `akarin` |
 | `DISCORD_TOKEN` | Akarin の bot の token（Yukarin とは別の bot） |
-| `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の gateway と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
-| `WORK_CATEGORY_IDS` | Yukarin の gateway と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
-| `SEAT_STATUS_URL` / `SEAT_STATUS_TOKEN` | Yukarin の gateway と同じ値。読むのは `PARTNER_ID` の席の分なので、Akarin の bot には Akarin の席（Codex）の数と使用率が出る |
+| `YUNOMI_URL` / `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Yukarin の relay と同じ Worker と Access service token を使える（呼び出し元は `gateway`） |
+| `WORK_CATEGORY_IDS` | Yukarin の relay と同じ値。仕事カテゴリで Akarin が雑談の返事をしないようにする |
+| `SEAT_STATUS_URL` / `SEAT_STATUS_TOKEN` | Yukarin の relay と同じ値。読むのは `PARTNER_ID` の席の分なので、Akarin の bot には Akarin の席（Codex）の数と使用率が出る |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` / `KUKICHA_URL` / `KUKICHA_TOKEN` / `OWNER_DISCORD_USER_ID` | Akarin はまだ声を持たないので渡さない |
 | `HEARTBEAT_FILE` / `LOG_LEVEL` / `AVATAR_DIR` | 必要なら Yukarin と同じように |
 
 Worker 側では、Akarin の bot の user id（`AKARIN_DISCORD_USER_ID`）と token（`AKARIN_DISCORD_BOT_TOKEN`）が要る（`apps/worker/README.md` の「もうひとりのパートナー」）。user id が無いと、Akarin は自分へのメンションを見分けられず、Yukarin も Akarin の発言を第三者の発言として見分けない。
 
-どちらの gateway も、もうひとりの bot の発言を `is_bot=true` で自分のパートナーに中継する。どちらが返事をするかは Worker が決める。
+どちらの relay も、もうひとりの bot の発言を `is_bot=true` で自分のパートナーに中継する。どちらが返事をするかは Worker が決める。
 
 ## サーバーへの招待
 
-bot の権限は、招待 URL の `permissions` でサーバーごとに決まる。VC に入るには「接続」と「発言」が要り、無いと Discord は何も返さずに接続を無視する（Gateway のログには、30 秒後の `voice connection not ready` だけが出る）。招待済みのサーバーでも、同じ URL を開いて承認し直せば、bot のロールの権限が置き換わる。
+bot の権限は、招待 URL の `permissions` でサーバーごとに決まる。VC に入るには「接続」と「発言」が要り、無いと Discord は何も返さずに接続を無視する（relay のログには、30 秒後の `voice connection not ready` だけが出る）。招待済みのサーバーでも、同じ URL を開いて承認し直せば、bot のロールの権限が置き換わる。
 
 | 環境 | 招待 URL |
 | --- | --- |
@@ -77,7 +77,7 @@ bot の権限は、招待 URL の `permissions` でサーバーごとに決ま�
 
 ## 表情画像
 
-`apps/gateway/avatars/<emotion>/` に、chagama で作ったストック（chimera で rating=good、タグ `avatar-stock` と `emotion:<name>`）を同梱し、Docker image に入れる。ディレクトリ名は `@yunomi/core` の `performanceEmotions` と同じ。起動時に一覧を作り、貼るたびにディスクから読む。差し替えは画像を入れ替える PR で行う。
+`apps/relay/avatars/<emotion>/` に、chagama で作ったストック（chimera で rating=good、タグ `avatar-stock` と `emotion:<name>`）を同梱し、Docker image に入れる。ディレクトリ名は `@yunomi/core` の `performanceEmotions` と同じ。起動時に一覧を作り、貼るたびにディスクから読む。差し替えは画像を入れ替える PR で行う。
 
 ## VC
 
@@ -85,14 +85,14 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 
 ### 出入り
 
-- 人の VC 出入り（チャンネルが変わった更新だけ。ミュート切り替えと partner 自身の更新は無視）を `POST /v1/interfaces/discord/voice-events` で Worker に送る。人数は bot を除き、変化後の値。`partner_channel_id` は Gateway が実際に接続している VC。応答の `voice_join` / `voice_leave` / `ignore` に従う。
+- 人の VC 出入り（チャンネルが変わった更新だけ。ミュート切り替えと partner 自身の更新は無視）を `POST /v1/interfaces/discord/voice-events` で Worker に送る。人数は bot を除き、変化後の値。`partner_channel_id` は relay が実際に接続している VC。応答の `voice_join` / `voice_leave` / `ignore` に従う。
 - 応答の `voice`（`reply` と `ack` に載る）は join → speak → leave の順に実行する。`speak` は、その VC に接続中のときだけ受け付け、それ以外は警告ログを出して捨てる。leave は再生待ちの発話を待たずに切る。
 - 接続が Ready になったら `POST /v1/partners/:partnerId/discord/voice-connection` に `{guild_id, channel_id, listening}` を送る。`listening` は、聞いた発話を Worker まで届けられる（`OWNER_DISCORD_USER_ID` と `KUKICHA_URL` がある）ときだけ `true`。切断（自分で出た・追い出された・チャンネル削除・復帰できなかった）では `channel_id: null`・`listening: false` を送る。起動時（ClientReady）は参加している全 guild に `null` を送り、Worker の古い状態を消す。
 - Disconnected は @discordjs/voice の標準の手順で扱う。別の VC への移動（close code 4014）は 5 秒だけ Connecting を待ち、それ以外は 5 秒刻みで最大 5 回 rejoin し、だめなら destroy する。
 
 ### 声
 
-- 合成は ochoko を直接呼ぶ（`POST {OCHOKO_URL}/mcp`、JSON-RPC `tools/call`、`Authorization: Bearer`。Cloudflare Access は通さない）。リクエストとエラーの分類は `apps/worker/src/ochoko.ts` の `synthesize` と同じ。Worker 側は Access ヘッダー・Workers 型・`SpeechPort` の組み立てと一体なので共通化せず、Gateway 側に最小限を写した。
+- 合成は ochoko を直接呼ぶ（`POST {OCHOKO_URL}/mcp`、JSON-RPC `tools/call`、`Authorization: Bearer`。Cloudflare Access は通さない）。リクエストとエラーの分類は `apps/worker/src/ochoko.ts` の `synthesize` と同じ。Worker 側は Access ヘッダー・Workers 型・`SpeechPort` の組み立てと一体なので共通化せず、relay 側に最小限を写した。
 - ochoko に一時的につながらないと、接続エラー・タイムアウト・5xx・429・busy が返る。再試行できる失敗は 5 秒おきに、発話ごとに 2 分の期限まで試し、超えたら警告ログを出して捨てる。認証エラーや不正な応答は再試行しない。
 - 発話は VC ごとに 1 本のキューに入れ、1 つの AudioPlayer で順番に再生する。
 - 変換は ffmpeg（`StreamType.Arbitrary`）に WAV を stdin から流し、48kHz ステレオにする。ファイルは作らず、読み取り専用のルートファイルシステムでも動く。WAV のサンプル形式やレートを自前で扱わずに済むため ffmpeg を選んだ（イメージは大きくなる）。
@@ -128,15 +128,15 @@ intent に `GuildVoiceStates` を使う。同時に入る VC は 1 つで、別�
 
 ## Docker
 
-イメージは `.github/workflows/gateway-image.yml` が main への push で `ghcr.io/ochanuco/yunomi-gateway` に `sha-<short>` と `main` の tag で公開する。PR では build の成否だけを確認する。公開の後、`deploy-dev` job が chabatake の `docker01-app` を dispatch して dev に配置する。prod とあかりは、dev で確かめて Environment `production-approval` で承認すると `deploy` job が配置する（`ochanuco/.github` の `actions/chabatake-dispatch`）。
+イメージは `.github/workflows/relay-image.yml` が main への push で `ghcr.io/ochanuco/yunomi-relay` に `sha-<short>` と `main` の tag で公開する。PR では build の成否だけを確認する。公開の後、`deploy-dev` job が chabatake の `docker01-app` を dispatch して dev に配置する。prod とあかりは、dev で確かめて Environment `production-approval` で承認すると `deploy` job が配置する（`ochanuco/.github` の `actions/chabatake-dispatch`）。
 
 ```sh
-docker build -f apps/gateway/Dockerfile -t yunomi-gateway .   # ビルドコンテキストはリポジトリルート
+docker build -f apps/relay/Dockerfile -t yunomi-relay .   # ビルドコンテキストはリポジトリルート
 ```
 
-- `apps/gateway/compose.example.yaml` に dev / prod の 2 サービス（`yunomi-gateway-dev` / `yunomi-gateway`）を定義している。どちらも `restart: unless-stopped` で、再起動後に自動で再接続する。
-- 環境変数は `.env.dev` / `.env.prod`（commit しない）で渡す。値は 1Password の item `yunomi-gateway-dev`（prod は `yunomi-gateway`）の `discord_shizuku_bot_token`（prod は `discord_yukarin_bot_token`）/ `cf_access_yunomi_client_id` / `cf_access_yunomi_client_secret` と、`yunomi-gateway` の `discord_owner_user_id`。参照の一覧は `dev.env.op` / `production.env.op` で、手元では `op inject -i apps/gateway/dev.env.op -o .env.dev` で作れる。
-  - deploy 用の Service Account が読む `yunomi-dev` / `gh-deploy` vault には置かない。Worker のデプロイに Gateway の secret は要らない。
+- `apps/relay/compose.example.yaml` に dev / prod の 2 サービス（`yunomi-relay-dev` / `yunomi-relay`）を定義している。どちらも `restart: unless-stopped` で、再起動後に自動で再接続する。
+- 環境変数は `.env.dev` / `.env.prod`（commit しない）で渡す。値は 1Password の item `yunomi-relay-dev`（prod は `yunomi-relay`）の `discord_shizuku_bot_token`（prod は `discord_yukarin_bot_token`）/ `cf_access_yunomi_client_id` / `cf_access_yunomi_client_secret` と、`yunomi-relay` の `discord_owner_user_id`。参照の一覧は `dev.env.op` / `production.env.op` で、手元では `op inject -i apps/relay/dev.env.op -o .env.dev` で作れる。
+  - deploy 用の Service Account が読む `yunomi-dev` / `gh-deploy` vault には置かない。Worker のデプロイに relay の secret は要らない。
 - dev と prod は別の Discord bot token、別の `YUNOMI_URL`、別の Access service token を使う。prod は `sha-<short>` の tag に固定し、dev だけ `main` を追う。
 - 実際に動かすホストでの配置（compose ファイルと tag の管理）はこのリポジトリの外で行う。prod の版を上げるときは、配置側の compose の tag を上げる。
 - HEALTHCHECK は heartbeat ファイルの更新時刻を見る。Discord に接続済み（ready）の間だけ 30 秒ごとに更新し、90 秒以上古いと unhealthy になる。

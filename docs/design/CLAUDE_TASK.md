@@ -87,7 +87,7 @@ Produce:
 
 The initial slice should include:
 
-- Discord event reception through Home Gateway Agent
+- Discord event reception through yunomi-relay
 - Cloudflare Yunomi endpoint
 - Partner DO
 - Yukarin static profile

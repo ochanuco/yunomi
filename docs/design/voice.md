@@ -131,7 +131,7 @@ core <-- WAV
 core: delivers the audio through the communication organ (Discord)
 ```
 
-The Worker cannot reach the home network directly, so the adapter goes through a relay: the Gateway on the LAN, or Cloudflare Tunnel + Access. Which one is an adapter choice (`principles.md`); the core does not depend on it.
+The Worker cannot reach the home network directly, so the adapter goes through a relay: yunomi-relay on the LAN, or Cloudflare Tunnel + Access. Which one is an adapter choice (`principles.md`); the core does not depend on it.
 
 ### GPU box power
 
@@ -147,7 +147,7 @@ The Worker cannot reach the home network directly, so the adapter goes through a
 
 ### VC entry
 
-When invited, the character decides whether to join (`voice_channel` in the turn output). The Gateway synthesizes through the organ and plays in the VC; the Worker only returns the instruction (`apps/worker/README.md`).
+When invited, the character decides whether to join (`voice_channel` in the turn output). yunomi-relay synthesizes through the organ and plays in the VC; the Worker only returns the instruction (`apps/worker/README.md`).
 
 ## Performance segmentation
 
