@@ -269,6 +269,43 @@ importers:
         specifier: ^5.0.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  apps/voice:
+    dependencies:
+      '@discordjs/voice':
+        specifier: ^0.19.2
+        version: 0.19.2(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)(opusscript@0.1.1)
+      '@snazzah/davey':
+        specifier: ^0.1.12
+        version: 0.1.12(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)
+      '@yunomi/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@yunomi/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      discord.js:
+        specifier: ^14.26.0
+        version: 14.28.1
+      opusscript:
+        specifier: ^0.1.0
+        version: 0.1.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.23.15
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.6.6
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   apps/worker:
     dependencies:
       '@yunomi/admin-contract':
