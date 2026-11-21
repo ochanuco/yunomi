@@ -53,7 +53,7 @@ Discord テキスト ⇄ relay（docker01）⇄ Worker
 
 ### CV4. 切り替えと relay の片付け
 
-- 技術範囲: yunomi-voice を prod に出し、同時に relay の prod の設定から `OCHOKO_URL`・`AIVOICE_TOKEN`・`KUKICHA_URL`・`KUKICHA_TOKEN` を外す（chabatake）。デモ手順を prod で確かめる。確かめた後、`apps/relay` から VC のコードと依存（`@discordjs/voice`、`opusscript`、`@snazzah/davey`）を消し、Worker の VC の口から `gateway` を外す。
+- 技術範囲: yunomi-voice を prod に出し、同時に relay の prod の設定で `RELAY_VOICE=off` にして relay の VC を止め、`OCHOKO_URL`・`AIVOICE_TOKEN`・`KUKICHA_URL`・`KUKICHA_TOKEN` を外す（chabatake）。デモ手順を prod で確かめる。確かめた後、`apps/relay` から VC のコードと依存（`@discordjs/voice`、`opusscript`、`@snazzah/davey`）を消し、Worker の VC の口から `gateway` を外す。
 - 非ゴール: relay のテキストの経路の変更。
 - Done: デモ手順が prod で通る。relay に VC のコードが残っていない。
 
@@ -73,7 +73,7 @@ Discord テキスト ⇄ relay（docker01）⇄ Worker
 | C08 | CV4 | prod の切り替えと確認 | C02, C04, C05, C07 | - |
 | C09 | CV4 | relay から VC のコードを消す | C08 | - |
 
-C02 と C08 のインフラ側（chabatake の manifest、service token、relay の設定）は、インフラ側の担当者が進める。yunomi-box への Node の導入と、初回の `register.ps1` の実行は持ち主が行う。
+C02 と C08 のインフラ側（chabatake の manifest、service token、relay の `RELAY_VOICE=off` などの設定）は、インフラ側の担当者が進める。yunomi-box への Node の導入と、初回の `register.ps1` の実行は持ち主が行う。
 
 ## 依存グラフ
 

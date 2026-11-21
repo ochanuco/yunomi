@@ -16,6 +16,7 @@ describe("loadConfig", () => {
 				ochoko: null,
 				kukicha: null,
 				devCaller: false,
+				voice: true,
 				avatarDir: null,
 				ownerUserId: null,
 				workCategoryIds: new Set(),
@@ -23,6 +24,14 @@ describe("loadConfig", () => {
 				logLevel: "info",
 			},
 		});
+	});
+
+	it("RELAY_VOICE は off で VC を止め、未設定と on では VC を扱う", () => {
+		const off = loadConfig({ ...base, RELAY_VOICE: "off" });
+		expect(off.ok && off.value.voice).toBe(false);
+		const on = loadConfig({ ...base, RELAY_VOICE: "on" });
+		expect(on.ok && on.value.voice).toBe(true);
+		expect(loadConfig({ ...base, RELAY_VOICE: "no" }).ok).toBe(false);
 	});
 
 	it("PARTNER_ID は名簿の ID だけを受け付ける", () => {
@@ -145,5 +154,18 @@ describe("configWarnings", () => {
 		).toEqual([
 			"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
 		]);
+	});
+
+	it("RELAY_VOICE=off なら、声と耳の設定が使われないことを警告する", () => {
+		expect(
+			configWarnings(
+				load({
+					WORK_CATEGORY_IDS: "1",
+					RELAY_VOICE: "off",
+					KUKICHA_URL: "http://kukicha:8191",
+					KUKICHA_TOKEN: "k",
+				}),
+			),
+		).toEqual(["RELAY_VOICE is off; OCHOKO_URL and KUKICHA_URL are ignored"]);
 	});
 });

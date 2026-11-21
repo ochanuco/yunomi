@@ -51,6 +51,20 @@ const parseRetryAfter = (value: string | null): number | null => {
 	return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
 };
 
+/** Worker に呼び出し元 voice として名乗るヘッダー。HTTP と WebSocket で共通に使う。 */
+export const callerHeaders = (
+	access: { clientId: string; clientSecret: string } | null,
+	devCaller: boolean,
+): Record<string, string> => {
+	if (access) {
+		return {
+			"CF-Access-Client-Id": access.clientId,
+			"CF-Access-Client-Secret": access.clientSecret,
+		};
+	}
+	return devCaller ? { "x-yunomi-dev-caller": "voice" } : {};
+};
+
 export class YunomiClient {
 	readonly #baseUrl: string;
 	readonly #url: string;
@@ -63,14 +77,10 @@ export class YunomiClient {
 	constructor(opts: YunomiClientOptions) {
 		this.#baseUrl = opts.baseUrl.replace(/\/+$/, "");
 		this.#url = `${this.#baseUrl}${EVENTS_PATH}`;
-		this.#headers = { "content-type": "application/json" };
-		if (opts.access) {
-			this.#headers["CF-Access-Client-Id"] = opts.access.clientId;
-			this.#headers["CF-Access-Client-Secret"] = opts.access.clientSecret;
-		} else if (opts.devCaller) {
-			// Worker の dev 用の迂回が受け付ける呼び出し元に voice は無いので、relay と同じ gateway を名乗る
-			this.#headers["x-yunomi-dev-caller"] = "gateway";
-		}
+		this.#headers = {
+			"content-type": "application/json",
+			...callerHeaders(opts.access, opts.devCaller),
+		};
 		this.#timeoutMs = opts.timeoutMs ?? 60_000;
 		this.#fetch = opts.fetch ?? fetch;
 		this.#sleep = opts.sleep ?? defaultSleep;

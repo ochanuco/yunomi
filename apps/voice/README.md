@@ -13,7 +13,7 @@ DISCORD_TOKEN=... YUNOMI_URL=http://localhost:8787 YUNOMI_DEV_CALLER=1 \
   pnpm --filter @yunomi/voice start
 ```
 
-relay も同じ bot で VC の出入りを扱う。両方が同じ bot・同じ Worker で動くと、VC の指示に二重に従うので、同時には動かさない。
+relay も同じ bot で VC の出入りを扱う。両方が同じ bot・同じ Worker で動くと、VC の指示に二重に従う。yunomi-voice を動かすときは、relay を `RELAY_VOICE=off` で動かす。
 
 ## 環境変数
 
@@ -23,7 +23,7 @@ relay も同じ bot で VC の出入りを扱う。両方が同じ bot・同じ 
 | `PARTNER_ID` | いいえ | この bot が受け持つパートナー（`yukarin` / `akarin`）。既定は `yukarin`。名簿にない値は起動時エラー |
 | `YUNOMI_URL` | はい | Worker の URL |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | 本番 | Access service token。どちらか一方だけの指定は起動時エラー |
-| `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: gateway` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
+| `YUNOMI_DEV_CALLER` | いいえ | `1` で `x-yunomi-dev-caller: voice` を送る。Access 未設定時のみ有効で、Worker は localhost でだけ受け付ける |
 | `OCHOKO_URL` / `AIVOICE_TOKEN` | いいえ | ochoko の URL（例 `http://localhost:8190`）と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら VC の出入りは動くが、`speak` は捨て、keep_awake は送らない |
 | `OWNER_DISCORD_USER_ID` | いいえ | VC でこの人の声だけを聞く。未設定なら耳を閉じて入る |
 | `KUKICHA_URL` / `KUKICHA_TOKEN` | いいえ | kukicha の URL と Bearer token。どちらか一方だけの指定は起動時エラー。未設定なら聞いた発話は文字にせず、長さだけをログに残して捨てる |
@@ -36,5 +36,17 @@ VC の出入り、再生、keep_awake、耳の振る舞いは relay の README �
 - 人の VC 出入りを `POST /v1/interfaces/discord/voice-events` に送り、応答の `voice_join` / `voice_leave` に従う。実際の接続先は `POST /v1/partners/:partnerId/discord/voice-connection` に知らせ、起動時は参加している全 guild に `null` を送る。
 - 持ち主の発話は kukicha で文字にし、`discord.voice.utterance` として `POST /v1/interfaces/discord/events` に送る。
 - 応答のうち実行するのは `voice`（join → speak → leave）だけ。テキストと表情画像は Worker が REST で送るので、yunomi-voice は送らない。`reply` が返ってきたときは `voice` だけを実行し、テキストが届かないことを warn ログに残す。
+- VC のテキストチャットに書かれた発言への声の指示は、relay ではなく yunomi-voice に届く（下の「声の指示の WebSocket」）。
 - info 以上のログに token・音声・発話の文字は出さない。
 - SIGTERM / SIGINT で VC と Discord の接続を閉じて終了する。
+
+## 声の指示の WebSocket
+
+ClientReady のあと、`${YUNOMI_URL}/v1/partners/:partnerId/voice/socket`（`https` は `wss` に読み替える）に WebSocket をつなぐ。ヘッダーは HTTP の口と同じで、Access の service token か、ローカル開発では `x-yunomi-dev-caller: voice` を送る。Node の WebSocket が任意のヘッダーを受け付けるので、追加の依存は持たない。Worker 側の受け口は `apps/worker/README.md` の「声の指示の WebSocket」。
+
+- 30 秒ごとに `ping` を送る。PartnerDO は起きずに `pong` を返し、yunomi-voice は `pong` を読み捨てる。
+- 届いたメッセージは `voiceSocketMessageSchema` で検証する。読めないものと、ほかのパートナー宛ての指示は warn ログを残して捨てる。
+- `voice.directive` の `voice` は、HTTP の応答の `voice` と同じに VoiceManager に渡す（join → speak → leave）。接続していない VC への `speak` は VoiceManager が捨てる。
+- close か error で切れたら、つなぎ直す。待ち時間の上限は 1 秒から倍々に 60 秒まで伸ばし、実際の待ち時間は上限の半分から上限のあいだで揺らす。60 秒続いた接続のあとに切れたら、1 秒から数え直す。
+- 切れているあいだに Worker が送れなかった指示は、Worker が relay への応答に載せる。relay を `RELAY_VOICE=off` で動かしていれば、その指示は流れない。
+- SIGTERM / SIGINT では、つなぎ直しをやめてから閉じる。
