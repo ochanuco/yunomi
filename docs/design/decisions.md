@@ -90,9 +90,9 @@ This is a compact decision register.
 
 - decisions and state live only in the Cloudflare core (Worker + Partner DO); see `principles.md`
 - organs only execute and sense, attached through per-faculty interfaces and adapters; location and transport stay inside the adapter
-- relays (Gateway, tunnel) relay only
+- relays (`yunomi-relay`, tunnel) relay only
 - one core (Partner DO) per character; characters share no state
-- organs and relays may be shared physically (GPU box, LLM provider, Gateway host) but are separated logically per character
+- organs and relays may be shared physically (`yunomi-box`, LLM provider, relay host) but are separated logically per character
 - the core has three layers: heart (who the Partner is), brain (perceive, recall, think, decide), body (faculties and organ coordination); see `principles.md`
 - the LLM is an organ attached to the brain; replacing it must not change the heart
 - the heart applies its own rules to changes the brain proposes
@@ -113,16 +113,25 @@ This is a compact decision register.
 ## Organ
 
 - A.I.VOICE organ is `ochanuco/ochoko`: a thin C# MCP server (text + A.I.VOICE values -> WAV), no IR, no character knowledge
-- runs on the GPU box (Windows + COM); `aivoice -> gpu-box`
-- the core reaches it through a relay (the Gateway on the LAN, or Cloudflare Tunnel + Access; an adapter choice); the GPU box is woken via WOL and kept awake by a lease while speaking
+- runs on `yunomi-box`, an always-on Windows machine (COM); `aivoice -> yunomi-box`
+- the core reaches it through a relay (the relay host on the LAN, or Cloudflare Tunnel + Access; an adapter choice)
 - node offline policy for aivoice: `fail`
-- deployed by an external GPU-box app deployer; the organ repo owns no runner
+- deployed by an external Windows app deployer; the organ repo owns no runner
+
+## Conversation organ
+
+- `yunomi-voice` runs next to the speech and hearing organs on `yunomi-box` and carries the audio stream of a conversation
+- it holds reflexes only: stop playback when the user starts speaking (barge-in), detect the end of an utterance, stream speech-to-text and text-to-speech
+- decisions stay in the core: what to say, whether to reply, what to do with a reply that was cut off
+- the audio transport is an adapter; the first one is a Discord voice channel through a voice-only bot, separate from the text bot
+- `yunomi-relay` keeps the Discord text connection the Worker cannot hold and relays only; it does not handle voice
 
 ## Cloud
 
 - Cloudflare first
 - GCP optional expansion
-- Home Docker for always-on gateway/local services
+- Home Docker for the relay (`yunomi-relay`) and local services
+- `yunomi-box` (always-on Windows) for the speech and hearing organs and `yunomi-voice`
 - GPU Box for GPU workloads
 - no HA requirement when Home dies
 
