@@ -1,0 +1,216 @@
+name: voice-release
+run-name: "${{ github.event_name == 'pull_request' && format('voice-release check #{0}', github.event.pull_request.number) || format('voice-release @ {0}', inputs.ref || github.sha) }}"
+
+# yunomi-voice を yunomi-box に出す。main への push で zip を作り、Environment production-approval で持ち主の承認を待ってから
+# Release voice-r<run>-<sha7> を公開し、chabatake の gpu-box-app に版を指定して配備させる（push 型）。
+# PR では zip を作って Windows で起動できるかまで確かめ、公開しない。workflow_dispatch は main 上の古いコミットの出し直し用。
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/voice/**
+      - packages/core/**
+      - packages/protocol/**
+      - pnpm-lock.yaml
+      - .github/workflows/voice-release.yml
+      - .github/scripts/voice-*.sh
+  pull_request:
+    paths:
+      - apps/voice/**
+      - packages/core/**
+      - packages/protocol/**
+      - pnpm-lock.yaml
+      - .github/workflows/voice-release.yml
+      - .github/scripts/voice-*.sh
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 公開する ref(main、または main 上のコミット SHA)
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # native の prebuild（@snazzah/davey、esbuild）を win32-x64 で入れるため Windows で作る
+  build:
+    name: build the release zip
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: version
+        shell: bash
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          if [[ "$EVENT" != pull_request ]]; then
+            git fetch --no-tags origin main
+            if ! git merge-base --is-ancestor "$sha" FETCH_HEAD; then
+              echo "::error::$sha is not a commit on main"
+              exit 1
+            fi
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=voice-r${RUN_NUMBER}-${sha:0:7}" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # yunomi-box に入れる Node と同じ major
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter "@yunomi/voice..."
+
+      # hoisted にして、zip にできないシンボリックリンクとジャンクションを作らせず、パスも短くする
+      - name: stage
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          pnpm --filter @yunomi/voice deploy --prod --legacy --config.node-linker=hoisted stage
+          if ($LASTEXITCODE -ne 0) { throw "pnpm deploy failed" }
+          Copy-Item -Recurse apps/voice/deploy stage/deploy
+          $release = [ordered]@{ version = $env:VERSION; commit = $env:SHA } | ConvertTo-Json
+          [IO.File]::WriteAllText((Join-Path $PWD "stage/release.json"), $release, (New-Object Text.UTF8Encoding $false))
+          $links = @(Get-ChildItem -LiteralPath stage -Recurse -Force -Attributes ReparsePoint)
+          if ($links.Count -gt 0) { $links | ForEach-Object FullName; throw "stage にリンクがある" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $PWD "stage"), (Join-Path $PWD "yunomi-voice-win-x64.zip"))
+
+      # yunomi-box と同じく、Windows PowerShell 5.1 で C:\apps\yunomi-voice\releases\<版> に展開し、フックを読めるか確かめる
+      - name: extract like gpu-box-app
+        shell: powershell
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $dir = "C:\apps\yunomi-voice\releases\$env:VERSION"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD "yunomi-voice-win-x64.zip"), $dir)
+          foreach ($f in Get-ChildItem -LiteralPath "$dir\deploy" -Filter *.ps1) {
+            $bytes = [IO.File]::ReadAllBytes($f.FullName)
+            if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) { throw "$($f.Name) が BOM 付きの UTF-8 でない" }
+            $errors = $null
+            $null = [Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
+            if ($errors) { $errors | Out-Host; throw "$($f.Name) を 5.1 で読めない" }
+          }
+
+      # 依存がすべて読み込めれば、設定がないことだけで終わる
+      - name: smoke
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd "/c/apps/yunomi-voice/releases/$VERSION"
+          node -e "const d = require('@snazzah/davey'); const O = require('opusscript'); new O(48000, 2); console.log('davey', d.DAVE_PROTOCOL_VERSION, 'opusscript ok')"
+          node --import tsx -e "import('@discordjs/voice').then((m) => console.log(m.generateDependencyReport()))"
+          set +e
+          out=$(env -u DISCORD_TOKEN -u YUNOMI_URL node --import tsx src/main.ts 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          [[ $code -eq 1 && "$out" == *"DISCORD_TOKEN"* && "$out" == *"YUNOMI_URL"* ]] || { echo "::error::main.ts did not stop on the missing config (exit $code)"; exit 1; }
+
+      # 置いた設定で prepare.ps1 と run.ps1 を通す。Discord の token は偽物なので、node はログインに失敗して 1 で終わる
+      - name: run the hooks with a dummy config
+        shell: powershell
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $dir = "C:\apps\yunomi-voice\releases\$env:VERSION"
+          $config = "C:\ProgramData\yunomi-voice"
+          New-Item -ItemType Directory -Force -Path $config | Out-Null
+          Set-Content -LiteralPath "$config\config.json" -Encoding UTF8 -Value '{"YUNOMI_URL": "https://yunomi.invalid", "LOG_LEVEL": "debug"}'
+          Set-Content -LiteralPath "$config\tokens.json" -Encoding UTF8 -Value '{"DISCORD_TOKEN": "not-a-real-token"}'
+          function Invoke-Hook([string]$Name) {
+            $p = Start-Process -FilePath powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$dir\deploy\$Name`"" -WorkingDirectory $dir -NoNewWindow -PassThru
+            $null = $p.Handle
+            $p.WaitForExit()
+            $p.ExitCode
+          }
+          if ((Invoke-Hook prepare.ps1) -ne 0) { throw "prepare.ps1 が失敗した" }
+          $code = Invoke-Hook run.ps1
+          $log = Get-ChildItem -LiteralPath "C:\apps\yunomi-voice\data\logs" -Filter *.log | Select-Object -First 1
+          Get-Content -LiteralPath $log.FullName -Encoding UTF8 | Out-Host
+          if ($code -ne 1) { throw "run.ps1 の終了コードが 1 でない: $code" }
+          $text = Get-Content -LiteralPath $log.FullName -Raw -Encoding UTF8
+          if ($text -notmatch "== start yunomi-voice $([regex]::Escape($env:VERSION)) " -or $text -notmatch "== exit yunomi-voice .* code 1 ") { throw "run.ps1 のログの形が違う" }
+          if ($text -match "not-a-real-token") { throw "ログに token が出た" }
+          if ((Invoke-Hook stop.ps1) -ne 0) { throw "stop.ps1 が失敗した" }
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yunomi-voice-zip
+          path: yunomi-voice-win-x64.zip
+          if-no-files-found: error
+
+  # 承認されるまで Release は公開されず、yunomi-box にも届かない
+  approve:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-approval
+    steps:
+      - run: echo approved
+
+  deploy:
+    name: publish the release and deploy it through chabatake
+    needs: [build, approve]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 50
+    permissions:
+      contents: write
+    concurrency:
+      group: gpu-box-yunomi-voice
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.build.outputs.sha }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: yunomi-voice-zip
+
+      - id: release
+        run: bash .github/scripts/voice-publish.sh
+
+      # 許可リスト gpu-box/apps/yunomi-voice.json は pull を持たないので、版はここで渡す
+      - uses: ochanuco/.github/actions/chabatake-dispatch@194995de7425c6457f8d802510787afd02ed9235 # v1.7.0
+        with:
+          workflow: gpu-box-app.yml
+          inputs: '{"app": "yunomi-voice", "action": "deploy", "version": "${{ steps.release.outputs.version }}"}'
+          title: 'gpu-box-app: deploy yunomi-voice ${{ steps.release.outputs.version }}'
+          wait-minutes: "40"
+          cancelled-message: superseded by a later call, did not run
+          op-service-account-token: ${{ secrets.OP_SA_DEPLOY }}
+
+      - run: bash .github/scripts/voice-prune.sh 3
