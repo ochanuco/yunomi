@@ -8,6 +8,8 @@ import {
 	startVoiceSocket,
 } from "./voice-socket.ts";
 
+const BACKOFF_ENOUGH = 120_000;
+
 type Listener = (event: { data: unknown }) => void;
 
 class FakeSocket implements SocketLike {
@@ -205,8 +207,6 @@ describe("startVoiceSocket", () => {
 		expect(sockets).toHaveLength(1);
 	});
 });
-
-const BACKOFF_ENOUGH = 120_000;
 
 describe("backoffMs", () => {
 	it("上限で止まり、揺らぎは上限の後半に収まる", () => {
