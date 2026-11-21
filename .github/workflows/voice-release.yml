@@ -96,6 +96,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $PWD "stage"), (Join-Path $PWD "yunomi-voice-win-x64.zip"))
 
+      # shell: powershell の run は BOM なしで 5.1 に渡り日本語が崩れるので、その中の文言は英語にする
       # yunomi-box と同じく、Windows PowerShell 5.1 で C:\apps\yunomi-voice\releases\<版> に展開し、フックを読めるか確かめる
       - name: extract like gpu-box-app
         shell: powershell
@@ -107,10 +108,10 @@ jobs:
           [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD "yunomi-voice-win-x64.zip"), $dir)
           foreach ($f in Get-ChildItem -LiteralPath "$dir\deploy" -Filter *.ps1) {
             $bytes = [IO.File]::ReadAllBytes($f.FullName)
-            if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) { throw "$($f.Name) が BOM 付きの UTF-8 でない" }
+            if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) { throw "$($f.Name) is not UTF-8 with a BOM" }
             $errors = $null
             $null = [Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
-            if ($errors) { $errors | Out-Host; throw "$($f.Name) を 5.1 で読めない" }
+            if ($errors) { $errors | Out-Host; throw "$($f.Name) does not parse in 5.1" }
           }
 
       # 依存がすべて読み込めれば、設定がないことだけで終わる
@@ -146,15 +147,15 @@ jobs:
             $p.WaitForExit()
             $p.ExitCode
           }
-          if ((Invoke-Hook prepare.ps1) -ne 0) { throw "prepare.ps1 が失敗した" }
+          if ((Invoke-Hook prepare.ps1) -ne 0) { throw "prepare.ps1 failed" }
           $code = Invoke-Hook run.ps1
           $log = Get-ChildItem -LiteralPath "C:\apps\yunomi-voice\data\logs" -Filter *.log | Select-Object -First 1
           Get-Content -LiteralPath $log.FullName -Encoding UTF8 | Out-Host
-          if ($code -ne 1) { throw "run.ps1 の終了コードが 1 でない: $code" }
+          if ($code -ne 1) { throw "run.ps1 exited with $code, not 1" }
           $text = Get-Content -LiteralPath $log.FullName -Raw -Encoding UTF8
-          if ($text -notmatch "== start yunomi-voice $([regex]::Escape($env:VERSION)) " -or $text -notmatch "== exit yunomi-voice .* code 1 ") { throw "run.ps1 のログの形が違う" }
-          if ($text -match "not-a-real-token") { throw "ログに token が出た" }
-          if ((Invoke-Hook stop.ps1) -ne 0) { throw "stop.ps1 が失敗した" }
+          if ($text -notmatch "== start yunomi-voice $([regex]::Escape($env:VERSION)) " -or $text -notmatch "== exit yunomi-voice .* code 1 ") { throw "unexpected run.ps1 log" }
+          if ($text -match "not-a-real-token") { throw "the token appeared in the log" }
+          if ((Invoke-Hook stop.ps1) -ne 0) { throw "stop.ps1 failed" }
 
       - if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
