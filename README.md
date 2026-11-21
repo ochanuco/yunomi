@@ -21,7 +21,7 @@ Working は yunomi の記憶を記憶の口（[docs/working-memory-api.md](docs/
 |---|---|
 | 考える助け | Claude API |
 | 話す | [ochoko](https://github.com/ochanuco/ochoko)（A.I.VOICE） |
-| やりとり | Discord（常時接続は Gateway が持つ） |
+| やりとり | Discord（常時接続は relay が持つ） |
 
 器官がどこで動き、どう届くかはアダプタの中に閉じます。
 器官が使えないときもコアは動き続け、パートナーはそれを身体の状態として受け取ります。
@@ -56,11 +56,11 @@ Working は yunomi の記憶を記憶の口（[docs/working-memory-api.md](docs/
 | パス | 役割 |
 |---|---|
 | `apps/worker` | Cloudflare Worker。パートナーごとの Durable Object、記憶、夜間バッチ、Admin API |
-| `apps/gateway` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る。仕事カテゴリの発言は送らない（mizuya の Working が受け持つ） |
+| `apps/relay` | Discord Gateway に常時接続し、メッセージを Envelope にして Worker へ送る。仕事カテゴリの発言は送らない（mizuya の Working が受け持つ） |
 | `apps/admin` | Admin Web（Vite + plain DOM）。Worker に埋め込んで `/admin/` で配信する |
 | `apps/cli` | `ykm`。Admin API を読む CLI（状態、記憶、KPI、監査ログ、スナップショット） |
 | `packages/core` | ID、`Result` とドメインエラー、Envelope、EventBus、ドメイン型 |
-| `packages/protocol` | Gateway と Worker の間の Discord 向けプロトコル |
+| `packages/protocol` | relay と Worker の間の Discord 向けプロトコル |
 | `packages/conversation` | プロンプト組み立て、発話判定プロンプト、応答スキーマ |
 | `packages/llm` | LLM プロバイダの抽象と Claude 実装 |
 | `packages/admin-contract` | Admin API の応答型と Valibot スキーマ |
@@ -83,7 +83,7 @@ pnpm format                      # Biome で整形
 
 ```sh
 pnpm --filter @yunomi/worker dev    # Worker をローカルで起動
-pnpm --filter @yunomi/gateway start # Gateway を起動
+pnpm --filter @yunomi/relay start # relay を起動
 pnpm --filter @yunomi/cli ykm status
 ```
 
@@ -91,7 +91,7 @@ pnpm --filter @yunomi/cli ykm status
 設定と運用の詳細は各ディレクトリの README にあります。
 
 - [apps/worker/README.md](apps/worker/README.md): Worker の設定、secret、デプロイ
-- [apps/gateway/README.md](apps/gateway/README.md): Gateway の設定と実行
+- [apps/relay/README.md](apps/relay/README.md): relay の設定と実行
 - [apps/cli/README.md](apps/cli/README.md): `ykm` の使い方
 - [apps/admin/README.md](apps/admin/README.md): Admin Web
 - [evals/README.md](evals/README.md): eval の書き方と実行

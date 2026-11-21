@@ -14,7 +14,7 @@ Implement end-to-end:
 
 ```text
 Discord message
-→ Home Discord Gateway Agent
+→ yunomi-relay (Home)
 → Yunomi Cloudflare endpoint
 → Partner DO
 → Yukarin profile load

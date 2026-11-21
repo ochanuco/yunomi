@@ -1,30 +1,30 @@
-name: gateway-image
+name: relay-image
 
 on:
   push:
     branches: [main]
     paths:
-      - apps/gateway/**
+      - apps/relay/**
       - packages/protocol/**
       - packages/core/**
       - pnpm-lock.yaml
       - .dockerignore
-      - .github/workflows/gateway-image.yml
+      - .github/workflows/relay-image.yml
   pull_request:
     paths:
-      - apps/gateway/**
+      - apps/relay/**
       - packages/protocol/**
       - packages/core/**
       - pnpm-lock.yaml
       - .dockerignore
-      - .github/workflows/gateway-image.yml
+      - .github/workflows/relay-image.yml
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: gateway-image-${{ github.ref }}
+  group: relay-image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,7 +41,7 @@ jobs:
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/gateway/Dockerfile
+          file: apps/relay/Dockerfile
           push: false
 
   publish:
@@ -69,11 +69,11 @@ jobs:
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/gateway/Dockerfile
+          file: apps/relay/Dockerfile
           push: true
           tags: |
-            ghcr.io/ochanuco/yunomi-gateway:${{ steps.tags.outputs.sha }}
-            ghcr.io/ochanuco/yunomi-gateway:main
+            ghcr.io/ochanuco/yunomi-relay:${{ steps.tags.outputs.sha }}
+            ghcr.io/ochanuco/yunomi-relay:main
 
   deploy-dev:
     needs: [publish]
@@ -81,14 +81,14 @@ jobs:
     timeout-minutes: 40
     environment: production
     concurrency:
-      group: docker01-yunomi-gateway-dev
+      group: docker01-yunomi-relay-dev
       cancel-in-progress: false
     steps:
       - uses: ochanuco/.github/actions/chabatake-dispatch@194995de7425c6457f8d802510787afd02ed9235 # v1.7.0
         with:
           workflow: docker01-app.yml
-          inputs: '{"service": "yunomi-gateway-dev", "tag": "${{ needs.publish.outputs.tag }}"}'
-          title: 'docker01-app: yunomi-gateway-dev ${{ needs.publish.outputs.tag }}'
+          inputs: '{"service": "yunomi-relay-dev", "tag": "${{ needs.publish.outputs.tag }}"}'
+          title: 'docker01-app: yunomi-relay-dev ${{ needs.publish.outputs.tag }}'
           op-service-account-token: ${{ secrets.OP_SA_DEPLOY }}
 
   # docker01 に出す前に、Environment production-approval で持ち主の承認を待つ。prod とあかりは dev で確かめてから出す
@@ -108,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [yunomi-gateway, yunomi-gateway-akarin]
+        service: [yunomi-relay, yunomi-relay-akarin]
     concurrency:
       group: docker01-${{ matrix.service }}
       cancel-in-progress: false

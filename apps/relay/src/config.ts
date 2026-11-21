@@ -52,7 +52,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type GatewayConfig = {
 	discordToken: string;
-	/** この gateway の bot が受け持つパートナー。 */
+	/** この relay の bot が受け持つパートナー。 */
 	partnerId: PartnerId;
 	yunomiUrl: string;
 	access: { clientId: string; clientSecret: string } | null;

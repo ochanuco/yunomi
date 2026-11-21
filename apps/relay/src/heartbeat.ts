@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 
 export const HEARTBEAT_INTERVAL_MS = 30_000;
-export const DEFAULT_HEARTBEAT_PATH = "/tmp/yunomi-gateway.heartbeat";
+export const DEFAULT_HEARTBEAT_PATH = "/tmp/yunomi-relay.heartbeat";
 
 type HeartbeatOptions = {
 	path: string;
@@ -11,7 +11,7 @@ type HeartbeatOptions = {
 	write?: (path: string, data: string) => void;
 };
 
-// Gateway は HTTP を持たないため、Docker の HEALTHCHECK 用にファイルの更新時刻で生存を示す。
+// relay は HTTP を持たないため、Docker の HEALTHCHECK 用にファイルの更新時刻で生存を示す。
 // 接続が切れている間は書かない（古くなって unhealthy になる）。
 export const startHeartbeat = (options: HeartbeatOptions): (() => void) => {
 	const {

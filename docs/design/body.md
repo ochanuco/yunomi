@@ -27,7 +27,7 @@ organ  (anywhere; e.g. ochoko on the GPU box)
   executes the instructions (text + engine values -> WAV)
 ```
 
-The three core layers are defined in `principles.md`. Relays (the Gateway, a tunnel) may carry instructions and results between the core and an organ. They relay only and do no mapping.
+The three core layers are defined in `principles.md`. Relays (yunomi-relay, a tunnel) may carry instructions and results between the core and an organ. They relay only and do no mapping.
 
 - The LLM does not call TTS as a tool. Speaking is a decision of the core, carried out through the speech organ.
 - The brain never emits engine-specific parameters.

@@ -11,7 +11,7 @@ import type { Logger } from "./logger.ts";
 import type { VoiceManager } from "./voice-manager.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
-/** discord.js の VoiceState のうち Gateway が読む部分だけの構造型。 */
+/** discord.js の VoiceState のうち relay が読む部分だけの構造型。 */
 export type VoiceStateLike = {
 	guildId: string;
 	channelId: string | null;

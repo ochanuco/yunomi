@@ -28,7 +28,7 @@ Done:
 ### Flow
 
 ```text
-Discord Gateway Agent
+yunomi-relay
 → Yunomi HTTP
 → Partner DO
 → Partner Profile
