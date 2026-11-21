@@ -12,6 +12,8 @@ import {
 	toInboundMessage,
 	toVoiceStateUpdate,
 	voiceResponseSchema,
+	voiceSocketMessageSchema,
+	voiceSocketPathFor,
 } from "./discord.ts";
 
 const valid = () => ({
@@ -415,5 +417,30 @@ describe("toInboundMessage modality", () => {
 	it("書かれた発言は text", () => {
 		const r = toInboundMessage(valid());
 		expect(r.ok && r.value.modality).toBe("text");
+	});
+});
+
+describe("voiceSocketMessageSchema", () => {
+	const message = {
+		type: "voice.directive",
+		partner_id: "yukarin",
+		guild_id: "1",
+		channel_id: "2",
+		voice: { leave: { guild_id: "1" } },
+	};
+
+	it("声の指示を受け、知らない type と欠けた channel_id を拒む", () => {
+		expect(v.safeParse(voiceSocketMessageSchema, message).success).toBe(true);
+		expect(
+			v.safeParse(voiceSocketMessageSchema, { ...message, type: "x" }).success,
+		).toBe(false);
+		const { channel_id: _c, ...noChannel } = message;
+		expect(v.safeParse(voiceSocketMessageSchema, noChannel).success).toBe(
+			false,
+		);
+	});
+
+	it("口の path は partner id を符号化する", () => {
+		expect(voiceSocketPathFor("a/b")).toBe("/v1/partners/a%2Fb/voice/socket");
 	});
 });

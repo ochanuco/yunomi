@@ -5,8 +5,8 @@
 - 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）、`--mode local` でローカル専用（`yunomi-local`、ドメインなし）に切り替わる。local は deploy しない。workers.dev と preview URL は無効。
 - `cf dev` / `cf build` の委譲先は `wrangler`（この package の devDependency）。Vite は使わない。
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
-- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `ykm` / `working` に引く。`POST /v1/interfaces/discord/events`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/sent`、`POST /v1/partners/:partnerId/discord/voice-connection` は `gateway` のみ。
-- ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|ykm` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
+- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `voice` / `ykm` / `working` に引く。`POST /v1/interfaces/discord/events` の発言（`discord.message.created`）と `POST /v1/partners/:partnerId/discord/sent` は `gateway` のみ。VC の口（`POST /v1/interfaces/discord/events` の発話 `discord.voice.utterance`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/voice-connection`）は、relay から yunomi-voice へ移しきるまで `gateway` と `voice` の両方から受ける。`GET /v1/partners/:partnerId/voice/socket` は `voice` のみ。
+- ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|voice|ykm|working` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
 - Worker 名・ホスト・D1 database id は `resources.ts` に集約し、`cloudflare.config.ts` と `scripts/deploy.sh` が読む。`cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
 ## 型
@@ -104,7 +104,7 @@ reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の 
 
 ## VC
 
-Worker から Gateway への押し出しは無く、Gateway が送って応答を受け取る。合成と再生は Gateway が担い、Worker は判断と指示だけを返す。
+Worker から Gateway への押し出しは無く、Gateway が送って応答を受け取る。合成と再生は Gateway が担い、Worker は判断と指示だけを返す。yunomi-voice への押し出しは下の「声の指示の WebSocket」を使う。
 
 #### 状態
 
@@ -149,6 +149,22 @@ Gateway が VC で聞き取った発話を、発言と同じ `POST /v1/interface
 ```
 
 古い Gateway は `voice` を無視する。
+
+#### 声の指示の WebSocket（`GET /v1/partners/:partnerId/voice/socket`）
+
+yunomi-voice（呼び出し元 `voice`）が PartnerDO につなぐ。Worker は認証と `Upgrade: websocket` を確かめて（`voice` 以外は 403、Upgrade なしは 426）、そのパートナーの DO に回す。DO は Hibernation API（`acceptWebSocket`、タグ `voice`）で受け、`ping` には `setWebSocketAutoResponse` で `pong` を返すので、つないだまま待つあいだ DO は起きない。つなぎ直すと古い接続は閉じ、開いているのは 1 本だけになる。
+
+テキストの発言（`discord.message.created`）のターンで `voice` ができたとき、socket が開いていればそこへ次のメッセージ（`voiceSocketMessageSchema`）を送り、relay への応答から `voice` を外す。1 本も送れなければ応答に載せる。保存する応答も外したあとのものなので、再送で同じ指示は繰り返さない。聞いた発話と `voice-events` は今までどおり応答で返す。
+
+```json
+{
+  "type": "voice.directive",
+  "partner_id": "yukarin",
+  "guild_id": "1",
+  "channel_id": "7",
+  "voice": { "speak": { "channel_id": "7", "text": "おはよう", "values": { "engine": "aivoice", "preset": "..." } } }
+}
+```
 
 ## State / Relationship
 

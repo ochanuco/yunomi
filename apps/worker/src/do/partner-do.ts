@@ -25,8 +25,10 @@ import {
 	type InboundMessage,
 	replyMessagesOf,
 	type SpeakDirective,
+	VOICE_DIRECTIVE,
 	type VoiceDirective,
 	type VoiceResponse,
+	type VoiceSocketMessage,
 	type VoiceStateUpdate,
 	withSpeakQueue,
 } from "@yunomi/protocol";
@@ -112,6 +114,9 @@ export type HandleResult = StoredResult;
 // 応答が遅いときだけ入力中を出す。前段ルールですぐ決まる ignore のたびには出さない。
 export const TYPING_DELAY_MS = 1500;
 export const TYPING_INTERVAL_MS = 8000;
+
+/** yunomi-voice の WebSocket に付ける Hibernation API のタグ。 */
+export const VOICE_SOCKET_TAG = "voice";
 
 // 返事の送信を Worker が担うのは、フラグとそのパートナーの bot の token が揃っているときだけ。揃わなければ Gateway に reply を返す。
 const defaultCommunication = (
@@ -199,8 +204,16 @@ export class PartnerDO extends DurableObject<Env> {
 			msg,
 		);
 
+	/** 声の指示を送る yunomi-voice の WebSocket。テストが送信に失敗する socket を差し込む seam。 */
+	voiceSockets: () => WebSocket[] = () =>
+		this.ctx.getWebSockets(VOICE_SOCKET_TAG);
+
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
+		// 生存確認に runtime が答えるので、つないだまま待つあいだ DO は起きない。
+		ctx.setWebSocketAutoResponse(
+			new WebSocketRequestResponsePair("ping", "pong"),
+		);
 		this.profile = partnerProfile(ctx.id.name ?? "") ?? defaultPartnerProfile;
 		this.#store = new DoStore(ctx.storage.sql);
 		const db = drizzle(env.DB);
@@ -302,7 +315,75 @@ export class PartnerDO extends DurableObject<Env> {
 
 	handleDiscordMessage(inbound: InboundMessage): Promise<HandleResult> {
 		const key = dedupeKey(inbound);
-		return this.#once(key, () => this.#process(inbound, key));
+		return this.#once(key, () =>
+			this.#process(inbound, key, undefined, (r) =>
+				this.#pushVoice(inbound, r),
+			),
+		);
+	}
+
+	/** Worker が認証と Upgrade を確かめたあとに回してくる、yunomi-voice の WebSocket。 */
+	async fetch(request: Request): Promise<Response> {
+		if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+			return Response.json({ error: "upgrade_required" }, { status: 426 });
+		}
+		// つなぎ直しで古い接続が残ると同じ声を二度流すので、新しい 1 本だけを残す。
+		for (const old of this.ctx.getWebSockets(VOICE_SOCKET_TAG)) {
+			try {
+				old.close(1000, "replaced");
+			} catch (e) {
+				console.warn("voice socket close failed", e);
+			}
+		}
+		const { 0: client, 1: server } = new WebSocketPair();
+		this.ctx.acceptWebSocket(server, [VOICE_SOCKET_TAG]);
+		return new Response(null, { status: 101, webSocket: client });
+	}
+
+	// yunomi-voice から送るものはまだ無い。生存確認の ping は auto response が答えるのでここに来ない。
+	webSocketMessage(_ws: WebSocket, message: string | ArrayBuffer): void {
+		console.warn("unexpected voice socket message", {
+			length: typeof message === "string" ? message.length : message.byteLength,
+		});
+	}
+
+	webSocketClose(ws: WebSocket, code: number, reason: string): void {
+		// 1005 / 1006 のように送り返せない code もあるので、閉じられなくても構わない。
+		try {
+			ws.close(code, reason);
+		} catch {}
+	}
+
+	webSocketError(_ws: WebSocket, error: unknown): void {
+		console.error("voice socket error", error);
+	}
+
+	// テキストの発言のターンの声の指示は、yunomi-voice がつながっていればそこへ送り、relay への応答から外す。
+	// 1 本も送れなければ、今までどおり応答に載せる。
+	#pushVoice(inbound: InboundMessage, result: HandleResult): HandleResult {
+		if ((result.action !== "ack" && result.action !== "reply") || !result.voice)
+			return result;
+		const message: VoiceSocketMessage = {
+			type: VOICE_DIRECTIVE,
+			partner_id: inbound.partnerId,
+			guild_id: inbound.guildId,
+			channel_id: inbound.channelId,
+			voice: result.voice,
+		};
+		const data = JSON.stringify(message);
+		let pushed = false;
+		for (const ws of this.voiceSockets()) {
+			if (ws.readyState !== WebSocket.READY_STATE_OPEN) continue;
+			try {
+				ws.send(data);
+				pushed = true;
+			} catch (e) {
+				console.error("voice socket send failed", e);
+			}
+		}
+		if (!pushed) return result;
+		const { voice: _voice, ...rest } = result;
+		return rest;
 	}
 
 	/** VC で聞いた発話。聞き取った文字をチャットに書いてから、発言としてターンに乗せる。 */
@@ -748,19 +829,23 @@ export class PartnerDO extends DurableObject<Env> {
 		inbound: InboundMessage,
 		key: string,
 		before: () => Promise<void> = async () => {},
+		// 再送で同じ指示をもう一度流さないよう、保存より前に応答を整える。
+		deliver: (result: HandleResult) => HandleResult = (r) => r,
 	): Promise<HandleResult> {
 		// 待機中の発言も次の判定の文脈になるよう、直列化の前に積む。
 		this.#store.appendInbound(inbound);
-		const result = await this.#gate.run<HandleResult>(
-			inbound.channelId,
-			async () => {
-				await before();
-				return this.#runTurn(inbound);
-			},
-			async () => {
-				await before();
-				return toResult(ignoreOutcome(inbound, "coalesced"));
-			},
+		const result = deliver(
+			await this.#gate.run<HandleResult>(
+				inbound.channelId,
+				async () => {
+					await before();
+					return this.#runTurn(inbound);
+				},
+				async () => {
+					await before();
+					return toResult(ignoreOutcome(inbound, "coalesced"));
+				},
+			),
 		);
 		const at = this.now();
 		this.#store.putProcessed(key, at, result);
