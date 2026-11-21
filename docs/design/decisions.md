@@ -120,10 +120,12 @@ This is a compact decision register.
 
 ## Conversation organ
 
-- `yunomi-voice` runs next to the speech and hearing organs on `yunomi-box` and carries the audio stream of a conversation
-- it holds reflexes only: stop playback when the user starts speaking (barge-in), detect the end of an utterance, stream speech-to-text and text-to-speech
-- decisions stay in the core: what to say, whether to reply, what to do with a reply that was cut off
-- the audio transport is an adapter; the first one is a Discord voice channel through a voice-only bot, separate from the text bot
+- `yunomi-voice` (`apps/voice`) runs next to the speech and hearing organs on `yunomi-box` and carries the audio stream of a conversation
+- it holds reflexes only: stop playback when the user starts speaking (barge-in), detect the end of an utterance, play cached backchannels, stream speech-to-text and text-to-speech
+- decisions stay in the core: who replies, what to say, which words to use as backchannels, what to do with a reply that was cut off
+- one `yunomi-voice` serves every partner: one ear for the owner, one mouth per partner
+- the audio transport is an adapter; the first one is a Discord voice channel, joined with each partner's own bot over a second Gateway connection
+- utterances and voice state go to the core over HTTP; the core pushes voice directives over a WebSocket that `yunomi-voice` keeps to each PartnerDO (Hibernation API)
 - `yunomi-relay` keeps the Discord text connection the Worker cannot hold and relays only; it does not handle voice
 
 ## Cloud
