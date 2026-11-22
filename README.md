@@ -69,7 +69,7 @@ Working は yunomi の記憶を記憶の口（[docs/working-memory-api.md](docs/
 
 ## 開発
 
-Node 24 と pnpm 10 が必要です（`mise.toml` で固定しています）。
+Node と pnpm が必要です。版は `mise.toml` で固定しています。
 
 ```sh
 pnpm install
@@ -82,8 +82,8 @@ pnpm format                      # Biome で整形
 パッケージ単位で動かすときは `pnpm --filter <name> <script>` を使います。
 
 ```sh
-pnpm --filter @yunomi/worker dev    # Worker をローカルで起動
-pnpm --filter @yunomi/relay start # relay を起動
+pnpm --filter @yunomi/worker dev   # Worker をローカルで起動
+pnpm --filter @yunomi/relay start  # relay を起動
 pnpm --filter @yunomi/cli ykm status
 ```
 
