@@ -164,7 +164,8 @@ export const yukarinProfile: PartnerProfile = {
 		"web_read": "auto",
 		"home_read": "auto",
 		"goal_write": "auto",
-		"watch_write": "auto"
+		"watch_write": "auto",
+		"work_request": "confirm"
 	},
 	"voice": {
 		"engines": {
@@ -1253,4 +1254,4 @@ export const yukarinProfile: PartnerProfile = {
 	]
 };
 
-export const profileVersion = "01e672f8500c";
+export const profileVersion = "a8b3da8df2ac";

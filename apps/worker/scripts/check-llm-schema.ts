@@ -24,6 +24,9 @@ const fullEnv: Required<CapabilityEnv> = {
 	HOME_ASSISTANT_TOKEN: "x",
 	HOME_ENTITY_IDS: "person.x",
 	OWNER_DISCORD_USER_ID: "x",
+	MIZUYA_URL: "https://mizuya.example.test",
+	MIZUYA_ACCESS_CLIENT_ID: "x",
+	MIZUYA_ACCESS_CLIENT_SECRET: "x",
 	DISCORD_BOT_TOKEN: "x",
 };
 // 道具の定義を読むだけで呼び出さないので、保留の保存先は使われない。

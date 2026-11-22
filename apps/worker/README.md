@@ -234,6 +234,16 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 - オーナーが話し相手のターンだけ「見張り」の区画に、動いている見張りを id・場所・間隔か cron 式・期限付きで出す。
 - 期限を過ぎた見張りは読み出しから外れるだけで、行は `active` のまま残る。
 
+### 仕事の依頼
+
+オーナーが会話で頼んだ仕事は、道具 `work_request`（`title` 1 行 100 字まで、`request` 2000 字まで）で mizuya の Working に渡す。category は `work_request`（Yukarin と Akarin の profile で `confirm`）なので、呼ぶとまず保留になり、オーナーが了承した次のターンで 1 回だけ `POST ${MIZUYA_URL}/working/requests` を呼ぶ。
+
+- 送る本文は `request_id`（UUID v7）、`partner`、`title`、`request`、`requested_by`（了承したオーナーの Discord user id）、`context_url`（依頼した発言へのリンク。VC の発話からなら null）。
+- 認証は mizuya の Cloudflare Access のサービストークン（`CF-Access-Client-Id` / `CF-Access-Client-Secret`）。2xx を受け付けとし、400 は `ValidationFailed`、401 / 403 は `PermissionDenied`、429 は `RateLimited`、ほかは `ExternalServiceUnavailable`（5xx と接続の失敗だけ retryable）でモデルに返す。
+- 結果は会話で待たない。Working が席を開くと、その出来事が「今の仕事」に届く。
+- `MIZUYA_URL`、2 つの secret、`OWNER_DISCORD_USER_ID` が揃っているときだけ `defaultCapabilities` が登録する。`ownerOnly` の道具なので、オーナー以外のターンでは道具の一覧にも出さない。
+- Audit の `toolCalls` の要約に件名や本文は入れない。
+
 ## Open Loop
 
 会話中の未解決の話題・あとで聞き返したい続き（結果待ち、相手自身の予定、困りごとの続き）。タスクやリマインダーではなく、今回は抽出・保存・解決の記録までで、フォローアップ発話や期限の評価はしない（`follow_up_interval_hours` と `last_followed_up_at` は常に null）。
@@ -338,6 +348,8 @@ dev が外部へ作用しないことは、既存の dev / prod 分離（別 bot
 | `GITHUB_DEFAULT_REPO` | var | `github_read` が repo を省略されたときに読む repo（`ochanuco/yunomi`） |
 | `CHATSUMI_ACCESS_CLIENT_ID` / `CHATSUMI_ACCESS_CLIENT_SECRET` | secret | 貼られた URL のページを読む（`web_fetch`）ための chatsumi の Cloudflare Access のサービストークン。2 つがそろっているときだけ登録する |
 | `CHATSUMI_URL` | var | chatsumi の origin（`https://chatsumi.chanu.co`） |
+| `MIZUYA_ACCESS_CLIENT_ID` / `MIZUYA_ACCESS_CLIENT_SECRET` | secret | 仕事を渡す（`work_request`）ための mizuya の Cloudflare Access のサービストークン。1Password の `cf_access_mizuya_client_id` / `cf_access_mizuya_client_secret` |
+| `MIZUYA_URL` | var | mizuya の Worker の origin。`resources.ts` の mode ごとの `mizuyaUrl` で、production だけが `https://mizuya.chanu.co` を持つ。空なら `work_request` を登録しない |
 | `HOME_ASSISTANT_TOKEN` | secret | 家の状態を読む（`home_state`）ための Home Assistant の long-lived access token。Yukarin 用の管理者でないユーザーで発行する |
 | `HOME_ASSISTANT_URL` / `HOME_ENTITY_IDS` | secret | Home Assistant の origin と、`home_state` が読む entity ID（カンマ区切り）。Home Assistant には entity 単位の権限がないため、読める範囲はこの一覧で絞る |
 | `GOOGLE_CALENDAR_ID` | secret | 予定を読み書きするカレンダー。prod はオーナーのメインカレンダー（`primary`） |

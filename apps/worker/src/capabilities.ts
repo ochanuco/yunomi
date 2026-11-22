@@ -11,6 +11,7 @@ import {
 	createHomeAssistantAdapter,
 	createToolRegistry,
 	createWatchAdapter,
+	createWorkingRequestsAdapter,
 	type GoalStore,
 	type PendingStore,
 	parseHomeEntityIds,
@@ -40,6 +41,11 @@ export type CapabilityEnv = {
 	/** home_state が読む entity ID（カンマ区切り）。これ以外は読ませない。 */
 	HOME_ENTITY_IDS?: string;
 	OWNER_DISCORD_USER_ID?: string;
+	/** work_request の渡し先 mizuya の Worker の origin。prod だけが持つ。 */
+	MIZUYA_URL?: string;
+	/** mizuya の Cloudflare Access のサービストークン。 */
+	MIZUYA_ACCESS_CLIENT_ID?: string;
+	MIZUYA_ACCESS_CLIENT_SECRET?: string;
 	/** 添付の読み取りに使う。送信と同じ bot の token。 */
 	DISCORD_BOT_TOKEN?: string;
 };
@@ -80,6 +86,9 @@ export const defaultCapabilities = (
 		HOME_ENTITY_IDS: homeEntityIdsRaw,
 		OWNER_DISCORD_USER_ID: ownerId,
 		DISCORD_BOT_TOKEN: botToken,
+		MIZUYA_URL: mizuyaUrl,
+		MIZUYA_ACCESS_CLIENT_ID: mizuyaClientId,
+		MIZUYA_ACCESS_CLIENT_SECRET: mizuyaClientSecret,
 	} = env;
 	// fetch を this なしで呼ぶと Workers では Illegal invocation になるため、包んで渡す。
 	const doFetch: typeof fetch =
@@ -139,6 +148,16 @@ export const defaultCapabilities = (
 	}
 	if (deps.watches && ownerId) {
 		adapters.push(createWatchAdapter({ store: deps.watches }));
+	}
+	if (mizuyaUrl && mizuyaClientId && mizuyaClientSecret && ownerId) {
+		adapters.push(
+			createWorkingRequestsAdapter({
+				fetch: doFetch,
+				baseUrl: mizuyaUrl,
+				accessClientId: mizuyaClientId,
+				accessClientSecret: mizuyaClientSecret,
+			}),
+		);
 	}
 	if (adapters.length === 0) return null;
 	const registry = createToolRegistry(adapters);

@@ -63,6 +63,7 @@ export type ToolLoopArgs = {
 	maxTokens: number;
 	partnerId: string;
 	speaker: { id: string; isOwner: boolean };
+	guildId: string;
 	channelId: string;
 	messageId: string;
 	/** 新着メッセージの本文。web_fetch に渡せる URL の出所になる。 */
@@ -104,7 +105,11 @@ export const runToolLoop = async (
 	args: ToolLoopArgs,
 ): Promise<ToolLoopOutcome> => {
 	const { router, capabilities, now } = args;
-	const tools = toToolSpecs(capabilities.gate.definitions);
+	const tools = toToolSpecs(
+		args.speaker.isOwner
+			? capabilities.gate.definitions
+			: capabilities.gate.definitions.filter((d) => !d.ownerOnly),
+	);
 	const messages: StepMessage[] = [...args.messages];
 	const toolCalls: ToolCallRecord[] = [];
 	const wallStarted = Date.now();
@@ -182,6 +187,7 @@ export const runToolLoop = async (
 						partnerId: args.partnerId,
 						speakerId: args.speaker.id,
 						isOwner: args.speaker.isOwner,
+						guildId: args.guildId,
 						channelId: args.channelId,
 						sourceMessageId: args.messageId,
 						replyToMessageId: args.replyToMessageId ?? null,
