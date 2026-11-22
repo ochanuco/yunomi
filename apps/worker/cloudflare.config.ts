@@ -42,6 +42,8 @@ export default defineConfig(({ mode }) => {
 				GITHUB_DEFAULT_REPO: bindings.text(instance.githubDefaultRepo),
 				// web_fetch の呼び先。サービストークンは prod だけが secret で持つ。
 				CHATSUMI_URL: bindings.text(instance.chatsumiUrl),
+				// work_request の渡し先。サービストークンは prod だけが secret で持つ。
+				MIZUYA_URL: bindings.text(r.mizuyaUrl),
 				SNAPSHOT_AGE_RECIPIENT: bindings.text(r.snapshotAgeRecipient),
 				ANTHROPIC_API_KEY: bindings.secret(),
 				// 返事の送信を Worker が担うか。"1" かつ DISCORD_BOT_TOKEN があるときだけ REST で送り、
@@ -64,7 +66,7 @@ export default defineConfig(({ mode }) => {
 				LANGFUSE_SECRET_KEY: bindings.secret(),
 				LANGFUSE_ACCESS_CLIENT_ID: bindings.secret(),
 				LANGFUSE_ACCESS_CLIENT_SECRET: bindings.secret(),
-				// 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
+				// 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant、mizuya）。prod だけが宣言する。宣言した secret は deploy が必須として検査するため、
 				// 値を置かない dev で宣言すると deploy が通らない。
 				...(production
 					? {
@@ -76,6 +78,8 @@ export default defineConfig(({ mode }) => {
 							GITHUB_TOKEN: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_ID: bindings.secret(),
 							CHATSUMI_ACCESS_CLIENT_SECRET: bindings.secret(),
+							MIZUYA_ACCESS_CLIENT_ID: bindings.secret(),
+							MIZUYA_ACCESS_CLIENT_SECRET: bindings.secret(),
 							HOME_ASSISTANT_TOKEN: bindings.secret(),
 							// 自宅の Home Assistant の origin と、home_state が読む entity ID（カンマ区切り）。
 							HOME_ASSISTANT_URL: bindings.secret(),

@@ -615,6 +615,7 @@ export const runTurn = async (
 				maxTokens: MAX_OUTPUT_TOKENS,
 				partnerId,
 				speaker: { id: msg.author.id, isOwner: speakerIsOwner },
+				guildId: msg.guildId,
 				channelId: msg.channelId,
 				messageId: msg.messageId,
 				messageText: msg.content,

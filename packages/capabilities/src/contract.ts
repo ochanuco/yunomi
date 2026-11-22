@@ -15,12 +15,19 @@ export type ToolDefinition<TInput = unknown> = {
 	 * モデルが組み立てた URL で、文脈の情報を外へ送らせないため。
 	 */
 	boundUrl?(input: TInput): string;
+	/**
+	 * オーナー以外のターンでは道具の一覧にも出さない。gate はどの道具でもオーナー以外を拒否するが、
+	 * 一覧に見えていると、モデルがオーナー以外の依頼を引き受けようとして呼んでしまう。
+	 */
+	readonly ownerOnly?: boolean;
 };
 
 export type CallContext = {
 	readonly partnerId: string;
 	readonly speakerId: string;
 	readonly isOwner: boolean;
+	/** channelId のサーバー。発言へのリンクを組むのに使う。省略は不明。 */
+	readonly guildId?: string;
 	readonly channelId: string;
 	readonly sourceMessageId: string;
 	/** sourceMessageId の返信先。返信でなければ null か省略。 */

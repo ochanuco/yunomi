@@ -44,6 +44,7 @@ export const resources = {
 		discordSendFromWorker: "1",
 		voiceEnabled: "1",
 		voiceRealization: "shizuku",
+		mizuyaUrl: "",
 		snapshotBucket: "yunomi-dev-snapshots",
 		memoryIndex: "yunomi-dev-memory",
 		snapshotAgeRecipient:
@@ -66,6 +67,8 @@ export const resources = {
 		discordSendFromWorker: "1",
 		voiceEnabled: "1",
 		voiceRealization: "yukari",
+		// work_request の渡し先。空の mode では道具を出さない。
+		mizuyaUrl: "https://mizuya.chanu.co",
 		snapshotBucket: "yunomi-snapshots",
 		memoryIndex: "yunomi-memory",
 		snapshotAgeRecipient:
@@ -82,6 +85,7 @@ export const resources = {
 		discordSendFromWorker: "0",
 		voiceEnabled: "0",
 		voiceRealization: "yukari",
+		mizuyaUrl: "",
 		snapshotBucket: "yunomi-local-snapshots",
 		// Vectorize と Workers AI はローカルで動かないため、local は索引の同期と意味検索をしない。
 		memoryIndex: null,

@@ -6,6 +6,7 @@ import {
 	type PendingStore,
 } from "@yunomi/capabilities";
 import { FakeLLMProvider, ModelRouter, type StepRequest } from "@yunomi/llm";
+import { akarinProfile } from "@yunomi/partner-akarin";
 import { yukarinProfile } from "@yunomi/partner-yukarin";
 import { describe, expect, it } from "vitest";
 import {
@@ -463,5 +464,160 @@ describe("期限切れの保留の保存", () => {
 		fake.enqueueStep(final("はい"));
 		await stub.handleDiscordMessage(ask("100000000000000009", "こんにちは"));
 		expect((await rows()).map((r) => r.status)).toEqual(["expired"]);
+	});
+});
+
+const mizuyaEnv = {
+	MIZUYA_URL: "https://mizuya.example.test",
+	MIZUYA_ACCESS_CLIENT_ID: "mizuya-id",
+	MIZUYA_ACCESS_CLIENT_SECRET: "mizuya-secret",
+	OWNER_DISCORD_USER_ID: OWNER,
+} satisfies CapabilityEnv;
+
+describe("work_request の登録", () => {
+	it("mizuya の URL とサービストークンとオーナーが揃えば、work_request を持つ", () => {
+		const caps = defaultCapabilities(mizuyaEnv, baseDeps);
+		expect(caps?.gate.definitions.map((d) => d.name)).toEqual([
+			"work_request",
+			"pending_confirm",
+			"pending_cancel",
+		]);
+	});
+
+	it.each(Object.keys(mizuyaEnv) as (keyof typeof mizuyaEnv)[])(
+		"%s が空なら work_request を作らない",
+		(key) => {
+			expect(
+				defaultCapabilities({ ...mizuyaEnv, [key]: "" }, baseDeps),
+			).toBeNull();
+		},
+	);
+
+	it("どちらの partner も work_request を confirm にする", () => {
+		expect(yukarinProfile.capability_defaults.work_request).toBe("confirm");
+		expect(akarinProfile.capability_defaults.work_request).toBe("confirm");
+	});
+});
+
+describe("work_request の了承と mizuya への POST", () => {
+	const requestInput = {
+		title: "README の手順を直す",
+		request: "yunomi の README のセットアップ手順を今の pnpm に合わせる。",
+	};
+	const guild = "900000000000000001";
+	const channel = "900000000000000002";
+	const askIn = (messageId: string, text: string, over = {}) =>
+		inbound({
+			messageId,
+			guildId: guild,
+			channelId: channel,
+			mentionedUserIds: [BOT],
+			content: text,
+			...over,
+		});
+
+	const setupWork = async (name: string) => {
+		const stub = partnerStub(name);
+		const fake = new FakeLLMProvider();
+		const posts: { url: string; init: RequestInit }[] = [];
+		const fetchFn = (async (
+			input: string | URL | Request,
+			init?: RequestInit,
+		) => {
+			posts.push({ url: String(input), init: init ?? {} });
+			return Response.json({ id: "w-1" }, { status: 202 });
+		}) as typeof fetch;
+		await runInDurableObject(stub, (o, st) => {
+			o.now = () => T0;
+			o.createRouter = () => new ModelRouter({ provider: fake });
+			o.capabilities =
+				defaultCapabilities(mizuyaEnv, {
+					pending: createPendingStore(st.storage.sql),
+					policy: yukarinProfile.capability_defaults,
+					now: () => T0,
+					fetch: fetchFn,
+				}) ?? undefined;
+		});
+		const pendingIds = () =>
+			runInDurableObject(stub, (_o, st) =>
+				st.storage.sql
+					.exec<{ id: string; status: string }>(
+						"SELECT id, status FROM pending_operations ORDER BY rowid",
+					)
+					.toArray(),
+			);
+		return { stub, fake, posts, pendingIds };
+	};
+
+	it("オーナー以外のターンには道具の一覧に出ない", async () => {
+		const { stub, fake } = await setupWork("work-guest");
+		fake.enqueueStep(final("それはオーナーに頼んでね"));
+		await stub.handleDiscordMessage(
+			askIn("900000000000000010", "README 直しといて", {
+				author: { id: "u2", displayName: "bob", isBot: false },
+			}),
+		);
+		expect(fake.stepRequests[0]?.tools.map((t) => t.name)).not.toContain(
+			"work_request",
+		);
+	});
+
+	it("提案では POST せず、了承で 1 回だけ POST し、二度目の了承では送らない", async () => {
+		const { stub, fake, posts, pendingIds } = await setupWork("work-confirm");
+		fake.enqueueStep(
+			toolUse([{ name: "work_request", input: requestInput }]),
+			final("README の手順直し、仕事の席に頼んでいい？"),
+		);
+		const proposed = await stub.handleDiscordMessage(
+			askIn("900000000000000011", "README の手順直しといて"),
+		);
+		expect(fake.stepRequests[0]?.tools.map((t) => t.name)).toContain(
+			"work_request",
+		);
+		expect(proposed.audit.toolCalls[0]).toMatchObject({
+			tool: "work_request",
+			decision: "confirm",
+			outcome: "pending",
+		});
+		expect(posts).toHaveLength(0);
+		const [pending] = await pendingIds();
+
+		fake.enqueueStep(
+			toolUse([
+				{ name: "pending_confirm", input: { pending_id: pending?.id } },
+			]),
+			final("頼んでおきました"),
+		);
+		const confirmed = await stub.handleDiscordMessage(
+			askIn("900000000000000012", "うん"),
+		);
+		expect(confirmed.audit.toolCalls[0]).toMatchObject({
+			decision: "pending_confirm",
+			outcome: "ok",
+		});
+		expect(posts).toHaveLength(1);
+		expect(posts[0]?.url).toBe("https://mizuya.example.test/working/requests");
+		expect(posts[0]?.init.headers).toMatchObject({
+			"CF-Access-Client-Id": "mizuya-id",
+			"CF-Access-Client-Secret": "mizuya-secret",
+		});
+		const body = JSON.parse(String(posts[0]?.init.body));
+		expect(body).toMatchObject({
+			partner: "yukarin",
+			...requestInput,
+			requested_by: OWNER,
+			context_url: `https://discord.com/channels/${guild}/${channel}/900000000000000011`,
+		});
+		expect(body.request_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+
+		fake.enqueueStep(
+			toolUse([
+				{ name: "pending_confirm", input: { pending_id: pending?.id } },
+			]),
+			final("もう頼んであります"),
+		);
+		await stub.handleDiscordMessage(askIn("900000000000000013", "お願いね"));
+		expect(posts).toHaveLength(1);
+		expect((await pendingIds()).map((r) => r.status)).toEqual(["executed"]);
 	});
 });

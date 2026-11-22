@@ -93,6 +93,7 @@ Discord Developer Portal でアプリケーションと bot を作ります。
 | `akarinDiscordUserId` | 2 人目のパートナー（Akarin）の bot の Application ID。Akarin を動かさないなら `""` |
 | `discordSendFromWorker` | `"1"` なら Worker が返事を送る（`DISCORD_BOT_TOKEN` が要る）。`"0"` なら relay が送る |
 | `voiceEnabled` | 音声を使わないなら `"0"` |
+| `mizuyaUrl` | 会話から仕事を渡す（`work_request`）mizuya の Worker の origin。使わないなら `""` |
 | `snapshotBucket` | 1 で作った R2 bucket 名 |
 | `memoryIndex` | 1 で作った Vectorize index 名 |
 | `snapshotAgeRecipient` | 2 で作った公開鍵 |
@@ -129,7 +130,7 @@ secret は環境変数で `scripts/deploy.sh` に渡します。設定されて�
 | `AKARIN_DISCORD_BOT_TOKEN` | Akarin の bot の token。production mode では宣言しているので必須（deploy が検査する）。development では宣言せず、Akarin の返事は relay が送る |
 | `AIVOICE_TOKEN`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET` | 音声を使うときだけ |
 | `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY`、`LANGFUSE_ACCESS_CLIENT_ID`、`LANGFUSE_ACCESS_CLIENT_SECRET` | LLM の trace を Langfuse に送る。development・production mode では宣言しているので必須（deploy が検査する）。送り先は `resources.ts` の `instance.langfuseUrl`。Langfuse の前に Cloudflare Access が無ければ、Access の 2 つには空でない任意の値を置く |
-| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`HOME_ASSISTANT_URL`、`HOME_ENTITY_IDS`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`、`GOOGLE_CALENDAR_ID`、`GOOGLE_PLACES_API_KEY`、`GITHUB_TOKEN`、`CHATSUMI_ACCESS_CLIENT_ID`、`CHATSUMI_ACCESS_CLIENT_SECRET`、`MIZUYA_ACCESS_CLIENT_ID`、`MIZUYA_ACCESS_CLIENT_SECRET`、`HOME_ASSISTANT_TOKEN`、`HOME_ASSISTANT_URL`、`HOME_ENTITY_IDS`、`OWNER_DISCORD_USER_ID` | 道具（Google カレンダー、Google Places、GitHub、chatsumi、mizuya、Home Assistant）。production mode では宣言しているので必須（deploy が検査する）。development では宣言も設定もしない |
 
 ```sh
 cd apps/worker

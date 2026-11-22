@@ -72,6 +72,7 @@ prod の Snapshot は `ykm snapshot-seed` で dev に復元できる。復元し
 | ochoko（ochoko-box） | 声にする返事の本文と声の指定 | 音声合成。合成した音声は Discord に添付する |
 | kukicha（GPU 機） | VC で持ち主が話した音声 | 文字起こし。登録した持ち主の声以外は捨てる |
 | mizuya の Working | 記憶の口（`docs/working-memory-api.md`）で、依頼した人の事実と出来事、気にかけている事柄、目標、見張り | Working が仕事の依頼に答える。Working は自分のモデルの呼び先にもこれを送る |
+| mizuya の Worker の受け箱 | 持ち主が了承した仕事の依頼の件名と本文、持ち主の Discord user id、依頼した発言へのリンク | 会話で頼まれた仕事を Working の席に渡す（`work_request`） |
 | 道具の呼び先（Google カレンダー、Google Places、GitHub、chatsumi、Home Assistant） | 道具の入力（検索語、予定の内容、URL など） | 道具の実行 |
 
 データを売ったり、広告やモデルの学習に使ったりはしない。
