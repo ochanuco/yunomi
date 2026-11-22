@@ -493,9 +493,9 @@ describe("work_request の登録", () => {
 		},
 	);
 
-	it("どちらの partner も work_request を confirm にする", () => {
-		expect(yukarinProfile.capability_defaults.work_request).toBe("confirm");
-		expect(akarinProfile.capability_defaults.work_request).toBe("confirm");
+	it("どちらの partner も work_request を auto にする", () => {
+		expect(yukarinProfile.capability_defaults.work_request).toBe("auto");
+		expect(akarinProfile.capability_defaults.work_request).toBe("auto");
 	});
 });
 
@@ -562,37 +562,21 @@ describe("work_request の了承と mizuya への POST", () => {
 		);
 	});
 
-	it("提案では POST せず、了承で 1 回だけ POST し、二度目の了承では送らない", async () => {
-		const { stub, fake, posts, pendingIds } = await setupWork("work-confirm");
+	it("呼んだターンで 1 回だけ POST し、保留を作らない", async () => {
+		const { stub, fake, posts, pendingIds } = await setupWork("work-auto");
 		fake.enqueueStep(
 			toolUse([{ name: "work_request", input: requestInput }]),
-			final("README の手順直し、仕事の席に頼んでいい？"),
+			final("仕事の席に頼んでおきました"),
 		);
-		const proposed = await stub.handleDiscordMessage(
+		const handled = await stub.handleDiscordMessage(
 			askIn("900000000000000011", "README の手順直しといて"),
 		);
 		expect(fake.stepRequests[0]?.tools.map((t) => t.name)).toContain(
 			"work_request",
 		);
-		expect(proposed.audit.toolCalls[0]).toMatchObject({
+		expect(handled.audit.toolCalls[0]).toMatchObject({
 			tool: "work_request",
-			decision: "confirm",
-			outcome: "pending",
-		});
-		expect(posts).toHaveLength(0);
-		const [pending] = await pendingIds();
-
-		fake.enqueueStep(
-			toolUse([
-				{ name: "pending_confirm", input: { pending_id: pending?.id } },
-			]),
-			final("頼んでおきました"),
-		);
-		const confirmed = await stub.handleDiscordMessage(
-			askIn("900000000000000012", "うん"),
-		);
-		expect(confirmed.audit.toolCalls[0]).toMatchObject({
-			decision: "pending_confirm",
+			decision: "auto",
 			outcome: "ok",
 		});
 		expect(posts).toHaveLength(1);
@@ -609,15 +593,6 @@ describe("work_request の了承と mizuya への POST", () => {
 			context_url: `https://discord.com/channels/${guild}/${channel}/900000000000000011`,
 		});
 		expect(body.request_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
-
-		fake.enqueueStep(
-			toolUse([
-				{ name: "pending_confirm", input: { pending_id: pending?.id } },
-			]),
-			final("もう頼んであります"),
-		);
-		await stub.handleDiscordMessage(askIn("900000000000000013", "お願いね"));
-		expect(posts).toHaveLength(1);
-		expect((await pendingIds()).map((r) => r.status)).toEqual(["executed"]);
+		expect(await pendingIds()).toEqual([]);
 	});
 });
