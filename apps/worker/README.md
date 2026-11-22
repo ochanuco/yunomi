@@ -5,7 +5,7 @@
 - 設定は `cloudflare.config.ts` のみ。`cf` CLI が読む。`--mode production` で本番（Worker `yunomi`、`yunomi.chanu.co`）、省略または `development` で開発（`yunomi-dev`、`yunomi-dev.chanu.co`）、`--mode local` でローカル専用（`yunomi-local`、ドメインなし）に切り替わる。local は deploy しない。workers.dev と preview URL は無効。
 - `cf dev` / `cf build` の委譲先は `wrangler`（この package の devDependency）。Vite は使わない。
 - `ANTHROPIC_API_KEY` は `bindings.secret()` で宣言のみ。ローカルは `.dev.vars` に書く（未設定でも `/health` は動く）。
-- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `voice` / `ykm` / `working` に引く。`POST /v1/interfaces/discord/events` の発言（`discord.message.created`）と `POST /v1/partners/:partnerId/discord/sent` は `gateway` のみ。VC の口（`POST /v1/interfaces/discord/events` の発話 `discord.voice.utterance`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/voice-connection`）は、relay から yunomi-voice へ移しきるまで `gateway` と `voice` の両方から受ける。`GET /v1/partners/:partnerId/voice/socket` は `voice` のみ。
+- `/health` は認証を要求しない（Cloudflare Access 側で bypass）。それ以外は `src/auth/access.ts` が `Cf-Access-Jwt-Assertion`（RS256）を `ACCESS_TEAM_DOMAIN` の JWKS・`ACCESS_AUD`・issuer で検証する。`email` が `OWNER_EMAILS` にあれば owner、service token は `common_name` を `ACCESS_CALLERS` で `gateway` / `voice` / `ykm` / `working` に引く。`POST /v1/interfaces/discord/events` の発言（`discord.message.created`）と `POST /v1/partners/:partnerId/discord/sent` は `gateway` のみ。VC の口（`POST /v1/interfaces/discord/events` の発話 `discord.voice.utterance`、`POST /v1/interfaces/discord/voice-events`、`POST /v1/partners/:partnerId/discord/voice-connection`）と `GET /v1/partners/:partnerId/voice/socket` は `voice` のみ。
 - ローカル開発の迂回: `ALLOW_DEV_CALLER=1` のとき、ヘッダ `x-yunomi-dev-caller: gateway|voice|ykm|working` でその呼び出し元として扱う。`ALLOW_DEV_CALLER` は `--mode local` だけが `"1"` にし、development / production は `"0"`。`pnpm --filter @yunomi/worker dev` は `cf dev --mode local`。`cf dev` はカスタムドメインがあると request.url を書き換えるため、host では判定しない。
 - Worker 名・ホスト・D1 database id は `resources.ts` に集約し、`cloudflare.config.ts` と `scripts/deploy.sh` が読む。`cf` の D1 database id は全ゼロ UUID を拒否するため、infra Issue (#7) で実 UUID に差し替えるまで `00000000-0000-4000-8000-000000000000` を置いている。
 
@@ -104,11 +104,11 @@ reply の応答には、DO が `recent_messages` に積んだ Yukarin 発言の 
 
 ## VC
 
-Worker から Gateway への押し出しは無く、Gateway が送って応答を受け取る。合成と再生は Gateway が担い、Worker は判断と指示だけを返す。yunomi-voice への押し出しは下の「声の指示の WebSocket」を使う。
+VC は yunomi-voice（`apps/voice`、呼び出し元 `voice`）が受け持つ。yunomi-voice が VC の出入りと聞いた発話を送って応答を受け取り、テキストの発言のターンでできた指示は下の「声の指示の WebSocket」で押し出す。合成と再生は yunomi-voice が担い、Worker は判断と指示だけを返す。relay（呼び出し元 `gateway`）は VC を扱わない。
 
 #### 状態
 
-DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_id` / `voice_listening` / `voice_updated_at`）が、いま入っている VC と、そこで耳を開けているか（相手の声を受け取っているか）を持つ。同時に入れるのは 1 つ。`POST /v1/partners/:partnerId/discord/voice-connection`（body: `{ guild_id, channel_id | null, listening? }`、応答 `{ recorded: true }`）で Gateway が実際に接続・切断したあと（と起動時に null で）報告したときだけ書き換わる。join の指示を返しただけでは変わらない。`listening` の省略と、`channel_id` が null の報告は「聞いていない」として覚える。プロンプトの「身体の状態」に、VC にいるか・この発言が VC のテキストチャットから来たか・VC で相手の声が聞こえるかを載せる。Admin API の status には出していない。
+DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_id` / `voice_listening` / `voice_updated_at`）が、いま入っている VC と、そこで耳を開けているか（相手の声を受け取っているか）を持つ。同時に入れるのは 1 つ。`POST /v1/partners/:partnerId/discord/voice-connection`（body: `{ guild_id, channel_id | null, listening? }`、応答 `{ recorded: true }`）で yunomi-voice が実際に接続・切断したあと（と起動時に null で）報告したときだけ書き換わる。join の指示を返しただけでは変わらない。`listening` の省略と、`channel_id` が null の報告は「聞いていない」として覚える。プロンプトの「身体の状態」に、VC にいるか・この発言が VC のテキストチャットから来たか・VC で相手の声が聞こえるかを載せる。Admin API の status には出していない。
 
 #### VC の出入りの判断（`POST /v1/interfaces/discord/voice-events`）
 
@@ -129,12 +129,12 @@ DO の SQLite の `voice_connection`（1 行: `voice_guild_id` / `voice_channel_
 
 #### 聞いた発話（`discord.voice.utterance`）
 
-Gateway が VC で聞き取った発話を、発言と同じ `POST /v1/interfaces/discord/events` に送る。認証と応答（`ack` / `reply` / `ignore`）は `discord.message.created` と同じで、`type` で振り分ける。
+yunomi-voice が VC で聞き取った発話を、発言と同じ `POST /v1/interfaces/discord/events` に送る。応答（`ack` / `reply` / `ignore`）は `discord.message.created` と同じで、`type` で振り分ける。呼び出し元は、発話が `voice`、発言が `gateway` に限る。
 
 - 重複: Discord の message id が無いので、Envelope の `event_id` で見る（`heardDedupeKey`）。再送ではチャットへの書き込みもターンも繰り返さない。
 - 聞き取った文字: ターンの前に、身体が VC のテキストチャット（`channel_id` は VC）へ `表示名: 文字` の形（2000 コードポイントまで）で書く。書き込みは返事の送信と同じチャンネル単位の直列化の中で行うので、複数メッセージの返事の途中には入らない。`coalesced` で飛ばされた発話も、文字は届いた順に書く。Worker が送信を担わない環境では書かない。書けなくても（エラーでも例外でも）ターンは続ける。
 - ターン: `heardToInbound` で VC での発言（`modality: "voice"`、`messageId` は `voice:<event_id>`）にし、割り込みの判定を通さず返事のターンに回す。相づちや独り言には、ターンの中で黙る（`ignore`）。黙ったときに残るのは聞き取った文字の書き込みだけ。
-- 返事: 上の「VC のテキストチャットへの返事」と同じく、テキストと `voice.speak` で返す。`messageId` は Discord に存在しないので、返事は返信形式（`message_reference`）にせず、Gateway に返す `reply` にも `reply_to_message_id` を載せない。
+- 返事: 上の「VC のテキストチャットへの返事」と同じく、テキストと `voice.speak` で返す。`messageId` は Discord に存在しないので、返事は返信形式（`message_reference`）にせず、応答の `reply` にも `reply_to_message_id` を載せない。
 - プロンプト: 新着の発言に、声で話したもので文字は聞き取り結果（聞き違いがありうる）だと添え、「身体の状態」でも VC で声で聞いた発言だと書く。`recent_messages` は `modality` を持ち（既存行は `text`）、後のターンの履歴でも聞いた発話に同じ注記を付ける。
 
 ```json
@@ -148,13 +148,13 @@ Gateway が VC で聞き取った発話を、発言と同じ `POST /v1/interface
 }
 ```
 
-古い Gateway は `voice` を無視する。
+relay は応答の `voice` を読まない。
 
 #### 声の指示の WebSocket（`GET /v1/partners/:partnerId/voice/socket`）
 
 yunomi-voice（呼び出し元 `voice`）が PartnerDO につなぐ。Worker は認証と `Upgrade: websocket` を確かめて（`voice` 以外は 403、Upgrade なしは 426）、そのパートナーの DO に回す。DO は Hibernation API（`acceptWebSocket`、タグ `voice`）で受け、`ping` には `setWebSocketAutoResponse` で `pong` を返すので、つないだまま待つあいだ DO は起きない。つなぎ直すと古い接続は閉じ、開いているのは 1 本だけになる。
 
-テキストの発言（`discord.message.created`）のターンで `voice` ができたとき、socket が開いていればそこへ次のメッセージ（`voiceSocketMessageSchema`）を送り、relay への応答から `voice` を外す。1 本も送れなければ応答に載せる。保存する応答も外したあとのものなので、再送で同じ指示は繰り返さない。聞いた発話と `voice-events` は今までどおり応答で返す。
+テキストの発言（`discord.message.created`）のターンで `voice` ができたとき、socket が開いていればそこへ次のメッセージ（`voiceSocketMessageSchema`）を送り、relay への応答から `voice` を外す。1 本も送れなければ応答に載せるが、relay はそれを読まないので、その指示は流れない。保存する応答も外したあとのものなので、再送で同じ指示は繰り返さない。聞いた発話と `voice-events` は今までどおり応答で返す。
 
 ```json
 {

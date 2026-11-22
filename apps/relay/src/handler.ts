@@ -2,14 +2,12 @@ import type { AvatarStock } from "./avatar-stock.ts";
 import { type ChannelLike, deliverResponse } from "./deliver.ts";
 import type { Logger } from "./logger.ts";
 import { type MessageLike, toEnvelope } from "./to-envelope.ts";
-import type { VoiceManager } from "./voice-manager.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
 export type HandlerDeps = {
 	client: Pick<YunomiClient, "send" | "notifySent">;
 	partnerId: string;
 	botUserId: string;
-	voice?: Pick<VoiceManager, "apply">;
 	/** 未設定なら表情画像を貼らない。 */
 	avatars?: Pick<AvatarStock, "pick">;
 	/** このカテゴリの発言は Talking（Worker）に送らない。仕事カテゴリは mizuya の Working が受け持つ。 */

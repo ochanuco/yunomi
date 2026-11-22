@@ -17,31 +17,17 @@ const envSchema = v.pipe(
 		YUNOMI_URL: v.pipe(v.string(), v.url()),
 		CF_ACCESS_CLIENT_ID: v.optional(nonEmpty),
 		CF_ACCESS_CLIENT_SECRET: v.optional(nonEmpty),
-		OCHOKO_URL: v.optional(v.pipe(v.string(), v.url())),
-		AIVOICE_TOKEN: v.optional(nonEmpty),
-		KUKICHA_URL: v.optional(v.pipe(v.string(), v.url())),
-		KUKICHA_TOKEN: v.optional(nonEmpty),
 		YUNOMI_DEV_CALLER: v.optional(v.string()),
 		AVATAR_DIR: v.optional(nonEmpty),
-		OWNER_DISCORD_USER_ID: v.optional(nonEmpty),
 		WORK_CATEGORY_IDS: v.optional(nonEmpty),
 		SEAT_STATUS_URL: v.optional(v.pipe(v.string(), v.url())),
 		SEAT_STATUS_TOKEN: v.optional(nonEmpty),
-		RELAY_VOICE: v.optional(v.picklist(["on", "off"])),
 		LOG_LEVEL: v.optional(v.picklist(["debug", "info", "warn", "error"])),
 	}),
 	v.check(
 		(e) =>
 			Boolean(e.CF_ACCESS_CLIENT_ID) === Boolean(e.CF_ACCESS_CLIENT_SECRET),
 		"CF_ACCESS_CLIENT_ID と CF_ACCESS_CLIENT_SECRET は両方指定する",
-	),
-	v.check(
-		(e) => Boolean(e.OCHOKO_URL) === Boolean(e.AIVOICE_TOKEN),
-		"OCHOKO_URL と AIVOICE_TOKEN は両方指定する",
-	),
-	v.check(
-		(e) => Boolean(e.KUKICHA_URL) === Boolean(e.KUKICHA_TOKEN),
-		"KUKICHA_URL と KUKICHA_TOKEN は両方指定する",
 	),
 	v.check(
 		(e) => Boolean(e.SEAT_STATUS_URL) === Boolean(e.SEAT_STATUS_TOKEN),
@@ -58,16 +44,8 @@ export type GatewayConfig = {
 	yunomiUrl: string;
 	access: { clientId: string; clientSecret: string } | null;
 	devCaller: boolean;
-	/** false なら VC を扱わない。VC は yunomi-voice が受け持ち、relay はテキストの中継だけをする。 */
-	voice: boolean;
-	/** 未設定なら声の合成と keep_awake を使わない。 */
-	ochoko: { url: string; token: string } | null;
-	/** 未設定なら聞いた発話を文字にせず、ログに残すだけにする。 */
-	kukicha: { url: string; token: string } | null;
 	/** 表情画像を置いたディレクトリ。未設定なら同梱の画像を使う。 */
 	avatarDir: string | null;
-	/** VC でこの人の声だけを聞く。未設定なら耳を閉じて入る。 */
-	ownerUserId: string | null;
 	/** この Discord カテゴリの発言は Worker に送らない。仕事カテゴリは mizuya の Working が mizuya の bot で受け持つ。 */
 	workCategoryIds: ReadonlySet<string>;
 	/** mizuya の Working の、席の状態を渡す口。未設定なら作業中の数と使用率を出さない。 */
@@ -78,7 +56,8 @@ export type GatewayConfig = {
 export const loadConfig = (
 	env: Record<string, string | undefined>,
 ): Result<GatewayConfig, string[]> => {
-	// 空文字は未設定として扱う（.env で `KEY=` と書かれがち）
+	// 空文字は未設定として扱う（.env で `KEY=` と書かれがち）。
+	// スキーマに無い変数は読み捨てるので、配置側に古い変数（RELAY_VOICE など）が残っていても起動する
 	const cleaned = Object.fromEntries(
 		Object.entries(env).filter(([, val]) => val !== undefined && val !== ""),
 	);
@@ -103,18 +82,8 @@ export const loadConfig = (
 						clientSecret: e.CF_ACCESS_CLIENT_SECRET,
 					}
 				: null,
-		ochoko:
-			e.OCHOKO_URL && e.AIVOICE_TOKEN
-				? { url: e.OCHOKO_URL.replace(/\/+$/, ""), token: e.AIVOICE_TOKEN }
-				: null,
-		kukicha:
-			e.KUKICHA_URL && e.KUKICHA_TOKEN
-				? { url: e.KUKICHA_URL.replace(/\/+$/, ""), token: e.KUKICHA_TOKEN }
-				: null,
 		devCaller: e.YUNOMI_DEV_CALLER === "1",
-		voice: e.RELAY_VOICE !== "off",
 		avatarDir: e.AVATAR_DIR ?? null,
-		ownerUserId: e.OWNER_DISCORD_USER_ID ?? null,
 		seatStatus:
 			e.SEAT_STATUS_URL && e.SEAT_STATUS_TOKEN
 				? { url: e.SEAT_STATUS_URL, token: e.SEAT_STATUS_TOKEN }
@@ -134,12 +103,6 @@ export const loadConfig = (
  * WORK_CATEGORY_IDS は dev のように仕事カテゴリのないサーバーでは空が正しいため、必須にはしない。
  */
 export const configWarnings = (cfg: GatewayConfig): string[] => [
-	...(cfg.voice && cfg.kukicha && !cfg.ownerUserId
-		? ["KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening"]
-		: []),
-	...(!cfg.voice && (cfg.ochoko || cfg.kukicha)
-		? ["RELAY_VOICE is off; OCHOKO_URL and KUKICHA_URL are ignored"]
-		: []),
 	...(cfg.workCategoryIds.size === 0
 		? [
 				"WORK_CATEGORY_IDS is not set; messages in work categories are sent to the Worker",

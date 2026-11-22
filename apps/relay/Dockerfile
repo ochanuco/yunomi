@@ -12,10 +12,6 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 FROM node:26.13.0-slim
 ENV NODE_ENV=production
-# VC で再生する WAV を ffmpeg で 48kHz ステレオへ変換する
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
- && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 USER node

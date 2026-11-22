@@ -45,9 +45,10 @@ const DISCORD_VOICE_CONNECTION_PATH =
 	/^\/v1\/partners\/([^/]+)\/discord\/voice-connection$/;
 const VOICE_SOCKET_PATH = /^\/v1\/partners\/([^/]+)\/voice\/socket$/;
 
-// VC の口は、relay から yunomi-voice へ移しきるまで両方から受ける。
-const VOICE_CALLERS: readonly Caller[] = ["gateway", "voice"];
+// テキストは relay（gateway）、VC は yunomi-voice（voice）が受け持つ。
 const GATEWAY_ONLY: readonly Caller[] = ["gateway"];
+const VOICE_ONLY: readonly Caller[] = ["voice"];
+const DISCORD_EVENT_CALLERS: readonly Caller[] = ["gateway", "voice"];
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
@@ -160,16 +161,15 @@ const isCallerIn = (p: Principal, allowed: readonly Caller[]) =>
 const forbidden = () => Response.json({ error: "forbidden" }, { status: 403 });
 
 async function discordEvents(request: Request, env: Env): Promise<Response> {
-	const read = await readServiceJson(request, env, VOICE_CALLERS);
+	const read = await readServiceJson(request, env, DISCORD_EVENT_CALLERS);
 	if ("response" in read) return read.response;
-	// 発話は VC の口なので voice からも受け、テキストの発言は relay だけから受ける。
+	// 同じ口で、発話は yunomi-voice だけから、テキストの発言は relay だけから受ける。
 	// 知らない type は発言のスキーマで弾くので、relay だけに絞った側に入れる。
-	if (
-		envelopeType(read.body) !== DISCORD_VOICE_UTTERANCE &&
-		!isCallerIn(read.principal, GATEWAY_ONLY)
-	) {
-		return forbidden();
-	}
+	const allowed =
+		envelopeType(read.body) === DISCORD_VOICE_UTTERANCE
+			? VOICE_ONLY
+			: GATEWAY_ONLY;
+	if (!isCallerIn(read.principal, allowed)) return forbidden();
 	const event = toDiscordEvent(read.body);
 	if (!event.ok) {
 		return Response.json(
@@ -249,7 +249,7 @@ async function discordVoiceEvents(
 	request: Request,
 	env: Env,
 ): Promise<Response> {
-	const read = await readServiceJson(request, env, VOICE_CALLERS);
+	const read = await readServiceJson(request, env, VOICE_ONLY);
 	if ("response" in read) return read.response;
 	const update = toVoiceStateUpdate(read.body);
 	if (!update.ok) {
@@ -272,7 +272,7 @@ async function discordVoiceConnection(
 	env: Env,
 	partnerId: string,
 ): Promise<Response> {
-	const read = await readServiceJson(request, env, VOICE_CALLERS);
+	const read = await readServiceJson(request, env, VOICE_ONLY);
 	if ("response" in read) return read.response;
 	if (!partnerProfile(partnerId)) {
 		return Response.json({ error: "unknown_partner" }, { status: 404 });

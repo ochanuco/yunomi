@@ -23,7 +23,6 @@ const setup = (
 	send: (e: unknown) => Promise<unknown>,
 	extra: Partial<Parameters<typeof createMessageHandler>[0]> = {},
 ) => {
-	const voice = { apply: vi.fn(async (_d: unknown) => {}) };
 	const channel = {
 		lastMessageId: "3" as string | null | undefined,
 		send: vi.fn(async (_o: unknown) => ({ id: "500" })),
@@ -46,12 +45,11 @@ const setup = (
 		client: client as never,
 		partnerId: "yukarin",
 		botUserId: "999",
-		voice,
 		avatars,
 		logger,
 		...extra,
 	});
-	return { avatars, channel, client, handle, logger, voice };
+	return { avatars, channel, client, handle, logger };
 };
 
 describe("createMessageHandler", () => {
@@ -239,69 +237,36 @@ describe("createMessageHandler", () => {
 		expect(client.send).not.toHaveBeenCalled();
 	});
 
-	it("ack の voice 指示を VoiceManager に渡す", async () => {
-		const voice = { join: { guild_id: "1", channel_id: "vc" } };
-		const {
-			channel,
-			handle,
-			voice: manager,
-		} = setup(async () => ok({ action: "ack", voice }));
-		await handle(message, channel);
-		expect(manager.apply).toHaveBeenCalledWith(voice);
-		expect(channel.send).not.toHaveBeenCalled();
-	});
-
-	it("reply の voice 指示も渡し、テキストの返信も送る", async () => {
-		const voice = { leave: { guild_id: "1" } };
-		const {
-			channel,
-			handle,
-			voice: manager,
-		} = setup(async () => ok({ action: "reply", content: "やあ", voice }));
-		await handle(message, channel);
-		expect(manager.apply).toHaveBeenCalledWith(voice);
-		expect(channel.send).toHaveBeenCalledTimes(1);
-	});
-
-	it("ignore では VC を操作しない", async () => {
-		const {
-			channel,
-			handle,
-			voice: manager,
-		} = setup(async () => ok({ action: "ignore" }));
-		await handle(message, channel);
-		expect(manager.apply).not.toHaveBeenCalled();
-	});
-
-	it("VoiceManager を持たない（RELAY_VOICE=off）なら voice を無視し、返信だけ送る", async () => {
-		const { channel, handle } = setup(
-			async () =>
-				ok({
-					action: "reply",
-					content: "やあ",
-					voice: { join: { guild_id: "1", channel_id: "vc" } },
-				}),
-			{ voice: undefined },
-		);
-		await handle(message, channel);
-		expect(channel.send).toHaveBeenCalledTimes(1);
-	});
-
-	it("VC の操作が失敗しても返信は送る", async () => {
-		const {
-			channel,
-			handle,
-			voice: manager,
-		} = setup(async () =>
+	it("応答に voice が載っていても読まず、返信と表情画像だけを送る", async () => {
+		const { channel, handle } = setup(async () =>
 			ok({
 				action: "reply",
 				content: "やあ",
-				voice: { leave: { guild_id: "1" } },
+				voice: { join: { guild_id: "1", channel_id: "vc" } },
+				avatar: { emotion: "joy" },
 			}),
 		);
-		manager.apply.mockRejectedValueOnce(new Error("boom"));
 		await handle(message, channel);
-		expect(channel.send).toHaveBeenCalledTimes(1);
+		expect(channel.send.mock.calls.map((c) => c[0])).toEqual([
+			{
+				content: "やあ",
+				allowedMentions: { repliedUser: false, parse: [] },
+			},
+			{
+				files: [
+					{ attachment: "/avatars/joy/101-abc.png", name: "101-abc.png" },
+				],
+				allowedMentions: { repliedUser: false, parse: [] },
+			},
+		]);
+	});
+
+	it("ack に voice だけが載っていても何も送らない", async () => {
+		const { channel, handle } = setup(async () =>
+			ok({ action: "ack", voice: { leave: { guild_id: "1" } } }),
+		);
+		await handle(message, channel);
+		expect(channel.send).not.toHaveBeenCalled();
 	});
 
 	describe("表情画像", () => {

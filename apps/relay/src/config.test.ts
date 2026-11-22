@@ -13,12 +13,8 @@ describe("loadConfig", () => {
 				partnerId: "yukarin",
 				yunomiUrl: "http://localhost:8787",
 				access: null,
-				ochoko: null,
-				kukicha: null,
 				devCaller: false,
-				voice: true,
 				avatarDir: null,
-				ownerUserId: null,
 				workCategoryIds: new Set(),
 				seatStatus: null,
 				logLevel: "info",
@@ -26,12 +22,16 @@ describe("loadConfig", () => {
 		});
 	});
 
-	it("RELAY_VOICE は off で VC を止め、未設定と on では VC を扱う", () => {
-		const off = loadConfig({ ...base, RELAY_VOICE: "off" });
-		expect(off.ok && off.value.voice).toBe(false);
-		const on = loadConfig({ ...base, RELAY_VOICE: "on" });
-		expect(on.ok && on.value.voice).toBe(true);
-		expect(loadConfig({ ...base, RELAY_VOICE: "no" }).ok).toBe(false);
+	it("VC の設定が配置側に残っていても、読み捨てて起動する", () => {
+		const r = loadConfig({
+			...base,
+			RELAY_VOICE: "off",
+			OCHOKO_URL: "http://192.168.10.253:8190",
+			KUKICHA_URL: "not a url",
+			OWNER_DISCORD_USER_ID: "42",
+		});
+		expect(r).toEqual(loadConfig(base));
+		expect(loadConfig({ ...base, RELAY_VOICE: "garbage" }).ok).toBe(true);
 	});
 
 	it("PARTNER_ID は名簿の ID だけを受け付ける", () => {
@@ -47,14 +47,12 @@ describe("loadConfig", () => {
 			CF_ACCESS_CLIENT_SECRET: "s",
 			YUNOMI_DEV_CALLER: "1",
 			AVATAR_DIR: "/srv/avatars",
-			OWNER_DISCORD_USER_ID: "42",
 			LOG_LEVEL: "debug",
 		});
 		expect(r.ok && r.value).toMatchObject({
 			access: { clientId: "i", clientSecret: "s" },
 			devCaller: true,
 			avatarDir: "/srv/avatars",
-			ownerUserId: "42",
 			logLevel: "debug",
 		});
 	});
@@ -73,35 +71,6 @@ describe("loadConfig", () => {
 		expect(loadConfig({ ...base, YUNOMI_URL: "nope" }).ok).toBe(false);
 		expect(loadConfig({ ...base, LOG_LEVEL: "loud" }).ok).toBe(false);
 		expect(loadConfig({ ...base, CF_ACCESS_CLIENT_ID: "i" }).ok).toBe(false);
-	});
-
-	it("OCHOKO_URL と AIVOICE_TOKEN は任意で、指定するなら両方そろえる", () => {
-		const both = loadConfig({
-			...base,
-			OCHOKO_URL: "http://192.168.10.253:8190/",
-			AIVOICE_TOKEN: "tok",
-		});
-		expect(both.ok && both.value.ochoko).toEqual({
-			url: "http://192.168.10.253:8190",
-			token: "tok",
-		});
-		expect(loadConfig({ ...base, OCHOKO_URL: "http://x:1" }).ok).toBe(false);
-		expect(loadConfig({ ...base, AIVOICE_TOKEN: "tok" }).ok).toBe(false);
-	});
-
-	it("KUKICHA_URL と KUKICHA_TOKEN は任意で、指定するなら両方そろえる", () => {
-		const both = loadConfig({
-			...base,
-			KUKICHA_URL: "http://kukicha.lan:8191/",
-			KUKICHA_TOKEN: "tok",
-		});
-		expect(both.ok && both.value.kukicha).toEqual({
-			url: "http://kukicha.lan:8191",
-			token: "tok",
-		});
-		const urlOnly = loadConfig({ ...base, KUKICHA_URL: "http://x:1" });
-		expect(!urlOnly.ok && urlOnly.error.join("\n")).toMatch(/KUKICHA_TOKEN/);
-		expect(loadConfig({ ...base, KUKICHA_TOKEN: "tok" }).ok).toBe(false);
 	});
 
 	it("仕事カテゴリはカンマ区切りで読む", () => {
@@ -138,34 +107,7 @@ describe("configWarnings", () => {
 		]);
 	});
 
-	it("仕事カテゴリがあり耳の設定が揃っていれば警告しない", () => {
+	it("仕事カテゴリがあれば警告しない", () => {
 		expect(configWarnings(load({ WORK_CATEGORY_IDS: "1,2" }))).toEqual([]);
-	});
-
-	it("kukicha があって持ち主が未設定なら、聞かないことを警告する", () => {
-		expect(
-			configWarnings(
-				load({
-					WORK_CATEGORY_IDS: "1",
-					KUKICHA_URL: "http://kukicha:8191",
-					KUKICHA_TOKEN: "k",
-				}),
-			),
-		).toEqual([
-			"KUKICHA_URL is set but OWNER_DISCORD_USER_ID is not; not listening",
-		]);
-	});
-
-	it("RELAY_VOICE=off なら、声と耳の設定が使われないことを警告する", () => {
-		expect(
-			configWarnings(
-				load({
-					WORK_CATEGORY_IDS: "1",
-					RELAY_VOICE: "off",
-					KUKICHA_URL: "http://kukicha:8191",
-					KUKICHA_TOKEN: "k",
-				}),
-			),
-		).toEqual(["RELAY_VOICE is off; OCHOKO_URL and KUKICHA_URL are ignored"]);
 	});
 });
