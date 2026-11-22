@@ -24,7 +24,8 @@ function Show-LogTail {
 $deadline = (Get-Date).AddSeconds(60)
 $proc = $null
 while ((Get-Date) -lt $deadline) {
-    $found = Get-ReleaseNodeProcess
+    # 1 件だけのとき、関数の戻り値は配列でなく CimInstance になり、5.1 では .Count が取れない
+    $found = @(Get-ReleaseNodeProcess)
     if ($found.Count -gt 0) { $proc = $found[0]; break }
     Start-Sleep -Seconds 2
 }
