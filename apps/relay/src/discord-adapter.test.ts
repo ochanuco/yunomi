@@ -1,6 +1,6 @@
 import { ChannelType } from "discord.js";
 import { describe, expect, it } from "vitest";
-import { countHumans, isRelayable, toMessageLike } from "./discord-adapter.ts";
+import { isRelayable, toMessageLike } from "./discord-adapter.ts";
 
 const fakeMessage = (over: Record<string, unknown> = {}) =>
 	({
@@ -91,28 +91,5 @@ describe("toMessageLike", () => {
 		expect(
 			toMessageLike(fakeMessage({ member: null })).authorVoiceChannelId,
 		).toBeNull();
-	});
-});
-
-describe("countHumans", () => {
-	it("指定の VC にいる bot 以外だけを数える", () => {
-		const state = (channelId: string | null, bot: boolean | undefined) =>
-			({
-				channelId,
-				member: bot === undefined ? null : { user: { bot } },
-			}) as never;
-		const guild = {
-			voiceStates: {
-				cache: new Map([
-					["a", state("vc1", false)],
-					["b", state("vc1", false)],
-					["c", state("vc1", true)],
-					["d", state("vc2", false)],
-					["e", state("vc1", undefined)],
-				]),
-			},
-		};
-		expect(countHumans(guild, "vc1")).toBe(2);
-		expect(countHumans(undefined, "vc1")).toBe(0);
 	});
 });

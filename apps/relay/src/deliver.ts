@@ -2,11 +2,9 @@ import {
 	type AvatarDirective,
 	type GatewayResponse,
 	replyMessagesOf,
-	type VoiceDirective,
 } from "@yunomi/protocol";
 import type { AvatarStock } from "./avatar-stock.ts";
 import type { Logger } from "./logger.ts";
-import type { VoiceManager } from "./voice-manager.ts";
 import type { YunomiClient } from "./yunomi-client.ts";
 
 /** discord.js のテキストチャンネルのうち返事の送信に使う部分。 */
@@ -29,7 +27,6 @@ export type ChannelLike = {
 export type DeliverDeps = {
 	client: Pick<YunomiClient, "notifySent">;
 	partnerId: string;
-	voice?: Pick<VoiceManager, "apply">;
 	/** 未設定なら表情画像を貼らない。 */
 	avatars?: Pick<AvatarStock, "pick">;
 	logger: Logger;
@@ -44,21 +41,10 @@ export type DeliverTarget = {
 	replyTo: () => string | null;
 };
 
-/** VC の操作が失敗しても、テキストの返信は止めないよう待たない。 */
-export const applyVoice = (
-	deps: Pick<DeliverDeps, "voice" | "logger">,
-	directive: VoiceDirective | undefined,
-	logFields: Record<string, unknown>,
-): void => {
-	void deps.voice?.apply(directive).catch((e: unknown) => {
-		deps.logger.error("voice directive failed", {
-			...logFields,
-			error: e instanceof Error ? e.name : "unknown",
-		});
-	});
-};
-
-/** Worker の応答を実行する。VC の指示・返事の送信・表情画像。 */
+/**
+ * Worker の応答を実行する。返事の送信と表情画像。
+ * 応答の `voice` は VC を受け持つ yunomi-voice 宛てなので、relay は読まない。
+ */
 export const deliverResponse = async (
 	deps: DeliverDeps,
 	response: GatewayResponse,
@@ -95,7 +81,6 @@ export const deliverResponse = async (
 		log.info("ignored", logFields);
 		return;
 	}
-	applyVoice(deps, response.voice, logFields);
 	// Worker が送信まで済ませている。Worker が REST で送る設定になる前は reply で返ってくる
 	if (response.action === "ack") {
 		log.info("acked", logFields);

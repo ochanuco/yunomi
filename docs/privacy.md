@@ -57,7 +57,8 @@ prod の Snapshot は `ykm snapshot-seed` で dev に復元できる。復元し
 | 保存先 | 内容 | 保持期間 | 削除手段 |
 | --- | --- | --- | --- |
 | Worker のログ（Cloudflare） | エラーの種類、イベント ID、チャンネル ID、Discord の user ID、Snapshot の復元の件数。発言の本文は出さない | Cloudflare のログの保持期間 | なし |
-| relay のログ（docker01 のコンテナ） | 接続、VC の発話の長さ、エラーの種類、guild とチャンネルの ID。発言の本文は出さない | コンテナのログの設定による | コンテナを作り直す |
+| relay のログ（docker01 のコンテナ） | 接続、エラーの種類、guild とチャンネルの ID。発言の本文は出さない | コンテナのログの設定による | コンテナを作り直す |
+| yunomi-voice のログ（yunomi-box の `C:\apps\yunomi-voice\data\logs`） | 接続、VC の発話の長さ、エラーの種類、guild とチャンネルの ID。音声と発話の文字は出さない | 14 日（起動時に古いものを消す） | ファイルを消す |
 | ochoko・kukicha のログ（ochoko-box・GPU 機） | 呼び出し元、文字数、処理時間。本文は出さない | 各サービスの設定による | 各機械でログを消す |
 
 ## 外部の処理先

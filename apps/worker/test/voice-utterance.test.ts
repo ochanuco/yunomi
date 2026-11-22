@@ -62,7 +62,7 @@ const post = (path: string, body: unknown) =>
 			method: "POST",
 			headers: {
 				"content-type": "application/json",
-				"x-yunomi-dev-caller": "gateway",
+				"x-yunomi-dev-caller": "voice",
 			},
 			body: JSON.stringify(body),
 		}),

@@ -1,6 +1,5 @@
-import type { Channel, Message, VoiceState } from "discord.js";
+import type { Channel, Message } from "discord.js";
 import type { MessageLike } from "./to-envelope.ts";
-import type { VoiceStateLike } from "./voice-state.ts";
 
 const roleMentionedBotUserIds = (m: Message): string[] =>
 	[...m.mentions.roles.values()]
@@ -44,28 +43,3 @@ export const toMessageLike = (m: Message): MessageLike => ({
 		size: a.size,
 	})),
 });
-
-export const toVoiceStateLike = (s: VoiceState): VoiceStateLike => ({
-	guildId: s.guild.id,
-	channelId: s.channelId,
-	member: s.member
-		? {
-				id: s.member.id,
-				displayName: s.member.displayName,
-				bot: s.member.user.bot,
-			}
-		: null,
-});
-
-/** bot を除いた、VC にいる人数。 */
-export const countHumans = (
-	guild: { voiceStates: { cache: Map<string, VoiceState> } } | undefined,
-	channelId: string,
-): number => {
-	if (!guild) return 0;
-	let n = 0;
-	for (const s of guild.voiceStates.cache.values()) {
-		if (s.channelId === channelId && s.member?.user.bot === false) n++;
-	}
-	return n;
-};

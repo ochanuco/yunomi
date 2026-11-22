@@ -68,7 +68,7 @@ const post = (path: string, body: unknown, caller: Caller = "gateway") =>
 		}),
 	);
 
-const report = (channelId: string | null, caller: Caller = "gateway") =>
+const report = (channelId: string | null, caller: Caller = "voice") =>
 	post(
 		"/v1/partners/yukarin/discord/voice-connection",
 		{ guild_id: "g1", channel_id: channelId },
@@ -181,19 +181,12 @@ afterEach(async () => {
 });
 
 describe("呼び出し元 voice", () => {
-	it("VC の口（voice-connection、voice-events、発話）は voice からも gateway からも受ける", async () => {
-		for (const caller of ["voice", "gateway"] as const) {
-			expect((await report("vc1", caller)).status).toBe(200);
-			expect(
-				(
-					await post(
-						"/v1/interfaces/discord/voice-events",
-						voiceEvent(),
-						caller,
-					)
-				).status,
-			).toBe(200);
-		}
+	it("VC の口（voice-connection、voice-events、発話）は voice から受ける", async () => {
+		expect((await report("vc1")).status).toBe(200);
+		expect(
+			(await post("/v1/interfaces/discord/voice-events", voiceEvent(), "voice"))
+				.status,
+		).toBe(200);
 
 		const s = newScenario();
 		await report(s.channelId);
@@ -202,6 +195,21 @@ describe("呼び出し元 voice", () => {
 		expect(await turnOf(EVENTS, utterance(s), "voice")).toMatchObject({
 			action: "ack",
 		});
+	});
+
+	it("VC の口は gateway から受けない", async () => {
+		expect((await report("vc1", "gateway")).status).toBe(403);
+		expect(
+			(
+				await post(
+					"/v1/interfaces/discord/voice-events",
+					voiceEvent(),
+					"gateway",
+				)
+			).status,
+		).toBe(403);
+		const s = newScenario();
+		expect((await post(EVENTS, utterance(s), "gateway")).status).toBe(403);
 	});
 
 	it("テキストの口（発言、sent）は voice から受けない", async () => {

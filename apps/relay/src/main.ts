@@ -1,23 +1,11 @@
-import { generateDependencyReport } from "@discordjs/voice";
 import { ActivityType, Client, Events, GatewayIntentBits } from "discord.js";
 import { DEFAULT_AVATAR_DIR, loadAvatarStock } from "./avatar-stock.ts";
 import { configWarnings, loadConfig } from "./config.ts";
-import {
-	countHumans,
-	isRelayable,
-	toMessageLike,
-	toVoiceStateLike,
-} from "./discord-adapter.ts";
-import { createEars } from "./ears.ts";
+import { isRelayable, toMessageLike } from "./discord-adapter.ts";
 import { createMessageHandler } from "./handler.ts";
-import { createHearing } from "./hearing.ts";
 import { DEFAULT_HEARTBEAT_PATH, startHeartbeat } from "./heartbeat.ts";
-import { createKukichaClient } from "./kukicha-client.ts";
 import { createLogger } from "./logger.ts";
-import { createOchokoClient } from "./ochoko-client.ts";
 import { createSeatStatusClient } from "./seat-status-client.ts";
-import { VoiceManager } from "./voice-manager.ts";
-import { createVoiceStateHandler } from "./voice-state.ts";
 import { startWorkActivity } from "./work-activity.ts";
 import { YunomiClient } from "./yunomi-client.ts";
 
@@ -43,6 +31,7 @@ const discord = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildMessages,
+		// 発言の作者がいる VC（author_voice_channel_id）を member.voice から読むために要る
 		GatewayIntentBits.GuildVoiceStates,
 		GatewayIntentBits.MessageContent,
 	],
@@ -55,101 +44,8 @@ const yunomi = new YunomiClient({
 	logger,
 });
 
-// RELAY_VOICE=off では VC を yunomi-voice に任せ、relay は VC の状態も声の指示も扱わない
-const buildVoice = () => {
-	const ochoko = cfg.ochoko
-		? createOchokoClient({
-				baseUrl: cfg.ochoko.url,
-				token: cfg.ochoko.token,
-				logger,
-			})
-		: null;
-
-	const kukicha = cfg.kukicha
-		? createKukichaClient({
-				baseUrl: cfg.kukicha.url,
-				token: cfg.kukicha.token,
-				logger,
-			})
-		: null;
-
-	const hear =
-		cfg.ownerUserId && kukicha
-			? createHearing({
-					kukicha,
-					client: yunomi,
-					partnerId: cfg.partnerId,
-					ownerUserId: cfg.ownerUserId,
-					displayNameOf: (guildId, userId) =>
-						discord.guilds.cache.get(guildId)?.members.cache.get(userId)
-							?.displayName ?? null,
-					channelOf: (channelId) => {
-						const channel = discord.channels.cache.get(channelId);
-						return channel?.isSendable() ? channel : null;
-					},
-					// VoiceManager は耳を受け取るので後で作る。発話が届く時点では作られている
-					voice: { apply: (d) => voice.apply(d) },
-					connectedChannelOf: (guildId) => voice.channelOf(guildId),
-					avatars,
-					logger,
-				})
-			: null;
-
-	const ears = cfg.ownerUserId
-		? createEars({
-				ownerUserId: cfg.ownerUserId,
-				onUtterance: (u, where) => {
-					if (hear) {
-						void hear(u, where);
-						return;
-					}
-					logger.info("utterance heard", {
-						guild_id: where.guildId,
-						channel_id: where.channelId,
-						duration_ms: u.durationMs,
-					});
-				},
-				logger,
-			})
-		: null;
-
-	const voice = new VoiceManager({
-		partnerId: cfg.partnerId,
-		ochoko,
-		yunomi,
-		ears,
-		listening: hear !== null,
-		adapterCreator: (guildId) =>
-			discord.guilds.cache.get(guildId)?.voiceAdapterCreator ?? null,
-		logger,
-	});
-
-	const handleVoiceState = createVoiceStateHandler({
-		client: yunomi,
-		voice,
-		partnerId: cfg.partnerId,
-		get botUserId() {
-			return discord.user?.id ?? "";
-		},
-		countHumans: (guildId, channelId) =>
-			countHumans(discord.guilds.cache.get(guildId), channelId),
-		logger,
-	});
-	return { voice, handleVoiceState };
-};
-const organ = cfg.voice ? buildVoice() : null;
-const voice = organ?.voice ?? null;
-if (!voice) logger.info("relay voice disabled");
-
 discord.once(Events.ClientReady, (c) => {
 	logger.info("relay ready", { bot_user_id: c.user.id });
-	if (voice) {
-		logger.debug("voice dependencies", {
-			report: generateDependencyReport(),
-		});
-		// 前回の接続先を Worker が覚えたままにしない
-		void voice.reportStartup([...c.guilds.cache.keys()]);
-	}
 	startHeartbeat({
 		path: process.env.HEARTBEAT_FILE ?? DEFAULT_HEARTBEAT_PATH,
 		isReady: () => discord.isReady(),
@@ -187,7 +83,6 @@ discord.on(Events.MessageCreate, (message) => {
 		client: yunomi,
 		partnerId: cfg.partnerId,
 		botUserId,
-		...(voice ? { voice } : {}),
 		avatars,
 		workCategoryIds: cfg.workCategoryIds,
 		logger,
@@ -203,24 +98,11 @@ discord.on(Events.MessageCreate, (message) => {
 	});
 });
 
-if (organ) {
-	const { handleVoiceState } = organ;
-	discord.on(Events.VoiceStateUpdate, (oldState, newState) => {
-		void handleVoiceState(
-			toVoiceStateLike(oldState),
-			toVoiceStateLike(newState),
-		).catch((e: unknown) => {
-			logger.error("voice handler crashed", { error: String(e) });
-		});
-	});
-}
-
 let shuttingDown = false;
 const shutdown = async (signal: string) => {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	logger.info("shutting down", { signal });
-	await voice?.shutdown();
 	await discord.destroy();
 	process.exit(0);
 };
