@@ -11,7 +11,7 @@
 	},
 	"dependencies": {
 		"@discordjs/voice": "^0.19.2",
-		"@snazzah/davey": "^0.1.12",
+		"@snazzah/davey": "^0.2.0",
 		"@yunomi/core": "workspace:*",
 		"@yunomi/protocol": "workspace:*",
 		"discord.js": "^14.26.0",
