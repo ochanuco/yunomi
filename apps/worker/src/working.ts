@@ -20,8 +20,14 @@ import {
 	WORK_NOTE_SUMMARY_MAX_LENGTH,
 	workNoteKinds,
 } from "./work-notes.ts";
+import {
+	createWorkingEventRepo,
+	workingDoneStatuses,
+	workingEventKinds,
+} from "./working-events.ts";
 
 export const WORKING_MEMORY_PATH = /^\/v1\/partners\/([^/]+)\/working\/memory$/;
+export const WORKING_EVENTS_PATH = /^\/v1\/partners\/([^/]+)\/working\/events$/;
 
 const writeSchema = v.object({
 	discord_user_id: v.pipe(v.string(), v.nonEmpty()),
@@ -295,4 +301,72 @@ export async function handleWorkingMemory(
 		},
 		201,
 	);
+}
+
+// Talking の prompt では 1 席が 1 行に並ぶため、件名と要旨に改行を入れさせない。
+const oneLine = (max: number) =>
+	v.pipe(
+		v.string(),
+		v.trim(),
+		v.nonEmpty(),
+		v.maxLength(max),
+		v.regex(/^[^\r\n]*$/),
+	);
+
+const eventSchema = v.pipe(
+	v.object({
+		thread_id: v.pipe(v.string(), v.regex(/^\d{1,25}$/)),
+		title: oneLine(100),
+		event: v.picklist(workingEventKinds),
+		status: v.nullish(v.picklist(workingDoneStatuses)),
+		summary: v.nullish(oneLine(200)),
+		at: v.pipe(
+			v.string(),
+			v.isoTimestamp(),
+			v.check((s) => !Number.isNaN(Date.parse(s))),
+			v.transform((s) => new Date(s)),
+		),
+	}),
+	v.forward(
+		v.check(
+			(b) => (b.event === "done") === (b.status != null),
+			"done のときだけ status を付ける",
+		),
+		["status"],
+	),
+);
+
+/**
+ * Working の席の出来事（始めた・判断を仰いだ・終えた・失敗した）を受ける口。席ごとに最新の 1 件だけを持ち、
+ * Talking はオーナーが話し相手のターンに「今の仕事」として読む。届いたことでターンは起こさない。
+ */
+export async function handleWorkingEvents(
+	request: Request,
+	env: Env,
+	partnerId: string,
+): Promise<Response> {
+	if (request.method !== "POST") return error(405, "method_not_allowed");
+	const auth = await authenticate(request, accessEnv(env));
+	if (!auth.ok) return error(auth.failure.status, auth.failure.error);
+	if (
+		auth.principal.kind !== "service" ||
+		auth.principal.caller !== "working"
+	) {
+		return error(403, "forbidden");
+	}
+	if (!partnerProfile(partnerId)) return error(404, "unknown_partner");
+	const parsed = await readJson(request, eventSchema);
+	if (!parsed.ok) return parsed.error;
+	const b = parsed.value;
+	await createWorkingEventRepo(drizzle(env.DB)).record({
+		partnerId,
+		threadId: b.thread_id,
+		title: b.title,
+		event: b.event,
+		status: b.status ?? null,
+		summary: b.summary ?? null,
+		at: b.at,
+		now: new Date(),
+	});
+	return new Response(null, { status: 204 });
 }

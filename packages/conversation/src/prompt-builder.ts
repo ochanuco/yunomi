@@ -59,6 +59,15 @@ export type WatchLine = {
 	untilAt: Date | null;
 };
 
+export type WorkingEventLine = {
+	title: string;
+	event: "started" | "asking" | "done" | "failed";
+	/** done だけが持つ。 */
+	status: "完了" | "見張り中" | "引き継ぎ" | null;
+	summary: string | null;
+	at: Date;
+};
+
 export type InterestLine = {
 	topic: string;
 	label: string;
@@ -129,6 +138,8 @@ export type PromptInput = {
 	goals?: GoalLine[];
 	/** オーナーの動いている見張り。オーナーが話し相手のターンだけ渡す。未指定なら見張りのブロックは出さない。 */
 	watches?: WatchLine[];
+	/** Working の席の最新の出来事。新しい順で渡す。オーナーが話し相手のターンだけ渡す。未指定なら今の仕事のブロックは出さない。 */
+	workingEvents?: WorkingEventLine[];
 	/** 現在の Interest。score の降順で渡す。先頭から INTEREST_PROMPT_LIMIT 件だけ使う。 */
 	interests: InterestLine[];
 	/** 現在の Opinion。先頭から OPINION_PROMPT_LIMIT 件だけ使う。 */
@@ -443,6 +454,43 @@ const watchBlock = (watches: WatchLine[]): string =>
 			: ["（なし）"]),
 	].join("\n");
 
+/** 席の出来事は 1 日のうちに動くので、暦日の「今日」では足りない。1 日を過ぎたら elapsedText に任せる。 */
+const sinceText = (at: Date, now: Date): string => {
+	const minutes = Math.max(
+		0,
+		Math.floor((now.getTime() - at.getTime()) / 60_000),
+	);
+	if (minutes < 1) return "たった今";
+	if (minutes < 60) return `${minutes} 分前`;
+	if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 時間前`;
+	return elapsedText(at, now);
+};
+
+const workingStateText = (e: WorkingEventLine): string => {
+	switch (e.event) {
+		case "started":
+			return "動いている";
+		case "asking":
+			return "判断待ち";
+		case "done":
+			return e.status ?? "完了";
+		case "failed":
+			return "失敗";
+	}
+};
+
+const workingEventBlock = (events: WorkingEventLine[], now: Date): string =>
+	[
+		"## 今の仕事",
+		"仕事の席（Working）で動いている仕事、オーナーの判断を待っている仕事と、この 1 日に終わった仕事。新しい順。聞かれたら、この一覧で答える。",
+		...(events.length
+			? events.map(
+					(e) =>
+						`- ${e.title}（${workingStateText(e)}、${sinceText(e.at, now)}）${e.summary ? `: ${e.summary}` : ""}`,
+				)
+			: ["（なし）"]),
+	].join("\n");
+
 /** Opinion の confidence を言葉にする下限。上から順に最初に満たしたものを使う。 */
 const CONFIDENCE_WORDS = [
 	{ min: 0.7, word: "強く思う" },
@@ -685,6 +733,9 @@ export class PromptBuilder {
 		);
 		const goal = input.goals ? goalBlock(input.goals) : null;
 		const watch = input.watches ? watchBlock(input.watches) : null;
+		const working = input.workingEvents
+			? workingEventBlock(input.workingEvents, input.now)
+			: null;
 		const clock = clockBlock(input.now);
 		const tools = input.tools ? TOOLS_BLOCK : null;
 		const examples = input.examples?.length
@@ -719,6 +770,7 @@ export class PromptBuilder {
 			(recalled === null ? 0 : estimateTokens(recalled)) +
 			(goal === null ? 0 : estimateTokens(goal)) +
 			(watch === null ? 0 : estimateTokens(watch)) +
+			(working === null ? 0 : estimateTokens(working)) +
 			estimateTokens(clock) +
 			(tools === null ? 0 : estimateTokens(tools)) +
 			(pending === null ? 0 : estimateTokens(pending)) +
@@ -758,6 +810,7 @@ export class PromptBuilder {
 				{ text: openLoop, cache: false },
 				...(goal === null ? [] : [{ text: goal, cache: false }]),
 				...(watch === null ? [] : [{ text: watch, cache: false }]),
+				...(working === null ? [] : [{ text: working, cache: false }]),
 				{ text: channel, cache: false },
 				...(otherPartner === null
 					? []

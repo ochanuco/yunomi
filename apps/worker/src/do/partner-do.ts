@@ -77,6 +77,10 @@ import {
 	createWorkNoteRepo,
 	type WorkNoteRepo,
 } from "../work-notes.ts";
+import {
+	createWorkingEventRepo,
+	type WorkingEventRepo,
+} from "../working-events.ts";
 import { ChannelGate } from "./channel-gate.ts";
 import { createEntityResolver, type EntityResolver } from "./entities.ts";
 import { createHistoryWriter, type HistoryWriter } from "./history.ts";
@@ -145,6 +149,7 @@ export class PartnerDO extends DurableObject<Env> {
 	readonly #openLoops: OpenLoopRepo;
 	readonly #workNotes: WorkNoteRepo;
 	readonly #watches: WatchRepo;
+	readonly #workingEvents: WorkingEventRepo;
 	readonly #interestOpinion: InterestOpinionRepo;
 	readonly #audit: AuditWriter;
 	readonly #conversationLog: ConversationLogWriter;
@@ -192,6 +197,7 @@ export class PartnerDO extends DurableObject<Env> {
 				openLoops: this.#openLoops,
 				goals: this.#workNotes,
 				watches: this.#watches,
+				workingEvents: this.#workingEvents,
 				interestOpinion: this.#interestOpinion,
 				background: (task) => this.#background(task),
 				onEngaged,
@@ -232,6 +238,7 @@ export class PartnerDO extends DurableObject<Env> {
 		this.#openLoops = createOpenLoopRepo(db);
 		this.#workNotes = createWorkNoteRepo(db, onIndexChange);
 		this.#watches = createWatchRepo(db);
+		this.#workingEvents = createWorkingEventRepo(db);
 		this.#interestOpinion = createInterestOpinionRepo(db);
 		this.#audit = createAuditWriter(db);
 		this.#conversationLog = createConversationLogWriter(db);

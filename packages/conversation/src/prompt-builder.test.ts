@@ -14,6 +14,75 @@ import { baseInput } from "./test-fixtures.ts";
 const builder = new PromptBuilder();
 
 describe("PromptBuilder", () => {
+	describe("今の仕事", () => {
+		const block = (input: ReturnType<typeof baseInput>) =>
+			builder.build(input).system.find((b) => b.text.startsWith("## 今の仕事"))
+				?.text;
+
+		it("件名・状態・経過・要旨を 1 行ずつ、渡した順に出す", () => {
+			const input = baseInput();
+			input.now = new Date("2026-11-22T03:00:00Z");
+			const ago = (minutes: number) =>
+				new Date(input.now.getTime() - minutes * 60_000);
+			input.workingEvents = [
+				{
+					title: "A",
+					event: "started",
+					status: null,
+					summary: null,
+					at: ago(0),
+				},
+				{
+					title: "B",
+					event: "asking",
+					status: null,
+					summary: "どちらにするか",
+					at: ago(5),
+				},
+				{
+					title: "C",
+					event: "done",
+					status: "見張り中",
+					summary: "毎朝調べる",
+					at: ago(180),
+				},
+				{
+					title: "D",
+					event: "done",
+					status: "引き継ぎ",
+					summary: null,
+					at: ago(600),
+				},
+				{
+					title: "E",
+					event: "failed",
+					status: null,
+					summary: "権限が無い",
+					at: ago(60 * 24 * 3),
+				},
+			];
+			expect(block(input)?.split("\n").slice(2)).toEqual([
+				"- A（動いている、たった今）",
+				"- B（判断待ち、5 分前）: どちらにするか",
+				"- C（見張り中、3 時間前）: 毎朝調べる",
+				"- D（引き継ぎ、10 時間前）",
+				"- E（失敗、3 日前）: 権限が無い",
+			]);
+		});
+
+		it("空なら（なし）、渡さなければ区画を出さず、出した分は見積もりに入る", () => {
+			const input = baseInput();
+			const without = builder.build(input);
+			expect(block(input)).toBeUndefined();
+			input.workingEvents = [];
+			expect(block(input)?.split("\n").at(-1)).toBe("（なし）");
+			const withBlock = builder.build(input);
+			expect(withBlock.meta.estimatedTokens).toBeGreaterThan(
+				without.meta.estimatedTokens,
+			);
+		});
+	});
+
 	describe("連想で浮かんだ記憶", () => {
 		const systemText = (input: ReturnType<typeof baseInput>) =>
 			builder

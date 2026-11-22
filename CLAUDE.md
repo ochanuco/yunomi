@@ -2,7 +2,7 @@
 
 計画の一次情報は `docs/plan/`。実装前に該当する Epic / Issue を確認する。
 
-yunomi の範囲は記憶と人格、Talking（会話・VC・声）。Working（仕事）は `ochanuco/mizuya` にあり、yunomi の記憶を記憶の口（`docs/working-memory-api.md`）で共有する。記憶の口の形を変えるときは mizuya も合わせる。`partners/` の人格は mizuya の Working が image に取り込むので、ファイル名や置き場所を変えるときも mizuya を合わせる。
+yunomi の範囲は記憶と人格、Talking（会話・VC・声）。Working（仕事）は `ochanuco/mizuya` にあり、yunomi の記憶を記憶の口（`docs/working-memory-api.md`）で共有し、席の出来事を出来事の口（`docs/working-events-api.md`）で yunomi に知らせる。記憶の口と出来事の口の形を変えるときは mizuya も合わせる。`partners/` の人格は mizuya の Working が image に取り込むので、ファイル名や置き場所を変えるときも mizuya を合わせる。
 
 ## コマンド
 
