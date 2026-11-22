@@ -48,6 +48,7 @@ import type { RecalledMemory, Recaller } from "../memory-index/index.ts";
 import type { OpenLoopRepo } from "../open-loops.ts";
 import type { WatchRepo } from "../watches.ts";
 import type { WorkNoteRepo } from "../work-notes.ts";
+import type { WorkingEventRepo } from "../working-events.ts";
 import type { EntityResolver } from "./entities.ts";
 import type { HistoryWriter } from "./history.ts";
 import { ignoreOutcome, inboundSummary, type TurnOutcome } from "./pipeline.ts";
@@ -89,6 +90,8 @@ export type TurnDeps = {
 	goals?: Pick<WorkNoteRepo, "openGoals">;
 	/** オーナーの見張り。オーナーが話し相手のターンだけ読む。 */
 	watches?: Pick<WatchRepo, "active">;
+	/** Working の席の出来事。オーナーが話し相手のターンだけ読む。 */
+	workingEvents?: Pick<WorkingEventRepo, "current">;
 	interestOpinion: InterestOpinionRepo;
 	/** 発声の身体の状態。声が無効な環境では unavailable。 */
 	bodyState: () => Promise<BodyState>;
@@ -502,6 +505,10 @@ export const runTurn = async (
 					.active(partnerId, entityId, seededAt)
 					.catch(() => null)
 			: null;
+	const workingEvents =
+		speakerIsOwner && deps.workingEvents
+			? await deps.workingEvents.current(partnerId, seededAt).catch(() => null)
+			: null;
 	const tools = deps.capabilities
 		? {
 				speakerIsOwner,
@@ -572,6 +579,7 @@ export const runTurn = async (
 		openLoops,
 		...(goals === null ? {} : { goals }),
 		...(watches === null ? {} : { watches }),
+		...(workingEvents === null ? {} : { workingEvents }),
 		now: seededAt,
 		tools,
 		channel: { name: null, presence: null },

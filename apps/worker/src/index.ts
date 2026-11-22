@@ -35,7 +35,13 @@ import {
 } from "./partners.ts";
 import { createSnapshot } from "./snapshot.ts";
 import { purgeExpiredSnapshots } from "./snapshot-store.ts";
-import { handleWorkingMemory, WORKING_MEMORY_PATH } from "./working.ts";
+import {
+	handleWorkingEvents,
+	handleWorkingMemory,
+	WORKING_EVENTS_PATH,
+	WORKING_MEMORY_PATH,
+} from "./working.ts";
+import { purgeFinishedWorkingEvents } from "./working-events.ts";
 
 export { PartnerDO };
 
@@ -90,6 +96,14 @@ export default {
 				(task) => ctx.waitUntil(task),
 			);
 		}
+		const eventsPartnerId = WORKING_EVENTS_PATH.exec(pathname)?.[1];
+		if (eventsPartnerId !== undefined) {
+			return handleWorkingEvents(
+				request,
+				env,
+				decodeURIComponent(eventsPartnerId),
+			);
+		}
 		const sentPartnerId = DISCORD_SENT_PATH.exec(pathname)?.[1];
 		if (sentPartnerId !== undefined) {
 			return discordSent(request, env, decodeURIComponent(sentPartnerId));
@@ -107,6 +121,7 @@ export default {
 		await aggregateDailyKpis(db, now, lifestyleDayBoundaryOf);
 		await purgeExpiredAudit(db, now);
 		await purgeExpiredCandidates(db, now);
+		await purgeFinishedWorkingEvents(db, now);
 		// OWNER_DISCORD_USER_ID は production だけが宣言する secret なので Env の型に無い。
 		// 持ち主が分からないまま消すと持ち主の発言まで消えるため、無ければ保持期間の削除をしない。
 		const ownerId = (env as Env & Pick<CapabilityEnv, "OWNER_DISCORD_USER_ID">)

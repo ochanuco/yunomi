@@ -162,6 +162,13 @@
       "when": 1794048654925,
       "tag": "0022_right_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795353004860,
+      "tag": "0023_even_micromax",
+      "breakpoints": true
     }
   ]
 }

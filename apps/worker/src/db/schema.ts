@@ -415,6 +415,30 @@ export const watches = sqliteTable(
 	(t) => [index("watches_entity").on(t.partnerId, t.entityId, t.status)],
 );
 
+/** Working の席（仕事フォーラムの投稿）ごとの最新の出来事。出来事の口が上書きする。 */
+export const workingEvents = sqliteTable(
+	"working_events",
+	{
+		partnerId: text("partner_id").notNull(),
+		/** 席の Discord の投稿（スレッド）の ID。 */
+		threadId: text("thread_id").notNull(),
+		title: text("title").notNull(),
+		event: text("event", {
+			enum: ["started", "asking", "done", "failed"],
+		}).notNull(),
+		/** done だけが持つ。ほかは null。 */
+		status: text("status", { enum: ["完了", "見張り中", "引き継ぎ"] }),
+		summary: text("summary"),
+		/** Working で出来事が起きた時刻（UTC）。これより古い出来事は捨てる。 */
+		at: text("at").notNull(),
+		updatedAt: text("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.partnerId, t.threadId] }),
+		index("working_events_partner_at").on(t.partnerId, t.at),
+	],
+);
+
 /**
  * conversation_messages を索引に入れる単位。持ち主の発言 1 件（anchor）に、その直前の持ち主と Partner の発言と、
  * 続く Partner の返事をまとめる。id は anchor の conversation_messages.id。
