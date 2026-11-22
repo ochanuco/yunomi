@@ -35,7 +35,7 @@ Talking の道具 work_request → mizuya の Worker の受け箱（kind work）
 
 ### WL2. 頼む
 
-- 技術範囲: mizuya の Worker の受け箱に kind `work` を足し、それを書き込む口を作る。yunomi の Worker は Cloudflare Access の service token でその口を呼ぶ。Working は受け箱に届いた `work` から、仕事チャンネルへの依頼（`startFromRequest`）と同じように仕事フォーラムに投稿を立てて席を開く。Talking に道具 `work_request`（件名と依頼の本文）を足す。オーナーのターンだけに出し、policy は `confirm` にする。了承の後に書き込みの口を 1 回呼び、結果は会話で待たず WL1 の経路で知る。
+- 技術範囲: mizuya の Worker の受け箱に kind `work` を足し、それを書き込む口を作る。yunomi の Worker は Cloudflare Access の service token でその口を呼ぶ。Working は受け箱に届いた `work` から、仕事チャンネルへの依頼（`startFromRequest`）と同じように仕事フォーラムに投稿を立てて席を開く。Talking に道具 `work_request`（件名と依頼の本文）を足す。オーナーのターンだけに出し、policy は `auto` にする。呼んだその場で書き込みの口を 1 回呼び、結果は会話で待たず WL1 の経路で知る。
 - インフラ側: yunomi の Worker が mizuya の Worker を呼ぶための Access の service token と、mizuya の Access application の許可。
 - 非ゴール: 会話の中で席とやりとりを続けること（判断待ちへの答えは今までどおり仕事の投稿で返す）。オーナー以外からの依頼。
 - Done: デモ手順の 4 が prod で通る。

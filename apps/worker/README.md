@@ -236,7 +236,7 @@ Talking の prompt では、`work_notes` の decided と done の新しい `WORK
 
 ### 仕事の依頼
 
-オーナーが会話で頼んだ仕事は、道具 `work_request`（`title` 1 行 100 字まで、`request` 2000 字まで）で mizuya の Working に渡す。category は `work_request`（Yukarin と Akarin の profile で `confirm`）なので、呼ぶとまず保留になり、オーナーが了承した次のターンで 1 回だけ `POST ${MIZUYA_URL}/working/requests` を呼ぶ。
+オーナーが会話で頼んだ仕事は、道具 `work_request`（`title` 1 行 100 字まで、`request` 2000 字まで）で mizuya の Working に渡す。category は `work_request`（Yukarin と Akarin の profile で `auto`）なので、呼んだその場で `POST ${MIZUYA_URL}/working/requests` を 1 回呼ぶ。
 
 - 送る本文は `request_id`（UUID v7）、`partner`、`title`、`request`、`requested_by`（了承したオーナーの Discord user id）、`context_url`（依頼した発言へのリンク。VC の発話からなら null）。
 - 認証は mizuya の Cloudflare Access のサービストークン（`CF-Access-Client-Id` / `CF-Access-Client-Secret`）。2xx を受け付けとし、400 は `ValidationFailed`、401 / 403 は `PermissionDenied`、429 は `RateLimited`、ほかは `ExternalServiceUnavailable`（5xx と接続の失敗だけ retryable）でモデルに返す。

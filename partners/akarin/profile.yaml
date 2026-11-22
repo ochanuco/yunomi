@@ -100,4 +100,4 @@ capability_defaults:
   home_read: auto
   goal_write: auto
   watch_write: auto
-  work_request: confirm
+  work_request: auto
